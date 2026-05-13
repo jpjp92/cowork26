@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/AuthForm.tsx","./src/hooks/useAuth.ts","./src/lib/supabase.ts"],"version":"6.0.3"}
+{"root":["./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/AuthForm.tsx","./src/components/InviteModal.tsx","./src/components/SheetEditor.tsx","./src/components/SheetList.tsx","./src/hooks/useAuth.ts","./src/hooks/useCells.ts","./src/hooks/useRealtime.ts","./src/hooks/useSheets.ts","./src/lib/fortune.ts","./src/lib/supabase.ts"],"version":"6.0.3"}
