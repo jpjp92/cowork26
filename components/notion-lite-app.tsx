@@ -50,10 +50,12 @@ export default function NotionLiteApp() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState('')
   const [activePageId, setActivePageId] = useState('')
   const [workspaceName, setWorkspaceName] = useState('')
+  const [renameWorkspaceName, setRenameWorkspaceName] = useState('')
   const [newPageTitle, setNewPageTitle] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [creatingWorkspace, setCreatingWorkspace] = useState(false)
+  const [renamingWorkspace, setRenamingWorkspace] = useState(false)
   const [creatingPage, setCreatingPage] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -178,6 +180,10 @@ export default function NotionLiteApp() {
   }, [activeWorkspaceId, loadPages])
 
   useEffect(() => {
+    setRenameWorkspaceName(activeWorkspace?.name ?? '')
+  }, [activeWorkspace?.id, activeWorkspace?.name])
+
+  useEffect(() => {
     if (!settingsOpen || !activeWorkspaceId) return
     loadMembers(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
   }, [settingsOpen, activeWorkspaceId, loadMembers])
@@ -256,6 +262,32 @@ export default function NotionLiteApp() {
       setNewPageTitle('')
     } finally {
       setCreatingPage(false)
+    }
+  }
+
+  const renameWorkspace = async () => {
+    if (!activeWorkspaceId || !renameWorkspaceName.trim() || !canManageMembers || renamingWorkspace) return
+    setError('')
+    setRenamingWorkspace(true)
+    try {
+      const response = await fetch('/api/workspaces', {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          id: activeWorkspaceId,
+          name: renameWorkspaceName.trim(),
+        }),
+      })
+
+      if (!response.ok) {
+        setError((await readError(response, '워크스페이스 이름을 바꾸지 못했습니다.')).message)
+        return
+      }
+
+      const workspace = await response.json() as Workspace
+      setWorkspaces(previous => previous.map(item => item.id === workspace.id ? workspace : item))
+    } finally {
+      setRenamingWorkspace(false)
     }
   }
 
@@ -575,6 +607,25 @@ export default function NotionLiteApp() {
               <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
             ))}
           </select>
+          {canManageMembers && activeWorkspace && (
+            <div className="mb-2 flex gap-2">
+              <input
+                className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
+                placeholder="워크스페이스 이름"
+                value={renameWorkspaceName}
+                onChange={event => setRenameWorkspaceName(event.target.value)}
+                onKeyDown={event => event.key === 'Enter' && renameWorkspace()}
+              />
+              <button
+                onClick={renameWorkspace}
+                disabled={!renameWorkspaceName.trim() || renamingWorkspace}
+                className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] disabled:opacity-40"
+                title="워크스페이스 이름 저장"
+              >
+                {renamingWorkspace ? '…' : '✓'}
+              </button>
+            </div>
+          )}
           <div className="flex gap-2">
             <input
               className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
@@ -646,35 +697,31 @@ export default function NotionLiteApp() {
 
         {activePage ? (
           <article className="mx-auto my-8 w-full max-w-4xl flex-1 rounded-[8px] border border-black bg-[#fef9ef] px-10 py-12 text-[#1d1c16] shadow-[6px_6px_0_#000] max-sm:mx-4 max-sm:px-5 max-sm:py-8">
-            <div className="mb-8 flex items-center gap-3 border-b border-black pb-3 text-xs font-black uppercase text-[#444748]">
-              <span>문서</span>
-              <span>/</span>
-              <span className="truncate">{activePage.title || 'Untitled'}</span>
-              {saving !== 'idle' && (
-                <span className="ml-auto border border-black bg-[#baf7c8] px-2 py-1 text-[11px] text-black">
+            <div className="mb-8 inline-flex max-w-full flex-col rounded-[10px] border border-black bg-[#f3ede4] px-4 py-3 shadow-[4px_4px_0_#000]">
+              <span className="mb-2 text-[11px] font-black uppercase tracking-[0.08em] text-[#6c685f]">
+                Page
+              </span>
+              <input
+                className="w-full min-w-0 bg-transparent text-[48px] font-black leading-[1.02] tracking-normal text-[#1d1c16] outline-none placeholder:text-[#8a867f] [text-shadow:3px_3px_0_#d8d2c7] max-sm:text-4xl"
+                value={activePage.title}
+                disabled={!canEdit}
+                placeholder="Untitled"
+                onChange={event => {
+                  const title = event.target.value
+                  setPages(previous => previous.map(page => (
+                    page.id === activePage.id ? { ...page, title } : page
+                  )))
+                }}
+                onBlur={event => updatePage(activePage.id, { title: event.target.value })}
+              />
+            </div>
+            {saving !== 'idle' && (
+              <div className="mb-6 flex justify-end">
+                <span className="rounded-[8px] border border-black bg-[#baf7c8] px-2 py-1 text-[11px] font-black text-black shadow-[2px_2px_0_#000]">
                   {saving === 'saving' ? '저장 중' : '저장됨'}
                 </span>
-              )}
-              <span className="hidden sm:inline">
-                {new Date(activePage.updated_at).toLocaleDateString('ko-KR', {
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </span>
-            </div>
-            <input
-              className="mb-7 w-full border-b border-black bg-transparent pb-3 text-[42px] font-black leading-tight tracking-normal text-[#1d1c16] outline-none placeholder:text-[#8a867f] focus:bg-[#f3ede4] max-sm:text-3xl"
-              value={activePage.title}
-              disabled={!canEdit}
-              placeholder="Untitled"
-              onChange={event => {
-                const title = event.target.value
-                setPages(previous => previous.map(page => (
-                  page.id === activePage.id ? { ...page, title } : page
-                )))
-              }}
-              onBlur={event => updatePage(activePage.id, { title: event.target.value })}
-            />
+              </div>
+            )}
             <DocumentEditor
               content={activePageContent}
               editable={Boolean(canEdit)}

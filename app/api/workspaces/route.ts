@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '../../../lib/supabase-admin'
-import { getUserFromRequest } from '../_utils/auth'
+import { getUserFromRequest, requireWorkspaceRole } from '../_utils/auth'
 
 export async function GET(request: Request) {
   const { user, response } = await getUserFromRequest(request)
@@ -87,4 +87,32 @@ export async function POST(request: Request) {
   if (pageError) return NextResponse.json({ error: pageError.message }, { status: 500 })
 
   return NextResponse.json({ workspace: { ...workspace, role: 'owner' }, page }, { status: 201 })
+}
+
+export async function PATCH(request: Request) {
+  const { user, response } = await getUserFromRequest(request)
+  if (!user) return response
+
+  const body = await request.json().catch(() => ({}))
+  const id = typeof body.id === 'string' ? body.id : ''
+  const name = typeof body.name === 'string' && body.name.trim()
+    ? body.name.trim()
+    : ''
+
+  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
+  if (!name) return NextResponse.json({ error: 'name is required' }, { status: 400 })
+
+  const isOwner = await requireWorkspaceRole(id, user.id, ['owner'])
+  if (!isOwner) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const { data, error } = await supabaseAdmin
+    .from('workspaces')
+    .update({ name })
+    .eq('id', id)
+    .select('id, name, created_by, created_at')
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  return NextResponse.json({ ...data, role: 'owner' })
 }
