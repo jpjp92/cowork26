@@ -95,3 +95,67 @@ textarea {
   height: 0;
   pointer-events: none;
 }
+
+.markdown-preview {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.markdown-preview h1 {
+  border-bottom: 2px solid #1d1c16;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1.15;
+  margin: 0 0 1rem;
+  padding-bottom: 0.6rem;
+}
+
+.markdown-preview h2 {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 1.35rem;
+  font-weight: 900;
+  line-height: 1.25;
+  margin: 1.5rem 0 0.6rem;
+}
+
+.markdown-preview h3 {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 900;
+  line-height: 1.3;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.markdown-preview p {
+  margin: 0.65rem 0;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  margin: 0.85rem 0;
+  padding-left: 1.4rem;
+}
+
+.markdown-preview li {
+  margin: 0.35rem 0;
+}
+
+.markdown-preview blockquote {
+  background: #ffffff;
+  border-left: 5px solid #1d1c16;
+  margin: 1rem 0;
+  padding: 0.7rem 1rem;
+}
+
+.markdown-preview pre {
+  background: #1d1c16;
+  color: #fef9ef;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  margin: 1rem 0;
+  overflow-x: auto;
+  padding: 1rem;
+}

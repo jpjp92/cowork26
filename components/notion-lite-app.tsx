@@ -50,11 +50,14 @@ export default function NotionLiteApp() {
   const [creatingWorkspace, setCreatingWorkspace] = useState(false)
   const [creatingPage, setCreatingPage] = useState(false)
   const [editorMode, setEditorMode] = useState<'rich' | 'markdown'>('rich')
-  const saveTimer = useRef<number | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const saveTimers = useRef(new Map<string, number>())
+  const pendingContent = useRef(new Map<string, Record<string, unknown>>())
 
   const accessToken = session?.access_token
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
   const activePage = pages.find(page => page.id === activePageId) ?? null
+  const activePageContent = activePage ? pendingContent.current.get(activePage.id) ?? activePage.content : null
   const canEdit = activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'editor'
 
   const authHeaders = useCallback(() => ({
@@ -121,6 +124,13 @@ export default function NotionLiteApp() {
     }
     loadPages(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
   }, [activeWorkspaceId, loadPages])
+
+  useEffect(() => () => {
+    for (const timer of saveTimers.current.values()) {
+      window.clearTimeout(timer)
+    }
+    saveTimers.current.clear()
+  }, [])
 
   const pageTree = useMemo(() => {
     const byParent = new Map<string, PageRecord[]>()
@@ -192,13 +202,16 @@ export default function NotionLiteApp() {
     }
   }
 
-  const updatePage = async (patch: Partial<Pick<PageRecord, 'title' | 'content'>>) => {
-    if (!activePage || !accessToken || !canEdit) return
+  const updatePage = async (
+    pageId: string,
+    patch: Partial<Pick<PageRecord, 'title' | 'content'>>,
+  ) => {
+    if (!accessToken || !canEdit) return
     setSaving('saving')
     const response = await fetch('/api/pages', {
       method: 'PATCH',
       headers: authHeaders(),
-      body: JSON.stringify({ id: activePage.id, ...patch }),
+      body: JSON.stringify({ id: pageId, ...patch }),
     })
 
     if (!response.ok) {
@@ -208,30 +221,46 @@ export default function NotionLiteApp() {
     }
 
     const page = await response.json() as PageRecord
-    setPages(previous => previous.map(item => item.id === page.id ? page : item))
+    const currentPendingContent = pendingContent.current.get(page.id)
+    const savedContent = page.content ?? null
+    if (
+      currentPendingContent &&
+      JSON.stringify(currentPendingContent) === JSON.stringify(savedContent)
+    ) {
+      pendingContent.current.delete(page.id)
+    }
+
+    setPages(previous => previous.map(item => (
+      item.id === page.id
+        ? { ...page, content: pendingContent.current.get(page.id) ?? page.content }
+        : item
+    )))
     setSaving('saved')
     window.setTimeout(() => setSaving('idle'), 1200)
   }
 
-  const scheduleContentSave = (content: Record<string, unknown>) => {
-    if (!activePage || !canEdit) return
-    setPages(previous => previous.map(page => (
-      page.id === activePage.id ? { ...page, content } : page
-    )))
-    if (saveTimer.current) window.clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(() => {
-      updatePage({ content }).catch(err => {
+  const scheduleContentSave = (pageId: string, content: Record<string, unknown>) => {
+    if (!canEdit) return
+    pendingContent.current.set(pageId, content)
+
+    const existingTimer = saveTimers.current.get(pageId)
+    if (existingTimer) window.clearTimeout(existingTimer)
+
+    const nextTimer = window.setTimeout(() => {
+      saveTimers.current.delete(pageId)
+      updatePage(pageId, { content }).catch(err => {
         setSaving('idle')
         setError(err instanceof Error ? err.message : '페이지를 저장하지 못했습니다.')
       })
-    }, 700)
+    }, 1500)
+    saveTimers.current.set(pageId, nextTimer)
   }
 
-  const deletePage = async () => {
-    if (!activePage || !accessToken || !canEdit) return
+  const deletePage = async (pageId: string) => {
+    if (!accessToken || !canEdit) return
     if (!window.confirm('이 페이지와 하위 페이지를 삭제할까요?')) return
 
-    const response = await fetch(`/api/pages?id=${activePage.id}`, {
+    const response = await fetch(`/api/pages?id=${pageId}`, {
       method: 'DELETE',
       headers: authHeaders(),
     })
@@ -240,9 +269,30 @@ export default function NotionLiteApp() {
       return
     }
 
-    const remaining = pages.filter(page => page.id !== activePage.id && page.parent_id !== activePage.id)
+    const deletedIds = new Set([pageId])
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const page of pages) {
+        if (page.parent_id && deletedIds.has(page.parent_id) && !deletedIds.has(page.id)) {
+          deletedIds.add(page.id)
+          changed = true
+        }
+      }
+    }
+
+    for (const deletedId of deletedIds) {
+      pendingContent.current.delete(deletedId)
+      const saveTimer = saveTimers.current.get(deletedId)
+      if (saveTimer) {
+        window.clearTimeout(saveTimer)
+        saveTimers.current.delete(deletedId)
+      }
+    }
+
+    const remaining = pages.filter(page => !deletedIds.has(page.id))
     setPages(remaining)
-    setActivePageId(remaining[0]?.id ?? '')
+    setActivePageId(current => deletedIds.has(current) ? remaining[0]?.id ?? '' : current)
   }
 
   const renderPageList = (parentId: string | null, depth = 0): React.ReactNode => {
@@ -261,13 +311,22 @@ export default function NotionLiteApp() {
             {page.title}
           </button>
           {canEdit && (
-            <button
-              onClick={() => createPage(page.id)}
-              className="hidden h-8 w-8 shrink-0 border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] group-hover:block"
-              title="하위 페이지 추가"
-            >
-              +
-            </button>
+            <>
+              <button
+                onClick={() => createPage(page.id)}
+                className="hidden h-8 w-8 shrink-0 border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] group-hover:block"
+                title="하위 페이지 추가"
+              >
+                +
+              </button>
+              <button
+                onClick={() => deletePage(page.id)}
+                className="hidden h-8 w-8 shrink-0 border border-black bg-red-300 text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-red-200 group-hover:block"
+                title="페이지 삭제"
+              >
+                x
+              </button>
+            </>
           )}
         </div>
         {renderPageList(page.id, depth + 1)}
@@ -294,34 +353,31 @@ export default function NotionLiteApp() {
           </div>
         </div>
 
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="hidden min-w-0 text-right sm:block">
-            <div className="flex items-center justify-end gap-2">
-              <p className="truncate text-sm font-black uppercase text-white">{activeWorkspace?.name ?? '워크스페이스 없음'}</p>
-              {activeWorkspace && (
-                <span className="border border-black bg-[#baf7c8] px-2 py-0.5 text-[11px] font-black text-black">
-                  {activeWorkspace.role}
-                </span>
-              )}
-            </div>
-            <p className="mt-0.5 text-xs font-bold text-neutral-100">
-              {saving === 'saving' ? '변경사항 저장 중' : saving === 'saved' ? '모든 변경사항 저장됨' : '문서 정리 PoC'}
-            </p>
-          </div>
-          {activePage && canEdit && (
-            <button
-              onClick={deletePage}
-              className="h-9 border border-black bg-red-300 px-3 text-sm font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000]"
-            >
-              삭제
-            </button>
-          )}
+        <div className="relative flex min-w-0 items-center">
           <button
-            onClick={() => supabase.auth.signOut()}
-            className="h-9 border border-black bg-[#50504d] px-3 text-xs font-black text-white hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[2px_2px_0_#000]"
+            onClick={() => setSettingsOpen(open => !open)}
+            className="flex h-9 w-9 items-center justify-center border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000]"
+            title="설정"
           >
-            로그아웃
+            ⚙
           </button>
+          {settingsOpen && (
+            <div className="absolute right-0 top-11 z-20 w-64 border border-black bg-[#50504d] p-3 text-white shadow-[5px_5px_0_#000]">
+              <p className="truncate text-xs font-bold text-neutral-100">{session.user.email}</p>
+              {activeWorkspace && (
+                <p className="mt-1 truncate text-sm font-black uppercase">{activeWorkspace.name}</p>
+              )}
+              <button
+                onClick={() => {
+                  setSettingsOpen(false)
+                  supabase.auth.signOut()
+                }}
+                className="mt-3 h-9 w-full border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000]"
+              >
+                로그아웃
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -456,20 +512,20 @@ export default function NotionLiteApp() {
                   page.id === activePage.id ? { ...page, title } : page
                 )))
               }}
-              onBlur={event => updatePage({ title: event.target.value })}
+              onBlur={event => updatePage(activePage.id, { title: event.target.value })}
             />
             {editorMode === 'markdown' ? (
               <MarkdownEditor
                 pageId={activePage.id}
-                content={activePage.content}
+                content={activePageContent}
                 editable={Boolean(canEdit)}
-                onChange={scheduleContentSave}
+                onChange={content => scheduleContentSave(activePage.id, content)}
               />
             ) : (
               <DocumentEditor
-                content={activePage.content}
+                content={activePageContent}
                 editable={Boolean(canEdit)}
-                onChange={scheduleContentSave}
+                onChange={content => scheduleContentSave(activePage.id, content)}
               />
             )}
           </article>
@@ -477,15 +533,9 @@ export default function NotionLiteApp() {
           <div className="flex flex-1 items-center justify-center px-6 py-10 text-center">
             <div className="grid w-full max-w-4xl grid-cols-[1.3fr_0.7fr] gap-4 max-lg:grid-cols-1">
               <div className="border border-black bg-[#50504d] p-8 text-left shadow-[6px_6px_0_#000]">
-                <p className="mb-3 inline-block border border-black bg-[#baf7c8] px-2 py-1 text-xs font-black uppercase text-black">
-                  Ready
+                <p className="text-3xl font-black uppercase text-white">
+                  {activeWorkspaceId ? '페이지를 선택하거나 새로 만드세요.' : '워크스페이스를 먼저 만드세요.'}
                 </p>
-              <p className="text-3xl font-black uppercase text-white">
-                {activeWorkspaceId ? '페이지를 선택하거나 새로 만드세요.' : '워크스페이스를 만들면 시작할 수 있습니다.'}
-              </p>
-              <p className="mt-4 border-l-2 border-black pl-3 text-left text-sm font-bold leading-6 text-neutral-100">
-                팀이 함께 읽은 자료, 회의 내용, 액션 아이템을 한곳에서 정리하는 가벼운 협업 문서 공간입니다.
-              </p>
               </div>
               <div className="grid gap-4">
                 <div className="border border-black bg-[#50504d] p-5 text-left shadow-[4px_4px_0_#000]">
