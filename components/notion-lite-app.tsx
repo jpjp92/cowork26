@@ -7,7 +7,6 @@ import AuthPanel from './auth-panel'
 import { supabase } from '../lib/supabase-browser'
 
 const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false })
-const MarkdownEditor = dynamic(() => import('./markdown-editor'), { ssr: false })
 
 interface Workspace {
   id: string
@@ -49,7 +48,6 @@ export default function NotionLiteApp() {
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [creatingWorkspace, setCreatingWorkspace] = useState(false)
   const [creatingPage, setCreatingPage] = useState(false)
-  const [editorMode, setEditorMode] = useState<'rich' | 'markdown'>('rich')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const saveTimers = useRef(new Map<string, number>())
   const pendingContent = useRef(new Map<string, Record<string, unknown>>())
@@ -472,28 +470,11 @@ export default function NotionLiteApp() {
               <span>문서</span>
               <span>/</span>
               <span className="truncate">{activePage.title || 'Untitled'}</span>
-              <div className="ml-auto grid h-8 w-40 shrink-0 grid-cols-2 border border-black">
-                <button
-                  onClick={() => setEditorMode('rich')}
-                  className={`text-xs font-black ${
-                    editorMode === 'rich'
-                      ? 'bg-[#baf7c8] text-black'
-                      : 'bg-[#50504d] text-white hover:bg-white hover:text-black'
-                  }`}
-                >
-                  문서
-                </button>
-                <button
-                  onClick={() => setEditorMode('markdown')}
-                  className={`border-l border-black text-xs font-black ${
-                    editorMode === 'markdown'
-                      ? 'bg-[#baf7c8] text-black'
-                      : 'bg-[#50504d] text-white hover:bg-white hover:text-black'
-                  }`}
-                >
-                  Markdown
-                </button>
-              </div>
+              {saving !== 'idle' && (
+                <span className="ml-auto border border-black bg-[#baf7c8] px-2 py-1 text-[11px] text-black">
+                  {saving === 'saving' ? '저장 중' : '저장됨'}
+                </span>
+              )}
               <span className="hidden sm:inline">
                 {new Date(activePage.updated_at).toLocaleDateString('ko-KR', {
                   month: 'short',
@@ -514,20 +495,11 @@ export default function NotionLiteApp() {
               }}
               onBlur={event => updatePage(activePage.id, { title: event.target.value })}
             />
-            {editorMode === 'markdown' ? (
-              <MarkdownEditor
-                pageId={activePage.id}
-                content={activePageContent}
-                editable={Boolean(canEdit)}
-                onChange={content => scheduleContentSave(activePage.id, content)}
-              />
-            ) : (
-              <DocumentEditor
-                content={activePageContent}
-                editable={Boolean(canEdit)}
-                onChange={content => scheduleContentSave(activePage.id, content)}
-              />
-            )}
+            <DocumentEditor
+              content={activePageContent}
+              editable={Boolean(canEdit)}
+              onChange={content => scheduleContentSave(activePage.id, content)}
+            />
           </article>
         ) : (
           <div className="flex flex-1 items-center justify-center px-6 py-10 text-center">

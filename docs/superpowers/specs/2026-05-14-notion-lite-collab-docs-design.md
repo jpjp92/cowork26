@@ -17,6 +17,8 @@ Cowork26의 방향을 협업 스프레드시트에서 **4~5인용 실시간 협�
 배포: Vercel + Supabase + Railway
 ```
 
+현재 구현은 Next.js 기반 단일 문서 편집 PoC까지 진행된 상태다. 로그인, 워크스페이스/페이지 CRUD, 페이지 트리, Tiptap 에디터, 자동 저장, 기본 레이아웃이 들어가 있다.
+
 ---
 
 ## 2. 피벗 배경
@@ -40,7 +42,7 @@ Frontend
 - React + TypeScript
 - Tiptap Editor
 - Tailwind CSS
-- Brutalism style UI
+- Workspace-first UI
 
 Collaboration
 - Yjs
@@ -118,6 +120,19 @@ Tiptap
 
 ## 5. 핵심 기능 범위
 
+### 현재 구현 완료
+
+```txt
+1. Supabase Auth 로그인 / 로그아웃
+2. 워크스페이스 생성 / 조회
+3. 페이지 생성 / 삭제
+4. parent_id 기반 페이지 트리
+5. Tiptap 단일 문서 편집기
+6. 본문 자동 저장
+7. 페이지 제목 blur 저장
+8. 설정 메뉴 기반 로그아웃
+```
+
 ### PoC 필수
 
 ```txt
@@ -142,6 +157,7 @@ Tiptap
 - 문서 승인 워크플로우
 - RAG 검색
 - AI 요약/정리
+- Markdown 탭 / Markdown preview
 - 버전 diff UI
 - 모바일 최적화
 - 오프라인 편집
@@ -230,15 +246,24 @@ page:{page_id}
 
 ## 8. UI 스타일
 
-PoC UI는 brutalism 스타일을 사용한다. 작업 도구로서 정보 밀도는 유지하되, 시각 언어는 더 강하게 가져간다.
+초기 brutalism 방향에서, 현재는 `sample_design` 레퍼런스를 반영한 **workspace-centered minimalist layout + 강한 포인트 액션**으로 조정한다.
 
 ```txt
 스타일 원칙:
-- 두꺼운 검정 테두리
-- 높은 대비
-- 평면 색상
-- 강한 버튼/입력 상태
-- 장식보다 구조를 드러내는 레이아웃
+- 좌측 고정 사이드바 + 상단 헤더
+- 중앙 문서 캔버스
+- 중성 배경 위 검정 border와 accent color 사용
+- 페이지 액션은 hover 시 노출
+- 헤더 액션은 최소화하고 설정 메뉴로 수렴
+```
+
+현재 UI 원칙:
+
+```txt
+- 헤더 우측에는 설정 아이콘만 둔다
+- 페이지 삭제/하위 페이지 추가는 사이드바 항목에서 관리한다
+- 문서 모드는 단일 Tiptap 편집기만 유지한다
+- 설명성 배지와 불필요한 PoC 워딩은 제거한다
 ```
 
 ---
@@ -252,11 +277,12 @@ PoC UI는 brutalism 스타일을 사용한다. 작업 도구로서 정보 밀도
 4단계: workspace / pages CRUD
 5단계: 사이드바 페이지 트리 구현
 6단계: Tiptap 단일 사용자 에디터 연결
-7단계: Hocuspocus + Yjs 실시간 편집 연결
-8단계: Hocuspocus 인증/인가 구현
-9단계: Supabase ydoc_state 저장/복원
-10단계: 접속자 표시 / 커서 표시
-11단계: Vercel + Railway 배포
+7단계: 자동 저장 안정화 / 편집 버벅임 제거
+8단계: Hocuspocus + Yjs 실시간 편집 연결
+9단계: Hocuspocus 인증/인가 구현
+10단계: Supabase ydoc_state 저장/복원
+11단계: 접속자 표시 / 커서 표시
+12단계: Vercel + Railway 배포
 ```
 
 ---
