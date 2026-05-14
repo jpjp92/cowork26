@@ -33,14 +33,7 @@ SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
 ```
 
-현재 `next.config.ts`에서 기존 Vite 변수도 fallback으로 읽는다.
-
-```env
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_ANON_KEY=...
-```
-
-다만 Vercel/Next 기준으로는 `NEXT_PUBLIC_` 이름을 사용하는 것이 더 명확하다.
+Vercel/Next 기준으로는 `NEXT_PUBLIC_` 이름을 사용하는 것이 기준이다.
 
 회원가입 메일 인증 후 복귀 주소는 `NEXT_PUBLIC_SITE_URL` 또는 현재 브라우저 origin을 사용한다. Supabase Authentication 설정의 Redirect URLs에도 아래 주소를 등록해야 한다.
 

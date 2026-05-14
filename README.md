@@ -1,6 +1,10 @@
 # Cowork26
 
-Cowork26는 `Next.js + Supabase + Tiptap` 기반의 Notion-lite 협업 문서 정리 도구다.
+---
+
+
+
+> Cowork26는 `Next.js + Supabase + Tiptap` 기반의 Notion-lite 협업 문서 정리 도구다.
 
 현재는 워크스페이스와 페이지를 만들고, 문서를 작성하고, 멤버를 추가하는 PoC 단계다. 실시간 동시 편집은 아직 붙지 않았고, 본문은 자동 저장 방식으로 동작한다. 다른 사용자의 변경 내용은 수동 새로고침으로 다시 불러오는 구조다.
 
@@ -100,13 +104,6 @@ SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
 ```
 
-현재 `next.config.ts`에서 기존 Vite 변수도 fallback으로 읽는다.
-
-```env
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_ANON_KEY=...
-```
-
 운영 배포 기준 권장값:
 
 ```env
@@ -131,8 +128,8 @@ pages
 
 추가 참고:
 
-- [docs/superpowers/plans/2026-05-14-supabase-notion-lite-setup.md](/home/jpjp92/devs/github/collab-sheets/docs/superpowers/plans/2026-05-14-supabase-notion-lite-setup.md)
-- [docs/superpowers/specs/2026-05-14-notion-lite-collab-docs-design.md](/home/jpjp92/devs/github/collab-sheets/docs/superpowers/specs/2026-05-14-notion-lite-collab-docs-design.md)
+- [docs/plans/2026-05-14-supabase-notion-lite-setup.md](/home/jpjp92/devs/github/collab-sheets/docs/plans/2026-05-14-supabase-notion-lite-setup.md)
+- [docs/specs/2026-05-14-notion-lite-collab-docs-design.md](/home/jpjp92/devs/github/collab-sheets/docs/specs/2026-05-14-notion-lite-collab-docs-design.md)
 
 ## 기본 플로우
 
