@@ -715,13 +715,15 @@ export default function NotionLiteApp() {
                 onBlur={event => updatePage(activePage.id, { title: event.target.value })}
               />
             </div>
-            {saving !== 'idle' && (
-              <div className="mb-6 flex justify-end">
-                <span className="rounded-[8px] border border-black bg-[#baf7c8] px-2 py-1 text-[11px] font-black text-black shadow-[2px_2px_0_#000]">
-                  {saving === 'saving' ? '저장 중' : '저장됨'}
-                </span>
-              </div>
-            )}
+            <div className="mb-6 flex h-7 justify-end">
+              <span
+                className={`rounded-[8px] border border-black bg-[#baf7c8] px-2 py-1 text-[11px] font-black text-black shadow-[2px_2px_0_#000] transition-opacity ${
+                  saving === 'idle' ? 'pointer-events-none opacity-0' : 'opacity-100'
+                }`}
+              >
+                {saving === 'saving' ? '저장 중' : '저장됨'}
+              </span>
+            </div>
             <DocumentEditor
               content={activePageContent}
               editable={Boolean(canEdit)}
