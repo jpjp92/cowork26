@@ -8,18 +8,37 @@ export default function AuthForm() {
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setNotice('')
     setLoading(true)
-    const { error } =
-      mode === 'login'
-        ? await signIn(email, password)
-        : await signUp(email, password, displayName)
-    if (error) setError(error.message)
-    setLoading(false)
+    try {
+      if (mode === 'login') {
+        const { error } = await signIn(email, password)
+        if (error) setError(error.message)
+        return
+      }
+
+      const { data, error } = await signUp(email, password, displayName)
+      if (error) {
+        setError(error.message)
+        return
+      }
+
+      if (data.session) {
+        setNotice('회원가입이 완료되었습니다.')
+      } else {
+        setNotice('가입 확인 메일을 보냈습니다. 이메일 인증 후 로그인해주세요.')
+        setMode('login')
+        setPassword('')
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -55,6 +74,7 @@ export default function AuthForm() {
           onChange={e => setPassword(e.target.value)}
           required
         />
+        {notice && <p className="text-green-600 text-sm">{notice}</p>}
         {error && <p className="text-red-500 text-sm">{error}</p>}
         <button
           type="submit"
@@ -68,7 +88,11 @@ export default function AuthForm() {
           <button
             type="button"
             className="text-blue-600 underline"
-            onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError('') }}
+            onClick={() => {
+              setMode(mode === 'login' ? 'signup' : 'login')
+              setError('')
+              setNotice('')
+            }}
           >
             {mode === 'login' ? '회원가입' : '로그인'}
           </button>

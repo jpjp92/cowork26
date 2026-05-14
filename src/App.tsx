@@ -59,7 +59,7 @@ export default function App() {
       <main className={activeSheet ? '' : 'bg-gray-50 min-h-[calc(100vh-56px)]'}>
         {activeSheet
           ? <SheetEditor sheet={activeSheet} />
-          : <SheetList onOpen={setActiveSheet} />
+          : <SheetList onOpen={setActiveSheet} accessToken={session.access_token} />
         }
       </main>
 

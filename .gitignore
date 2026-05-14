@@ -1,5 +1,10 @@
 node_modules
 dist
+.next
 .env
 .env.local
 .vercel
+ref/ref1.2.html
+ref/ref1.html
+ref/sample12.png
+supabase/migrations/002_notion_lite.sql

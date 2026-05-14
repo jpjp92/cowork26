@@ -3,25 +3,30 @@ import { supabaseAdmin } from '../_lib/supabase'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = req.headers.authorization?.replace('Bearer ', '')
-  if (!token) return res.status(401).json({ error: 'Unauthorized' })
+  if (!token || token === 'undefined') return res.status(401).json({ error: 'Missing access token' })
 
   const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
-  if (authError || !user) return res.status(401).json({ error: 'Unauthorized' })
+  if (authError || !user) {
+    return res.status(401).json({ error: authError?.message ?? 'Invalid access token' })
+  }
 
   if (req.method === 'GET') {
-    const { data, error } = await supabaseAdmin
+    const { data: memberships, error: membershipsError } = await supabaseAdmin
+      .from('sheet_members')
+      .select('sheet_id')
+      .eq('user_id', user.id)
+
+    if (membershipsError) return res.status(500).json({ error: membershipsError.message })
+
+    const memberSheetIds = memberships?.map(row => row.sheet_id) ?? []
+    const query = supabaseAdmin
       .from('sheets')
       .select('id, title, created_at, updated_at, owner_id')
-      .or(
-        `owner_id.eq.${user.id},id.in.(${
-          (await supabaseAdmin
-            .from('sheet_members')
-            .select('sheet_id')
-            .eq('user_id', user.id)
-          ).data?.map(r => r.sheet_id).join(',') || 'null'
-        })`
-      )
       .order('updated_at', { ascending: false })
+
+    const { data, error } = memberSheetIds.length > 0
+      ? await query.or(`owner_id.eq.${user.id},id.in.(${memberSheetIds.join(',')})`)
+      : await query.eq('owner_id', user.id)
 
     if (error) return res.status(500).json({ error: error.message })
     return res.json(data)
@@ -38,11 +43,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (error) return res.status(500).json({ error: error.message })
 
-    await supabaseAdmin.from('sheet_members').insert({
+    const { error: memberError } = await supabaseAdmin.from('sheet_members').insert({
       sheet_id: sheet.id,
       user_id: user.id,
       role: 'editor',
     })
+
+    if (memberError) return res.status(500).json({ error: memberError.message })
 
     return res.status(201).json(sheet)
   }
