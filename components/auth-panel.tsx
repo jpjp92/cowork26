@@ -3,6 +3,14 @@
 import { FormEvent, useState } from 'react'
 import { supabase } from '../lib/supabase-browser'
 
+function getAuthRedirectUrl() {
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+
+  return process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cowork26.vercel.app'
+}
+
 export default function AuthPanel() {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
@@ -31,7 +39,10 @@ export default function AuthPanel() {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { display_name: displayName } },
+        options: {
+          data: { display_name: displayName },
+          emailRedirectTo: getAuthRedirectUrl(),
+        },
       })
 
       if (signUpError) {
@@ -55,22 +66,19 @@ export default function AuthPanel() {
     <main className="flex min-h-screen items-center justify-center bg-[#777773] px-4">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-[390px] border-2 border-black bg-[#50504d] p-7 text-white shadow-[6px_6px_0_#000]"
+        className="w-full max-w-[390px] rounded-[8px] border-2 border-black bg-[#50504d] p-7 text-white shadow-[6px_6px_0_#000]"
       >
         <div className="mb-7">
-          <div className="mb-4 flex h-9 w-9 items-center justify-center border border-black bg-[#baf7c8] text-sm font-black leading-none text-black shadow-[2px_2px_0_#000]">
-            C
-          </div>
           <h1 className="text-3xl font-black uppercase text-white">Cowork26</h1>
           <p className="mt-2 border-l-2 border-black pl-3 text-sm font-bold leading-6 text-neutral-100">
-            팀 문서를 함께 만들고 정리하는 brutal Notion-lite 협업 공간
+            팀 문서를 함께 만들고 정리하는 협업 공간
           </p>
         </div>
 
         <div className="space-y-3">
           {mode === 'signup' && (
             <input
-              className="w-full border-2 border-black bg-white px-3 py-2 text-sm font-bold text-black outline-none placeholder:text-[#777] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
+              className="w-full rounded-[8px] border-2 border-black bg-white px-3 py-2 text-sm font-bold text-black outline-none placeholder:text-[#777] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
               placeholder="이름"
               value={displayName}
               onChange={event => setDisplayName(event.target.value)}
@@ -78,7 +86,7 @@ export default function AuthPanel() {
             />
           )}
           <input
-            className="w-full border-2 border-black bg-white px-3 py-2 text-sm font-bold text-black outline-none placeholder:text-[#777] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
+            className="w-full rounded-[8px] border-2 border-black bg-white px-3 py-2 text-sm font-bold text-black outline-none placeholder:text-[#777] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
             placeholder="이메일"
             type="email"
             value={email}
@@ -86,7 +94,7 @@ export default function AuthPanel() {
             required
           />
           <input
-            className="w-full border-2 border-black bg-white px-3 py-2 text-sm font-bold text-black outline-none placeholder:text-[#777] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
+            className="w-full rounded-[8px] border-2 border-black bg-white px-3 py-2 text-sm font-bold text-black outline-none placeholder:text-[#777] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
             placeholder="비밀번호"
             type="password"
             value={password}
@@ -96,12 +104,12 @@ export default function AuthPanel() {
         </div>
 
         {message && (
-          <p className="mt-4 border-2 border-black bg-[#baf7c8] px-3 py-2 text-sm font-bold text-black">
+          <p className="mt-4 rounded-[8px] border-2 border-black bg-[#baf7c8] px-3 py-2 text-sm font-bold text-black">
             {message}
           </p>
         )}
         {error && (
-          <p className="mt-4 border-2 border-black bg-red-300 px-3 py-2 text-sm font-bold text-black">
+          <p className="mt-4 rounded-[8px] border-2 border-black bg-red-300 px-3 py-2 text-sm font-bold text-black">
             {error}
           </p>
         )}
@@ -109,7 +117,7 @@ export default function AuthPanel() {
         <button
           type="submit"
           disabled={loading}
-          className="mt-5 h-10 w-full border-2 border-black bg-[#baf7c8] px-4 text-sm font-black uppercase text-black shadow-[4px_4px_0_#000] hover:-translate-y-0.5 hover:shadow-[5px_5px_0_#000] disabled:opacity-50"
+          className="mt-5 h-10 w-full rounded-[8px] border-2 border-black bg-[#baf7c8] px-4 text-sm font-black uppercase text-black shadow-[4px_4px_0_#000] hover:-translate-y-0.5 hover:shadow-[5px_5px_0_#000] disabled:opacity-50"
         >
           {loading ? '처리 중...' : mode === 'login' ? '로그인' : '회원가입'}
         </button>

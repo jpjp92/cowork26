@@ -26,6 +26,13 @@ interface PageRecord {
   updated_at: string
 }
 
+interface WorkspaceMember {
+  user_id: string
+  role: 'owner' | 'editor' | 'viewer'
+  created_at: string
+  email: string | null
+}
+
 async function readError(response: Response, fallback: string) {
   try {
     const data = await response.json()
@@ -49,6 +56,12 @@ export default function NotionLiteApp() {
   const [creatingWorkspace, setCreatingWorkspace] = useState(false)
   const [creatingPage, setCreatingPage] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [members, setMembers] = useState<WorkspaceMember[]>([])
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('editor')
+  const [inviteLoading, setInviteLoading] = useState(false)
   const saveTimers = useRef(new Map<string, number>())
   const pendingContent = useRef(new Map<string, Record<string, unknown>>())
 
@@ -57,11 +70,22 @@ export default function NotionLiteApp() {
   const activePage = pages.find(page => page.id === activePageId) ?? null
   const activePageContent = activePage ? pendingContent.current.get(activePage.id) ?? activePage.content : null
   const canEdit = activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'editor'
+  const canManageMembers = activeWorkspace?.role === 'owner'
 
   const authHeaders = useCallback(() => ({
     Authorization: `Bearer ${accessToken}`,
     'Content-Type': 'application/json',
   }), [accessToken])
+
+  const resetClientState = useCallback(() => {
+    setSession(null)
+    setWorkspaces([])
+    setPages([])
+    setMembers([])
+    setActiveWorkspaceId('')
+    setActivePageId('')
+    setSettingsOpen(false)
+  }, [])
 
   const loadWorkspaces = useCallback(async () => {
     if (!accessToken) return
@@ -72,6 +96,7 @@ export default function NotionLiteApp() {
     const data = await response.json() as Workspace[]
     setWorkspaces(data)
     setActiveWorkspaceId(current => current || data[0]?.id || '')
+    return data
   }, [accessToken, authHeaders])
 
   const loadPages = useCallback(async (workspaceId: string) => {
@@ -89,25 +114,54 @@ export default function NotionLiteApp() {
     ))
   }, [accessToken, authHeaders])
 
+  const loadMembers = useCallback(async (workspaceId: string) => {
+    if (!accessToken || !workspaceId) return
+    setMembersLoading(true)
+    try {
+      const response = await fetch(`/api/workspaces/${workspaceId}/members`, {
+        headers: authHeaders(),
+      })
+      if (!response.ok) throw await readError(response, '멤버를 불러오지 못했습니다.')
+
+      const data = await response.json() as WorkspaceMember[]
+      setMembers(data)
+    } finally {
+      setMembersLoading(false)
+    }
+  }, [accessToken, authHeaders])
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    const bootstrapSession = async () => {
+      const { data, error: sessionError } = await supabase.auth.getSession()
+
+      if (sessionError) {
+        const isInvalidRefreshToken = sessionError.message.includes('Invalid Refresh Token')
+        if (isInvalidRefreshToken) {
+          await supabase.auth.signOut({ scope: 'local' })
+          resetClientState()
+        } else {
+          setError(sessionError.message)
+        }
+        setAuthLoading(false)
+        return
+      }
+
       setSession(data.session)
       setAuthLoading(false)
-    })
+    }
+
+    bootstrapSession()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession)
       setAuthLoading(false)
       if (!nextSession) {
-        setWorkspaces([])
-        setPages([])
-        setActiveWorkspaceId('')
-        setActivePageId('')
+        resetClientState()
       }
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [resetClientState])
 
   useEffect(() => {
     if (!accessToken) return
@@ -122,6 +176,11 @@ export default function NotionLiteApp() {
     }
     loadPages(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
   }, [activeWorkspaceId, loadPages])
+
+  useEffect(() => {
+    if (!settingsOpen || !activeWorkspaceId) return
+    loadMembers(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
+  }, [settingsOpen, activeWorkspaceId, loadMembers])
 
   useEffect(() => () => {
     for (const timer of saveTimers.current.values()) {
@@ -293,14 +352,66 @@ export default function NotionLiteApp() {
     setActivePageId(current => deletedIds.has(current) ? remaining[0]?.id ?? '' : current)
   }
 
+  const inviteMember = async () => {
+    if (!activeWorkspaceId || !inviteEmail.trim() || !canManageMembers || inviteLoading) return
+    setInviteLoading(true)
+    setError('')
+    try {
+      const response = await fetch(`/api/workspaces/${activeWorkspaceId}/members`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          role: inviteRole,
+        }),
+      })
+      if (!response.ok) {
+        setError((await readError(response, '멤버를 추가하지 못했습니다.')).message)
+        return
+      }
+
+      setInviteEmail('')
+      await loadMembers(activeWorkspaceId)
+    } finally {
+      setInviteLoading(false)
+    }
+  }
+
+  const refreshWorkspaceData = async () => {
+    if (!accessToken || refreshing) return
+    setRefreshing(true)
+    setError('')
+
+    try {
+      for (const timer of saveTimers.current.values()) {
+        window.clearTimeout(timer)
+      }
+      saveTimers.current.clear()
+      pendingContent.current.clear()
+
+      const refreshedWorkspaces = await loadWorkspaces()
+      const nextWorkspaceId = activeWorkspaceId || refreshedWorkspaces?.[0]?.id || ''
+      if (nextWorkspaceId) {
+        await loadPages(nextWorkspaceId)
+        if (settingsOpen) {
+          await loadMembers(nextWorkspaceId)
+        }
+      }
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : '새로고침에 실패했습니다.')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   const renderPageList = (parentId: string | null, depth = 0): React.ReactNode => {
     const items = pageTree.get(parentId ?? 'root') ?? []
     return items.map(page => (
       <div key={page.id}>
-        <div className="group flex items-center gap-1" style={{ paddingLeft: depth * 14 }}>
+        <div className="flex items-center gap-2" style={{ paddingLeft: depth * 14 }}>
           <button
             onClick={() => setActivePageId(page.id)}
-            className={`min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm ${
+            className={`flex h-9 min-w-0 flex-1 items-center truncate rounded-[8px] px-3 text-left text-sm ${
               page.id === activePageId
                 ? 'border border-black bg-[#baf7c8] font-black text-black shadow-[2px_2px_0_#000]'
                 : 'font-semibold text-white hover:bg-[#50504d]'
@@ -309,22 +420,22 @@ export default function NotionLiteApp() {
             {page.title}
           </button>
           {canEdit && (
-            <>
+            <div className="ml-2 flex shrink-0 gap-2">
               <button
                 onClick={() => createPage(page.id)}
-                className="hidden h-8 w-8 shrink-0 border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] group-hover:block"
+                className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8]"
                 title="하위 페이지 추가"
               >
                 +
               </button>
               <button
                 onClick={() => deletePage(page.id)}
-                className="hidden h-8 w-8 shrink-0 border border-black bg-red-300 text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-red-200 group-hover:block"
+                className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-red-300 text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-red-200"
                 title="페이지 삭제"
               >
                 x
               </button>
-            </>
+            </div>
           )}
         </div>
         {renderPageList(page.id, depth + 1)}
@@ -342,7 +453,7 @@ export default function NotionLiteApp() {
     <main className="flex min-h-screen flex-col bg-[#777773] text-black">
       <header className="flex h-16 shrink-0 items-center justify-between border-b border-black bg-[#777773] px-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center border border-black bg-[#baf7c8] text-sm font-black leading-none text-black shadow-[2px_2px_0_#000]">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border border-black bg-[#baf7c8] text-sm font-black leading-none text-black shadow-[2px_2px_0_#000]">
             C
           </span>
           <div className="min-w-0">
@@ -351,26 +462,95 @@ export default function NotionLiteApp() {
           </div>
         </div>
 
-        <div className="relative flex min-w-0 items-center">
+        <div className="relative flex min-w-0 items-center gap-2">
+          <button
+            onClick={refreshWorkspaceData}
+            disabled={refreshing}
+            className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
+            title="새로고침"
+          >
+            {refreshing ? '…' : '↻'}
+          </button>
           <button
             onClick={() => setSettingsOpen(open => !open)}
-            className="flex h-9 w-9 items-center justify-center border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000]"
+            className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000]"
             title="설정"
           >
             ⚙
           </button>
           {settingsOpen && (
-            <div className="absolute right-0 top-11 z-20 w-64 border border-black bg-[#50504d] p-3 text-white shadow-[5px_5px_0_#000]">
+            <div className="absolute right-0 top-11 z-20 w-80 rounded-[8px] border border-black bg-[#50504d] p-3 text-white shadow-[5px_5px_0_#000]">
               <p className="truncate text-xs font-bold text-neutral-100">{session.user.email}</p>
               {activeWorkspace && (
                 <p className="mt-1 truncate text-sm font-black uppercase">{activeWorkspace.name}</p>
+              )}
+              {activeWorkspace && (
+                <>
+                  <div className="mt-3 border-t border-black pt-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-[11px] font-black uppercase text-neutral-100">Members</p>
+                      {membersLoading ? (
+                        <span className="text-[11px] font-bold text-neutral-200">불러오는 중</span>
+                      ) : (
+                        <span className="border border-black bg-[#baf7c8] px-1.5 text-[11px] font-black text-black">
+                          {members.length}
+                        </span>
+                      )}
+                    </div>
+                    <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+                      {members.map(member => (
+                        <div key={member.user_id} className="rounded-[8px] border border-black bg-[#62625f] px-2 py-2">
+                          <p className="truncate text-xs font-bold text-white">
+                            {member.email ?? member.user_id}
+                          </p>
+                          <p className="mt-1 text-[11px] font-black uppercase text-[#baf7c8]">
+                            {member.role}
+                          </p>
+                        </div>
+                      ))}
+                      {!membersLoading && members.length === 0 && (
+                        <p className="text-xs font-bold text-neutral-200">멤버가 없습니다.</p>
+                      )}
+                    </div>
+                  </div>
+                  {canManageMembers && (
+                    <div className="mt-3 border-t border-black pt-3">
+                      <p className="mb-2 text-[11px] font-black uppercase text-neutral-100">Add Member</p>
+                      <input
+                        className="w-full rounded-[8px] border border-black bg-white px-2.5 py-2 text-sm font-bold text-black outline-none placeholder:text-[#666]"
+                        placeholder="이메일"
+                        type="email"
+                        value={inviteEmail}
+                        onChange={event => setInviteEmail(event.target.value)}
+                        onKeyDown={event => event.key === 'Enter' && inviteMember()}
+                      />
+                      <div className="mt-2 flex gap-2">
+                        <select
+                          className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-[#62625f] px-2 text-xs font-black uppercase text-white outline-none"
+                          value={inviteRole}
+                          onChange={event => setInviteRole(event.target.value as 'editor' | 'viewer')}
+                        >
+                          <option value="editor">editor</option>
+                          <option value="viewer">viewer</option>
+                        </select>
+                        <button
+                          onClick={inviteMember}
+                          disabled={!inviteEmail.trim() || inviteLoading}
+                          className="h-9 rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] disabled:opacity-40"
+                        >
+                          {inviteLoading ? '추가 중' : '멤버 추가'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
               <button
                 onClick={() => {
                   setSettingsOpen(false)
                   supabase.auth.signOut()
                 }}
-                className="mt-3 h-9 w-full border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000]"
+                className="mt-3 h-9 w-full rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000]"
               >
                 로그아웃
               </button>
@@ -386,7 +566,7 @@ export default function NotionLiteApp() {
             Workspace
           </p>
           <select
-            className="mb-2 w-full border border-black bg-[#50504d] px-2.5 py-2 text-sm font-black text-white outline-none focus:-translate-y-0.5 focus:bg-white focus:text-black focus:shadow-[3px_3px_0_#000]"
+            className="mb-2 w-full rounded-[8px] border border-black bg-[#50504d] px-2.5 py-2 text-sm font-black text-white outline-none focus:-translate-y-0.5 focus:bg-white focus:text-black focus:shadow-[3px_3px_0_#000]"
             value={activeWorkspaceId}
             onChange={event => setActiveWorkspaceId(event.target.value)}
           >
@@ -397,7 +577,7 @@ export default function NotionLiteApp() {
           </select>
           <div className="flex gap-2">
             <input
-              className="min-w-0 flex-1 border border-black bg-white px-2.5 py-1.5 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
+              className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
               placeholder="새 워크스페이스"
               value={workspaceName}
               onChange={event => setWorkspaceName(event.target.value)}
@@ -406,9 +586,9 @@ export default function NotionLiteApp() {
             <button
               onClick={createWorkspace}
               disabled={!workspaceName.trim() || creatingWorkspace}
-              className="h-8 border border-black bg-[#baf7c8] px-3 text-sm font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
+              className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-[#baf7c8] text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
             >
-              {creatingWorkspace ? '생성 중' : '생성'}
+              {creatingWorkspace ? '…' : '+'}
             </button>
           </div>
         </div>
@@ -422,7 +602,7 @@ export default function NotionLiteApp() {
           </div>
           <div className="mb-3 flex items-center gap-2">
             <input
-              className="min-w-0 flex-1 border border-black bg-white px-2.5 py-1.5 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
+              className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
               placeholder="새 페이지"
               value={newPageTitle}
               onChange={event => setNewPageTitle(event.target.value)}
@@ -432,7 +612,7 @@ export default function NotionLiteApp() {
             <button
               onClick={() => createPage()}
               disabled={!activeWorkspaceId || !canEdit || creatingPage}
-              className="h-8 w-8 shrink-0 border border-black bg-[#50504d] text-sm font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
+              className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-[#50504d] text-sm font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
             >
               {creatingPage ? '...' : '+'}
             </button>
@@ -465,8 +645,8 @@ export default function NotionLiteApp() {
         )}
 
         {activePage ? (
-          <article className="mx-auto w-full max-w-4xl flex-1 px-10 py-12 max-sm:px-5 max-sm:py-8">
-            <div className="mb-8 flex items-center gap-3 border-b border-black pb-3 text-xs font-black uppercase text-white">
+          <article className="mx-auto my-8 w-full max-w-4xl flex-1 rounded-[8px] border border-black bg-[#fef9ef] px-10 py-12 text-[#1d1c16] shadow-[6px_6px_0_#000] max-sm:mx-4 max-sm:px-5 max-sm:py-8">
+            <div className="mb-8 flex items-center gap-3 border-b border-black pb-3 text-xs font-black uppercase text-[#444748]">
               <span>문서</span>
               <span>/</span>
               <span className="truncate">{activePage.title || 'Untitled'}</span>
@@ -483,7 +663,7 @@ export default function NotionLiteApp() {
               </span>
             </div>
             <input
-              className="mb-7 w-full border-b border-black bg-transparent pb-3 text-[42px] font-black leading-tight tracking-normal text-white outline-none placeholder:text-neutral-300 focus:bg-[#50504d] max-sm:text-3xl"
+              className="mb-7 w-full border-b border-black bg-transparent pb-3 text-[42px] font-black leading-tight tracking-normal text-[#1d1c16] outline-none placeholder:text-[#8a867f] focus:bg-[#f3ede4] max-sm:text-3xl"
               value={activePage.title}
               disabled={!canEdit}
               placeholder="Untitled"
@@ -504,17 +684,17 @@ export default function NotionLiteApp() {
         ) : (
           <div className="flex flex-1 items-center justify-center px-6 py-10 text-center">
             <div className="grid w-full max-w-4xl grid-cols-[1.3fr_0.7fr] gap-4 max-lg:grid-cols-1">
-              <div className="border border-black bg-[#50504d] p-8 text-left shadow-[6px_6px_0_#000]">
+              <div className="rounded-[8px] border border-black bg-[#50504d] p-8 text-left shadow-[6px_6px_0_#000]">
                 <p className="text-3xl font-black uppercase text-white">
                   {activeWorkspaceId ? '페이지를 선택하거나 새로 만드세요.' : '워크스페이스를 먼저 만드세요.'}
                 </p>
               </div>
               <div className="grid gap-4">
-                <div className="border border-black bg-[#50504d] p-5 text-left shadow-[4px_4px_0_#000]">
+                <div className="rounded-[8px] border border-black bg-[#50504d] p-5 text-left shadow-[4px_4px_0_#000]">
                   <p className="text-xs font-black uppercase text-[#baf7c8]">Workspaces</p>
                   <p className="mt-2 text-4xl font-black text-white">{workspaces.length}</p>
                 </div>
-                <div className="border border-black bg-[#50504d] p-5 text-left shadow-[4px_4px_0_#000]">
+                <div className="rounded-[8px] border border-black bg-[#50504d] p-5 text-left shadow-[4px_4px_0_#000]">
                   <p className="text-xs font-black uppercase text-[#baf7c8]">Pages</p>
                   <p className="mt-2 text-4xl font-black text-white">{pages.length}</p>
                 </div>

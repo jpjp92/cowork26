@@ -27,6 +27,7 @@ pages
 ```env
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
+NEXT_PUBLIC_SITE_URL=https://cowork26.vercel.app
 
 SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
@@ -40,6 +41,13 @@ VITE_SUPABASE_ANON_KEY=...
 ```
 
 다만 Vercel/Next 기준으로는 `NEXT_PUBLIC_` 이름을 사용하는 것이 더 명확하다.
+
+회원가입 메일 인증 후 복귀 주소는 `NEXT_PUBLIC_SITE_URL` 또는 현재 브라우저 origin을 사용한다. Supabase Authentication 설정의 Redirect URLs에도 아래 주소를 등록해야 한다.
+
+```txt
+https://cowork26.vercel.app
+http://localhost:3000
+```
 
 ---
 

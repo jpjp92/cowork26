@@ -32,7 +32,7 @@ textarea {
 .ProseMirror {
   min-height: 55vh;
   outline: none;
-  color: #ffffff;
+  color: #1d1c16;
   font-size: 1rem;
   line-height: 1.8;
 }
@@ -64,10 +64,10 @@ textarea {
 }
 
 .ProseMirror blockquote {
-  background: #50504d;
+  background: #e7e2d9;
   border: 1px solid #000;
   box-shadow: 3px 3px 0 #000;
-  color: #ffffff;
+  color: #1d1c16;
   margin: 1rem 0;
   padding: 0.75rem 1rem;
 }
@@ -89,7 +89,7 @@ textarea {
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
-  color: #d4d4d0;
+  color: #8a867f;
   content: attr(data-placeholder);
   float: left;
   height: 0;
