@@ -21,12 +21,22 @@ function parseMarkdownTable(text: string) {
     .trim()
     .split(/\r?\n/)
     .map(line => line.trim())
-    .filter(Boolean)
+    .filter(line => line && !line.startsWith('```'))
 
-  if (lines.length < 2 || !lines.every(line => line.includes('|'))) return null
+  if (lines.length < 2) return null
 
   const dividerPattern = /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/
-  if (!dividerPattern.test(lines[1])) return null
+  const dividerIndex = lines.findIndex((line, index) => (
+    index > 0 && line.includes('|') && dividerPattern.test(line) && lines[index - 1]?.includes('|')
+  ))
+
+  if (dividerIndex === -1) return null
+
+  const tableLines = [lines[dividerIndex - 1], lines[dividerIndex]]
+  for (const line of lines.slice(dividerIndex + 1)) {
+    if (!line.includes('|')) break
+    tableLines.push(line)
+  }
 
   const toCells = (line: string) => line
     .replace(/^\|/, '')
@@ -34,8 +44,8 @@ function parseMarkdownTable(text: string) {
     .split('|')
     .map(cell => cell.trim())
 
-  const headers = toCells(lines[0])
-  const rows = lines.slice(2).map(toCells)
+  const headers = toCells(tableLines[0])
+  const rows = tableLines.slice(2).map(toCells)
   if (!headers.length || rows.some(row => row.length !== headers.length)) return null
 
   const escapeHtml = (value: string) => value
