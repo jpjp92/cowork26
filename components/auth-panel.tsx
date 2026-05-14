@@ -58,7 +58,7 @@ export default function AuthPanel() {
         className="w-full max-w-[390px] border-2 border-black bg-[#50504d] p-7 text-white shadow-[6px_6px_0_#000]"
       >
         <div className="mb-7">
-          <div className="mb-4 flex h-11 w-11 items-center justify-center border-2 border-black bg-[#baf7c8] text-sm font-black text-black shadow-[3px_3px_0_#000]">
+          <div className="mb-4 flex h-9 w-9 items-center justify-center border border-black bg-[#baf7c8] text-sm font-black leading-none text-black shadow-[2px_2px_0_#000]">
             C
           </div>
           <h1 className="text-3xl font-black uppercase text-white">Cowork26</h1>
@@ -109,7 +109,7 @@ export default function AuthPanel() {
         <button
           type="submit"
           disabled={loading}
-          className="mt-5 w-full border-2 border-black bg-[#baf7c8] px-4 py-2.5 text-sm font-black uppercase text-black shadow-[4px_4px_0_#000] hover:-translate-y-0.5 hover:shadow-[5px_5px_0_#000] disabled:opacity-50"
+          className="mt-5 h-10 w-full border-2 border-black bg-[#baf7c8] px-4 text-sm font-black uppercase text-black shadow-[4px_4px_0_#000] hover:-translate-y-0.5 hover:shadow-[5px_5px_0_#000] disabled:opacity-50"
         >
           {loading ? '처리 중...' : mode === 'login' ? '로그인' : '회원가입'}
         </button>

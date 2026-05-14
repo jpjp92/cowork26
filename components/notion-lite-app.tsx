@@ -7,6 +7,7 @@ import AuthPanel from './auth-panel'
 import { supabase } from '../lib/supabase-browser'
 
 const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false })
+const MarkdownEditor = dynamic(() => import('./markdown-editor'), { ssr: false })
 
 interface Workspace {
   id: string
@@ -46,6 +47,9 @@ export default function NotionLiteApp() {
   const [newPageTitle, setNewPageTitle] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false)
+  const [creatingPage, setCreatingPage] = useState(false)
+  const [editorMode, setEditorMode] = useState<'rich' | 'markdown'>('rich')
   const saveTimer = useRef<number | null>(null)
 
   const accessToken = session?.access_token
@@ -133,45 +137,59 @@ export default function NotionLiteApp() {
   }, [pages])
 
   const createWorkspace = async () => {
-    if (!workspaceName.trim() || !accessToken) return
+    if (!workspaceName.trim() || !accessToken || creatingWorkspace) return
     setError('')
-    const response = await fetch('/api/workspaces', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ name: workspaceName.trim() }),
-    })
-    if (!response.ok) {
-      setError((await readError(response, '워크스페이스를 만들지 못했습니다.')).message)
-      return
-    }
+    setCreatingWorkspace(true)
+    try {
+      const response = await fetch('/api/workspaces', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ name: workspaceName.trim() }),
+      })
+      if (!response.ok) {
+        setError((await readError(response, '워크스페이스를 만들지 못했습니다.')).message)
+        return
+      }
 
-    const workspace = await response.json() as Workspace
-    setWorkspaces(previous => [...previous, workspace])
-    setActiveWorkspaceId(workspace.id)
-    setWorkspaceName('')
+      const data = await response.json() as { workspace: Workspace; page?: PageRecord }
+      setWorkspaces(previous => [...previous, data.workspace])
+      setActiveWorkspaceId(data.workspace.id)
+      setWorkspaceName('')
+      if (data.page) {
+        setPages([data.page])
+        setActivePageId(data.page.id)
+      }
+    } finally {
+      setCreatingWorkspace(false)
+    }
   }
 
   const createPage = async (parentId: string | null = null) => {
-    if (!activeWorkspaceId || !accessToken || !canEdit) return
+    if (!activeWorkspaceId || !accessToken || !canEdit || creatingPage) return
     setError('')
-    const response = await fetch('/api/pages', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({
-        workspaceId: activeWorkspaceId,
-        parentId,
-        title: newPageTitle.trim() || 'Untitled',
-      }),
-    })
-    if (!response.ok) {
-      setError((await readError(response, '페이지를 만들지 못했습니다.')).message)
-      return
-    }
+    setCreatingPage(true)
+    try {
+      const response = await fetch('/api/pages', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          workspaceId: activeWorkspaceId,
+          parentId,
+          title: newPageTitle.trim() || 'Untitled',
+        }),
+      })
+      if (!response.ok) {
+        setError((await readError(response, '페이지를 만들지 못했습니다.')).message)
+        return
+      }
 
-    const page = await response.json() as PageRecord
-    setPages(previous => [...previous, page])
-    setActivePageId(page.id)
-    setNewPageTitle('')
+      const page = await response.json() as PageRecord
+      setPages(previous => [...previous, page])
+      setActivePageId(page.id)
+      setNewPageTitle('')
+    } finally {
+      setCreatingPage(false)
+    }
   }
 
   const updatePage = async (patch: Partial<Pick<PageRecord, 'title' | 'content'>>) => {
@@ -245,7 +263,7 @@ export default function NotionLiteApp() {
           {canEdit && (
             <button
               onClick={() => createPage(page.id)}
-              className="hidden h-7 w-7 border border-black bg-white font-black text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] group-hover:block"
+              className="hidden h-8 w-8 shrink-0 border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] group-hover:block"
               title="하위 페이지 추가"
             >
               +
@@ -264,28 +282,51 @@ export default function NotionLiteApp() {
   if (!session) return <AuthPanel />
 
   return (
-    <main className="flex min-h-screen bg-[#777773] text-black">
-      <aside className="flex w-[312px] shrink-0 flex-col border-r border-black bg-[#62625f] max-lg:w-64 max-md:hidden">
-        <div className="border-b border-black px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center border border-black bg-[#baf7c8] text-xs font-black text-black shadow-[2px_2px_0_#000]">
-                  C
-                </span>
-                <p className="truncate text-sm font-black uppercase tracking-normal text-white">Cowork26</p>
-              </div>
-              <p className="mt-1 truncate pl-10 text-xs font-bold text-neutral-100">{session.user.email}</p>
-            </div>
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="border border-black bg-[#50504d] px-2 py-1 text-xs font-black text-white hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[2px_2px_0_#000]"
-            >
-              로그아웃
-            </button>
+    <main className="flex min-h-screen flex-col bg-[#777773] text-black">
+      <header className="flex h-16 shrink-0 items-center justify-between border-b border-black bg-[#777773] px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center border border-black bg-[#baf7c8] text-sm font-black leading-none text-black shadow-[2px_2px_0_#000]">
+            C
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-black uppercase tracking-normal text-white">Cowork26</p>
+            <p className="truncate text-xs font-bold text-neutral-100">{session.user.email}</p>
           </div>
         </div>
 
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="hidden min-w-0 text-right sm:block">
+            <div className="flex items-center justify-end gap-2">
+              <p className="truncate text-sm font-black uppercase text-white">{activeWorkspace?.name ?? '워크스페이스 없음'}</p>
+              {activeWorkspace && (
+                <span className="border border-black bg-[#baf7c8] px-2 py-0.5 text-[11px] font-black text-black">
+                  {activeWorkspace.role}
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-xs font-bold text-neutral-100">
+              {saving === 'saving' ? '변경사항 저장 중' : saving === 'saved' ? '모든 변경사항 저장됨' : '문서 정리 PoC'}
+            </p>
+          </div>
+          {activePage && canEdit && (
+            <button
+              onClick={deletePage}
+              className="h-9 border border-black bg-red-300 px-3 text-sm font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000]"
+            >
+              삭제
+            </button>
+          )}
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="h-9 border border-black bg-[#50504d] px-3 text-xs font-black text-white hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[2px_2px_0_#000]"
+          >
+            로그아웃
+          </button>
+        </div>
+      </header>
+
+      <div className="flex min-h-0 flex-1 max-md:flex-col">
+        <aside className="flex w-[312px] shrink-0 flex-col border-r border-black bg-[#62625f] max-lg:w-64 max-md:w-full max-md:border-r-0 max-md:border-b">
         <div className="border-b border-black p-3">
           <p className="mb-2 px-1 text-[11px] font-black uppercase tracking-normal text-white">
             Workspace
@@ -310,10 +351,10 @@ export default function NotionLiteApp() {
             />
             <button
               onClick={createWorkspace}
-              disabled={!workspaceName.trim()}
-              className="border border-black bg-[#baf7c8] px-3 py-1.5 text-sm font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
+              disabled={!workspaceName.trim() || creatingWorkspace}
+              className="h-8 border border-black bg-[#baf7c8] px-3 text-sm font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
             >
-              생성
+              {creatingWorkspace ? '생성 중' : '생성'}
             </button>
           </div>
         </div>
@@ -336,13 +377,13 @@ export default function NotionLiteApp() {
             />
             <button
               onClick={() => createPage()}
-              disabled={!activeWorkspaceId || !canEdit}
-              className="h-8 w-8 border border-black bg-[#50504d] text-sm font-black text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
+              disabled={!activeWorkspaceId || !canEdit || creatingPage}
+              className="h-8 w-8 shrink-0 border border-black bg-[#50504d] text-sm font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
             >
-              +
+              {creatingPage ? '...' : '+'}
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1 max-md:max-h-56">
             {activeWorkspaceId ? (
               pages.length > 0 ? renderPageList(null) : (
                 <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
@@ -358,32 +399,9 @@ export default function NotionLiteApp() {
             )}
           </div>
         </div>
-      </aside>
+        </aside>
 
-      <section className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 items-center justify-between border-b border-black bg-[#777773] px-6 max-sm:px-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-black uppercase text-white">{activeWorkspace?.name ?? '워크스페이스 없음'}</p>
-              {activeWorkspace && (
-                <span className="border border-black bg-[#baf7c8] px-2 py-0.5 text-[11px] font-black text-black">
-                  {activeWorkspace.role}
-                </span>
-              )}
-            </div>
-            <p className="mt-0.5 text-xs font-bold text-neutral-100">
-              {saving === 'saving' ? '변경사항 저장 중' : saving === 'saved' ? '모든 변경사항 저장됨' : '문서 정리 PoC'}
-            </p>
-          </div>
-          {activePage && canEdit && (
-            <button
-              onClick={deletePage}
-              className="border border-black bg-red-300 px-3 py-1.5 text-sm font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000]"
-            >
-              삭제
-            </button>
-          )}
-        </header>
+        <section className="flex min-w-0 flex-1 flex-col max-md:min-h-[60vh]">
 
         {error && (
           <div className="border-b border-black bg-red-300 px-6 py-3 text-sm font-bold text-black max-sm:px-4">
@@ -398,7 +416,29 @@ export default function NotionLiteApp() {
               <span>문서</span>
               <span>/</span>
               <span className="truncate">{activePage.title || 'Untitled'}</span>
-              <span className="ml-auto hidden sm:inline">
+              <div className="ml-auto grid h-8 w-40 shrink-0 grid-cols-2 border border-black">
+                <button
+                  onClick={() => setEditorMode('rich')}
+                  className={`text-xs font-black ${
+                    editorMode === 'rich'
+                      ? 'bg-[#baf7c8] text-black'
+                      : 'bg-[#50504d] text-white hover:bg-white hover:text-black'
+                  }`}
+                >
+                  문서
+                </button>
+                <button
+                  onClick={() => setEditorMode('markdown')}
+                  className={`border-l border-black text-xs font-black ${
+                    editorMode === 'markdown'
+                      ? 'bg-[#baf7c8] text-black'
+                      : 'bg-[#50504d] text-white hover:bg-white hover:text-black'
+                  }`}
+                >
+                  Markdown
+                </button>
+              </div>
+              <span className="hidden sm:inline">
                 {new Date(activePage.updated_at).toLocaleDateString('ko-KR', {
                   month: 'short',
                   day: 'numeric',
@@ -418,25 +458,50 @@ export default function NotionLiteApp() {
               }}
               onBlur={event => updatePage({ title: event.target.value })}
             />
-            <DocumentEditor
-              content={activePage.content}
-              editable={Boolean(canEdit)}
-              onChange={scheduleContentSave}
-            />
+            {editorMode === 'markdown' ? (
+              <MarkdownEditor
+                pageId={activePage.id}
+                content={activePage.content}
+                editable={Boolean(canEdit)}
+                onChange={scheduleContentSave}
+              />
+            ) : (
+              <DocumentEditor
+                content={activePage.content}
+                editable={Boolean(canEdit)}
+                onChange={scheduleContentSave}
+              />
+            )}
           </article>
         ) : (
-          <div className="flex flex-1 items-center justify-center px-6 text-center">
-            <div className="max-w-md border border-black bg-[#50504d] p-8 shadow-[6px_6px_0_#000]">
+          <div className="flex flex-1 items-center justify-center px-6 py-10 text-center">
+            <div className="grid w-full max-w-4xl grid-cols-[1.3fr_0.7fr] gap-4 max-lg:grid-cols-1">
+              <div className="border border-black bg-[#50504d] p-8 text-left shadow-[6px_6px_0_#000]">
+                <p className="mb-3 inline-block border border-black bg-[#baf7c8] px-2 py-1 text-xs font-black uppercase text-black">
+                  Ready
+                </p>
               <p className="text-3xl font-black uppercase text-white">
                 {activeWorkspaceId ? '페이지를 선택하거나 새로 만드세요.' : '워크스페이스를 만들면 시작할 수 있습니다.'}
               </p>
               <p className="mt-4 border-l-2 border-black pl-3 text-left text-sm font-bold leading-6 text-neutral-100">
                 팀이 함께 읽은 자료, 회의 내용, 액션 아이템을 한곳에서 정리하는 가벼운 협업 문서 공간입니다.
               </p>
+              </div>
+              <div className="grid gap-4">
+                <div className="border border-black bg-[#50504d] p-5 text-left shadow-[4px_4px_0_#000]">
+                  <p className="text-xs font-black uppercase text-[#baf7c8]">Workspaces</p>
+                  <p className="mt-2 text-4xl font-black text-white">{workspaces.length}</p>
+                </div>
+                <div className="border border-black bg-[#50504d] p-5 text-left shadow-[4px_4px_0_#000]">
+                  <p className="text-xs font-black uppercase text-[#baf7c8]">Pages</p>
+                  <p className="mt-2 text-4xl font-black text-white">{pages.length}</p>
+                </div>
+              </div>
             </div>
           </div>
         )}
-      </section>
+        </section>
+      </div>
     </main>
   )
 }

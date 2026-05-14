@@ -2,6 +2,7 @@ node_modules
 dist
 .next
 .env
+ref/
 .env.local
 .vercel
 ref/ref1.2.html

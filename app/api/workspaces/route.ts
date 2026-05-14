@@ -58,5 +58,33 @@ export async function POST(request: Request) {
 
   if (memberError) return NextResponse.json({ error: memberError.message }, { status: 500 })
 
-  return NextResponse.json({ ...workspace, role: 'owner' }, { status: 201 })
+  const { data: page, error: pageError } = await supabaseAdmin
+    .from('pages')
+    .insert({
+      workspace_id: workspace.id,
+      title: 'Welcome',
+      order_index: 0,
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'heading',
+            attrs: { level: 2 },
+            content: [{ type: 'text', text: 'Welcome to Cowork26' }],
+          },
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: '이 페이지에서 팀 문서를 정리해보세요.' }],
+          },
+        ],
+      },
+      created_by: user.id,
+      updated_by: user.id,
+    })
+    .select('id, workspace_id, parent_id, title, order_index, content, created_by, updated_by, created_at, updated_at')
+    .single()
+
+  if (pageError) return NextResponse.json({ error: pageError.message }, { status: 500 })
+
+  return NextResponse.json({ workspace: { ...workspace, role: 'owner' }, page }, { status: 201 })
 }
