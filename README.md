@@ -1,35 +1,43 @@
 # Cowork26
 
----
+Next.js, Supabase, Tiptap 기반의 Notion-lite 협업 문서 앱입니다.
 
+워크스페이스 단위로 페이지를 만들고, 멤버를 추가하고, 문서를 자동 저장하는 PoC입니다. 실시간 동시 편집은 아직 연결하지 않았고, 다른 사용자의 변경 사항은 헤더의 새로고침 버튼으로 다시 불러오는 구조입니다.
 
-
-> Cowork26는 `Next.js + Supabase + Tiptap` 기반의 Notion-lite 협업 문서 정리 도구다.
-
-현재는 워크스페이스와 페이지를 만들고, 문서를 작성하고, 멤버를 추가하는 PoC 단계다. 실시간 동시 편집은 아직 붙지 않았고, 본문은 자동 저장 방식으로 동작한다. 다른 사용자의 변경 내용은 수동 새로고침으로 다시 불러오는 구조다.
-
-## 현재 구현 범위
+## 주요 기능
 
 - 이메일 회원가입 / 로그인
-- Supabase Auth 기반 세션 처리
-- 워크스페이스 생성 / 조회
-- 워크스페이스명 수정
-- 페이지 생성 / 삭제
-- `parent_id` 기반 페이지 트리
-- Tiptap 문서 편집기
-- Tiptap 표 편집
-- 마크다운 표 붙여넣기 변환
+- Supabase Auth 세션 처리
+- 워크스페이스 생성, 조회, 이름 변경
+- 워크스페이스 멤버 조회 및 이메일 기반 추가
+- 역할 기반 권한 처리: `owner`, `editor`, `viewer`
+- 페이지 생성, 삭제
+- `parent_id` 기반 중첩 페이지 트리
+- Tiptap 기반 문서 편집
+- 문서 제목 blur 저장
 - 본문 자동 저장
-- 제목 blur 저장
-- 설정 메뉴에서 멤버 목록 조회
-- 설정 메뉴에서 멤버 이메일 추가
-- 수동 새로고침 버튼
+- 저장 상태 표시: 페이지 헤더 우측 `저장 중` / `저장됨`
+- 마크다운 표 붙여넣기 변환
+- Tiptap 표 열 너비 조절
+- 표 행 높이 드래그 조절
+- 최상단 앱 헤더 sticky 고정
+- 설정 메뉴 바깥 클릭 시 자동 닫힘
 - 잘못된 refresh token 자동 정리
+
+## 현재 제약
+
+- 실시간 동시 편집 미연결
+- Yjs / Hocuspocus 의존성은 설치되어 있지만 앱 플로우에 연결되지 않음
+- 자동 동기화 또는 폴링 없음
+- 멤버 제거 / 역할 변경 UI 없음
+- 초대 메일 발송 없음
+- 파일 업로드 없음
+- 페이지 순서 변경 없음
 
 ## 기술 스택
 
 ```txt
-Frontend
+App
 - Next.js 16
 - React 19
 - TypeScript
@@ -39,10 +47,11 @@ Frontend
 Backend / Data
 - Supabase Auth
 - Supabase Postgres
+- Supabase service role API route access
 
-Planned
+Installed for future collaboration work
 - Yjs
-- Hocuspocus
+- Hocuspocus provider
 ```
 
 ## 프로젝트 구조
@@ -54,9 +63,9 @@ app/
     pages/route.ts
     workspaces/route.ts
     workspaces/[id]/members/route.ts
+  globals.css
   layout.tsx
   page.tsx
-  globals.css
 
 components/
   auth-panel.tsx
@@ -73,14 +82,14 @@ supabase/
     002_notion_lite.sql
 ```
 
-## 실행 방법
+## 실행
 
 ```bash
 npm install
 npm run dev
 ```
 
-기본 로컬 주소:
+기본 주소:
 
 ```txt
 http://localhost:3000
@@ -95,7 +104,7 @@ npm run build
 
 ## 환경 변수
 
-`.env.local`
+`.env.local`에 Supabase 값을 설정합니다.
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=...
@@ -106,10 +115,10 @@ SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
 ```
 
-운영 배포 기준 권장값:
+배포 환경에서는 `NEXT_PUBLIC_SITE_URL`을 실제 도메인으로 설정합니다.
 
 ```env
-NEXT_PUBLIC_SITE_URL=https://cowork26.vercel.app
+NEXT_PUBLIC_SITE_URL=https://your-domain.example
 ```
 
 ## Supabase 세팅
@@ -120,7 +129,7 @@ NEXT_PUBLIC_SITE_URL=https://cowork26.vercel.app
 supabase/migrations/002_notion_lite.sql
 ```
 
-이 마이그레이션이 생성하는 핵심 테이블:
+핵심 테이블:
 
 ```txt
 workspaces
@@ -128,44 +137,43 @@ workspace_members
 pages
 ```
 
-추가 참고:
+권한과 멤버십 확인은 API route에서 Supabase service role 클라이언트로 처리합니다.
 
-- [docs/plans/2026-05-14-supabase-notion-lite-setup.md](/home/jpjp92/devs/github/collab-sheets/docs/plans/2026-05-14-supabase-notion-lite-setup.md)
-- [docs/specs/2026-05-14-notion-lite-collab-docs-design.md](/home/jpjp92/devs/github/collab-sheets/docs/specs/2026-05-14-notion-lite-collab-docs-design.md)
+## 사용 흐름
 
-## 기본 플로우
-
-1. 사용자가 회원가입 또는 로그인한다.
-2. 워크스페이스를 생성한다.
-3. 생성 직후 기본 `Welcome` 페이지가 함께 만들어진다.
-4. 좌측 사이드바에서 페이지를 선택하거나 새 페이지를 만든다.
-5. 워크스페이스 owner는 사이드바에서 워크스페이스명을 수정할 수 있다.
-6. 문서 본문은 입력 후 약 1.5초 뒤 자동 저장된다.
-7. 문서 편집기에서 표를 추가하고 행/열을 조정할 수 있다.
-8. 마크다운 표를 붙여넣으면 편집 가능한 Tiptap 표로 변환된다.
-9. 문서 제목은 상단 탭형 UI에서 수정하고 blur 시 저장된다.
-10. 설정 메뉴에서 현재 워크스페이스 멤버를 확인하고 이메일로 추가할 수 있다.
-11. 다른 사용자의 변경은 헤더 우측 새로고침 버튼으로 다시 불러올 수 있다.
+1. 사용자가 회원가입 또는 로그인합니다.
+2. 워크스페이스를 생성합니다.
+3. 워크스페이스 생성 시 기본 `Welcome` 페이지가 함께 생성됩니다.
+4. 좌측 사이드바에서 페이지를 선택하거나 새 페이지를 만듭니다.
+5. 페이지 제목은 문서 상단 경로 헤더에서 바로 수정합니다.
+6. 문서 본문은 입력 후 자동 저장됩니다.
+7. 저장 상태는 페이지 헤더 우측에 표시됩니다.
+8. 마크다운 표를 붙여넣으면 편집 가능한 표로 변환됩니다.
+9. 표 열 너비는 기본 Tiptap 리사이즈로 조절합니다.
+10. 표 행 높이는 행 하단 경계 드래그로 조절합니다.
+11. 설정 메뉴에서 멤버 목록을 확인하고, 가입된 사용자 이메일로 멤버를 추가합니다.
+12. 다른 사용자 변경 사항은 최상단 새로고침 버튼으로 다시 불러옵니다.
 
 ## 권한 모델
 
 ```txt
 owner
-- 워크스페이스 owner
-- 워크스페이스명 수정 가능
-- 멤버 추가 가능
-- 페이지 생성 / 수정 / 삭제 가능
+- 워크스페이스 이름 변경
+- 멤버 추가
+- 페이지 생성 / 수정 / 삭제
+- 문서 편집
 
 editor
-- 페이지 생성 / 수정 / 삭제 가능
+- 페이지 생성 / 수정 / 삭제
+- 문서 편집
 
 viewer
 - 읽기 전용
 ```
 
-현재 멤버 추가는 "공유 링크"가 아니라 "이미 가입된 사용자 이메일을 workspace_members에 추가"하는 방식이다.
+멤버 추가는 초대 링크나 메일 발송이 아니라, 이미 가입된 사용자의 이메일을 찾아 `workspace_members`에 추가하는 방식입니다.
 
-## 주요 API
+## API
 
 ```txt
 GET    /api/workspaces
@@ -190,28 +198,22 @@ POST   /api/workspaces/:id/members
 }
 ```
 
-## 현재 제약
-
-- 실시간 동시 편집 없음
-- Yjs / Hocuspocus 미연결
-- 자동 새로고침 없음
-- 멤버 제거 / role 변경 UI 없음
-- 초대 메일 발송 없음
-- 파일 업로드 없음
-
 ## UI 메모
 
-- 좌측 사이드바에서 워크스페이스와 페이지를 관리한다.
-- 헤더 우측에는 새로고침 버튼과 설정 버튼만 둔다.
-- 설정 메뉴에서 멤버 목록, 멤버 추가, 로그아웃을 처리한다.
-- 문서 페이지 상단 제목은 탭처럼 보이는 헤더형 입력 UI를 사용한다.
-- 편집기 상단에는 표 추가 / 행 추가 / 열 추가 / 행 삭제 / 열 삭제 / 표 삭제 액션을 둔다.
-- 저장 상태 배지는 고정 높이 영역에서 opacity만 바꿔 작성창이 흔들리지 않게 한다.
+- 최상단 헤더는 스크롤 중에도 고정됩니다.
+- 좌측 사이드바에서 워크스페이스와 페이지를 관리합니다.
+- 페이지 목록의 하위 페이지 추가 / 삭제 버튼은 해당 행 hover 또는 focus 때만 보입니다.
+- 페이지 헤더는 `워크스페이스 / 상위 페이지 / 현재 페이지` 형태의 경로형 제목입니다.
+- 문서 저장 상태는 페이지 헤더 우측에 고정 폭 배지로 표시합니다.
+- 별도 편집 도구 패널은 두지 않습니다.
+- 표 행 높이는 표 행 하단 경계를 드래그해서 조절합니다.
 
 ## 다음 작업 후보
 
 - Yjs + Hocuspocus 실시간 협업 연결
 - 브라우저 포커스 복귀 시 자동 동기화
-- 멤버 제거 / role 변경
+- 멤버 제거 / 역할 변경
 - 페이지 순서 변경
-- page snapshot / history
+- 페이지 이동
+- 페이지 snapshot / history
+- 초대 메일 또는 공유 링크

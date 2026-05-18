@@ -63,6 +63,23 @@ textarea {
   margin: 0.75rem 0;
 }
 
+.ProseMirror ul {
+  list-style-type: disc;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+}
+
+.ProseMirror li {
+  margin: 0.25rem 0;
+  padding-left: 0.15rem;
+}
+
+.ProseMirror li p {
+  margin: 0.2rem 0;
+}
+
 .ProseMirror blockquote {
   background: #e7e2d9;
   border: 1px solid #000;
@@ -89,7 +106,8 @@ textarea {
 }
 
 .ProseMirror .tableWrapper {
-  margin: 1.25rem 0;
+  margin: 0.85rem 0;
+  max-width: 100%;
   overflow-x: auto;
 }
 
@@ -100,17 +118,23 @@ textarea {
   box-shadow: 4px 4px 0 #000;
   margin: 0;
   table-layout: fixed;
-  width: 100%;
+  width: auto;
 }
 
 .ProseMirror th,
 .ProseMirror td {
   border: 2px solid #000;
   color: #1d1c16;
-  min-width: 6rem;
-  padding: 0.6rem 0.75rem;
+  min-width: 4.5rem;
+  min-height: 1.75rem;
+  padding: 0.35rem 0.5rem;
   position: relative;
   vertical-align: top;
+}
+
+.ProseMirror th p,
+.ProseMirror td p {
+  margin: 0.15rem 0;
 }
 
 .ProseMirror th {
@@ -142,6 +166,17 @@ textarea {
 
 .ProseMirror.resize-cursor {
   cursor: col-resize;
+}
+
+.ProseMirror.row-resize-cursor,
+.ProseMirror.row-resize-cursor th,
+.ProseMirror.row-resize-cursor td {
+  cursor: row-resize;
+}
+
+.ProseMirror tr.row-height-resizing th,
+.ProseMirror tr.row-height-resizing td {
+  box-shadow: inset 0 -3px 0 #000;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
