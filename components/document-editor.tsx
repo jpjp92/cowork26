@@ -1,6 +1,6 @@
 'use client'
 
-import { Mark, mergeAttributes } from '@tiptap/core'
+import { Extension, Mark, mergeAttributes } from '@tiptap/core'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { DOMParser as ProseMirrorDOMParser } from '@tiptap/pm/model'
 import type { EditorView } from '@tiptap/pm/view'
@@ -74,6 +74,17 @@ const FontSize = Mark.create({
 
   renderHTML({ HTMLAttributes }) {
     return ['span', mergeAttributes(HTMLAttributes), 0]
+  },
+})
+
+const ListTabKeymap = Extension.create({
+  name: 'listTabKeymap',
+
+  addKeyboardShortcuts() {
+    return {
+      Tab: () => this.editor.commands.sinkListItem('listItem'),
+      'Shift-Tab': () => this.editor.commands.liftListItem('listItem'),
+    }
   },
 })
 
@@ -174,6 +185,7 @@ export default function DocumentEditor({ content, editable, onChange }: Document
     editable,
     extensions: [
       StarterKit,
+      ListTabKeymap,
       FontSize,
       Table.configure({
         resizable: true,
