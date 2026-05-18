@@ -146,22 +146,40 @@ function parseMarkdownTable(text: string) {
     index > 0 && line.includes('|') && dividerPattern.test(line) && lines[index - 1]?.includes('|')
   ))
 
-  if (dividerIndex === -1) return null
-
-  const tableLines = [lines[dividerIndex - 1], lines[dividerIndex]]
-  for (const line of lines.slice(dividerIndex + 1)) {
-    if (!line.includes('|')) break
-    tableLines.push(line)
-  }
-
   const toCells = (line: string) => line
     .replace(/^\|/, '')
     .replace(/\|$/, '')
     .split('|')
     .map(cell => cell.trim())
 
-  const headers = toCells(tableLines[0])
-  const rows = tableLines.slice(2).map(toCells)
+  let headers: string[]
+  let rows: string[][]
+
+  if (dividerIndex !== -1) {
+    const tableLines = [lines[dividerIndex - 1], lines[dividerIndex]]
+    for (const line of lines.slice(dividerIndex + 1)) {
+      if (!line.includes('|')) break
+      tableLines.push(line)
+    }
+    headers = toCells(tableLines[0])
+    rows = tableLines.slice(2).map(toCells)
+  } else {
+    // No markdown divider row (---|---): accept plain pipe-separated table
+    const firstPipeIdx = lines.findIndex(line => line.includes('|'))
+    if (firstPipeIdx === -1) return null
+
+    const pipeLines: string[] = []
+    for (const line of lines.slice(firstPipeIdx)) {
+      if (!line.includes('|')) break
+      pipeLines.push(line)
+    }
+
+    if (pipeLines.length < 2) return null
+
+    headers = toCells(pipeLines[0])
+    rows = pipeLines.slice(1).map(toCells)
+  }
+
   if (!headers.length || rows.some(row => row.length !== headers.length)) return null
 
   const escapeHtml = (value: string) => value
@@ -171,9 +189,37 @@ function parseMarkdownTable(text: string) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;')
 
-  const headerHtml = headers.map(cell => `<th><p>${escapeHtml(cell)}</p></th>`).join('')
+  const renderInlineMarkdown = (value: string) => {
+    const htmlTokens: string[] = []
+    const stash = (html: string) => {
+      const tokenIndex = htmlTokens.push(html) - 1
+      return `__INLINE_TOKEN_${tokenIndex}__`
+    }
+
+    let escaped = escapeHtml(value)
+
+    escaped = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_match, label, href) => (
+      stash(`<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`)
+    ))
+
+    escaped = escaped.replace(/`([^`]+)`/g, (_match, code) => stash(`<code>${code}</code>`))
+    // __bold__ must run before **bold** to prevent the **bold** stash token (__INLINE_TOKEN_N__) being consumed by __...__
+    escaped = escaped.replace(/__(.+?)__/g, (_match, strong) => stash(`<strong>${strong}</strong>`))
+    escaped = escaped.replace(/\*\*(.+?)\*\*/g, (_match, strong) => stash(`<strong>${strong}</strong>`))
+    escaped = escaped.replace(/~~(.+?)~~/g, (_match, strike) => stash(`<s>${strike}</s>`))
+    escaped = escaped.replace(/(^|[\s(])\*(?!\*)([^*\n]+?)\*(?!\*)/g, (_match, prefix, emphasis) => (
+      `${prefix}${stash(`<em>${emphasis}</em>`)}`
+    ))
+    escaped = escaped.replace(/(^|[\s(])_(?!_)([^_\n]+?)_(?!_)/g, (_match, prefix, emphasis) => (
+      `${prefix}${stash(`<em>${emphasis}</em>`)}`
+    ))
+
+    return escaped.replace(/__INLINE_TOKEN_(\d+)__/g, (_match, tokenIndex) => htmlTokens[Number(tokenIndex)] ?? '')
+  }
+
+  const headerHtml = headers.map(cell => `<th><p>${renderInlineMarkdown(cell)}</p></th>`).join('')
   const rowsHtml = rows
-    .map(row => `<tr>${row.map(cell => `<td><p>${escapeHtml(cell)}</p></td>`).join('')}</tr>`)
+    .map(row => `<tr>${row.map(cell => `<td><p>${renderInlineMarkdown(cell)}</p></td>`).join('')}</tr>`)
     .join('')
 
   return `<table><tbody><tr>${headerHtml}</tr>${rowsHtml}</tbody></table>`
