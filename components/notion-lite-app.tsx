@@ -66,6 +66,9 @@ export default function NotionLiteApp() {
   const [inviteLoading, setInviteLoading] = useState(false)
   const saveTimers = useRef(new Map<string, number>())
   const pendingContent = useRef(new Map<string, Record<string, unknown>>())
+  const settingsRef = useRef<HTMLDivElement>(null)
+  const draggedIdRef = useRef<string | null>(null)
+  const [dragOver, setDragOver] = useState<{ id: string; position: 'above' | 'below' } | null>(null)
 
   const accessToken = session?.access_token
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
@@ -73,6 +76,28 @@ export default function NotionLiteApp() {
   const activePageContent = activePage ? pendingContent.current.get(activePage.id) ?? activePage.content : null
   const canEdit = activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'editor'
   const canManageMembers = activeWorkspace?.role === 'owner'
+
+  const activePageTrail = useMemo(() => {
+    if (!activePage) return []
+
+    const pagesById = new Map(pages.map(page => [page.id, page]))
+    const trail: PageRecord[] = []
+    const visited = new Set<string>()
+    let currentPage: PageRecord | undefined = activePage
+
+    while (currentPage && !visited.has(currentPage.id)) {
+      visited.add(currentPage.id)
+      trail.unshift(currentPage)
+      currentPage = currentPage.parent_id ? pagesById.get(currentPage.parent_id) : undefined
+    }
+
+    return trail
+  }, [activePage, pages])
+
+  const activePageBreadcrumbPrefix = [
+    activeWorkspace?.name,
+    ...activePageTrail.slice(0, -1).map(page => page.title),
+  ].filter(Boolean)
 
   const authHeaders = useCallback(() => ({
     Authorization: `Bearer ${accessToken}`,
@@ -180,6 +205,21 @@ export default function NotionLiteApp() {
   }, [activeWorkspaceId, loadPages])
 
   useEffect(() => {
+    if (!activePageId || !accessToken) return
+    // 페이지 전환 시 최신 content 서버에서 fetch (다른 사용자 수정 반영)
+    fetch(`/api/pages?id=${activePageId}`, { headers: authHeaders() })
+      .then(res => res.ok ? res.json() : null)
+      .then((fresh: PageRecord | null) => {
+        if (!fresh) return
+        // pendingContent(미저장 로컬 편집)가 없는 경우에만 덮어씀
+        if (!pendingContent.current.has(activePageId)) {
+          setPages(prev => prev.map(p => p.id === fresh.id ? fresh : p))
+        }
+      })
+      .catch(() => { /* 조용히 무시 */ })
+  }, [activePageId, accessToken, authHeaders])
+
+  useEffect(() => {
     setRenameWorkspaceName(activeWorkspace?.name ?? '')
   }, [activeWorkspace?.id, activeWorkspace?.name])
 
@@ -187,6 +227,21 @@ export default function NotionLiteApp() {
     if (!settingsOpen || !activeWorkspaceId) return
     loadMembers(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
   }, [settingsOpen, activeWorkspaceId, loadMembers])
+
+  useEffect(() => {
+    if (!settingsOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return
+      if (!settingsRef.current?.contains(event.target)) {
+        setSettingsOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [settingsOpen])
 
   useEffect(() => () => {
     for (const timer of saveTimers.current.values()) {
@@ -436,11 +491,73 @@ export default function NotionLiteApp() {
     }
   }
 
+  const reorderPage = useCallback(async (draggedId: string, targetId: string, position: 'above' | 'below') => {
+    if (draggedId === targetId || !accessToken) return
+    const draggedPage = pages.find(p => p.id === draggedId)
+    const targetPage = pages.find(p => p.id === targetId)
+    if (!draggedPage || !targetPage) return
+    if (draggedPage.parent_id !== targetPage.parent_id) return
+
+    const siblings = [...(pageTree.get(targetPage.parent_id ?? 'root') ?? [])]
+    const withoutDragged = siblings.filter(p => p.id !== draggedId)
+    const targetIdx = withoutDragged.findIndex(p => p.id === targetId)
+    const insertIdx = position === 'above' ? targetIdx : targetIdx + 1
+    withoutDragged.splice(insertIdx, 0, draggedPage)
+
+    const reordered = withoutDragged.map((p, i) => ({ ...p, order_index: i }))
+
+    // optimistic update
+    setPages(prev => prev.map(p => reordered.find(r => r.id === p.id) ?? p))
+
+    // persist only changed order_index values
+    const changed = reordered.filter(r => {
+      const original = siblings.find(s => s.id === r.id)
+      return original?.order_index !== r.order_index
+    })
+    await Promise.all(changed.map(p =>
+      fetch('/api/pages', {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ id: p.id, orderIndex: p.order_index }),
+      })
+    ))
+  }, [accessToken, authHeaders, pages, pageTree])
+
   const renderPageList = (parentId: string | null, depth = 0): React.ReactNode => {
     const items = pageTree.get(parentId ?? 'root') ?? []
     return items.map(page => (
       <div key={page.id}>
-        <div className="flex items-center gap-2" style={{ paddingLeft: depth * 14 }}>
+        {/* drop indicator — above */}
+        {dragOver?.id === page.id && dragOver.position === 'above' && (
+          <div className="mx-1 h-0.5 rounded bg-[#baf7c8]" style={{ marginLeft: depth * 14 + 4 }} />
+        )}
+        <div
+          className="group/page-row flex items-center gap-2"
+          style={{ paddingLeft: depth * 14 }}
+          draggable={canEdit}
+          onDragStart={() => { draggedIdRef.current = page.id }}
+          onDragEnd={() => { draggedIdRef.current = null; setDragOver(null) }}
+          onDragOver={e => {
+            e.preventDefault()
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            const position = e.clientY < rect.top + rect.height / 2 ? 'above' : 'below'
+            setDragOver(prev =>
+              prev?.id === page.id && prev.position === position ? prev : { id: page.id, position }
+            )
+          }}
+          onDragLeave={e => {
+            if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+              setDragOver(null)
+            }
+          }}
+          onDrop={e => {
+            e.preventDefault()
+            const dragged = draggedIdRef.current
+            if (dragged) reorderPage(dragged, page.id, dragOver?.position ?? 'below')
+            draggedIdRef.current = null
+            setDragOver(null)
+          }}
+        >
           <button
             onClick={() => setActivePageId(page.id)}
             className={`flex h-9 min-w-0 flex-1 items-center truncate rounded-[8px] px-3 text-left text-sm ${
@@ -452,7 +569,7 @@ export default function NotionLiteApp() {
             {page.title}
           </button>
           {canEdit && (
-            <div className="ml-2 flex shrink-0 gap-2">
+            <div className="ml-2 flex shrink-0 gap-2 opacity-0 transition-opacity group-hover/page-row:opacity-100 group-focus-within/page-row:opacity-100">
               <button
                 onClick={() => createPage(page.id)}
                 className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8]"
@@ -470,6 +587,10 @@ export default function NotionLiteApp() {
             </div>
           )}
         </div>
+        {/* drop indicator — below */}
+        {dragOver?.id === page.id && dragOver.position === 'below' && (
+          <div className="mx-1 h-0.5 rounded bg-[#baf7c8]" style={{ marginLeft: depth * 14 + 4 }} />
+        )}
         {renderPageList(page.id, depth + 1)}
       </div>
     ))
@@ -483,7 +604,7 @@ export default function NotionLiteApp() {
 
   return (
     <main className="flex min-h-screen flex-col bg-[#777773] text-black">
-      <header className="flex h-16 shrink-0 items-center justify-between border-b border-black bg-[#777773] px-4">
+      <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-black bg-[#777773] px-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border border-black bg-[#baf7c8] text-sm font-black leading-none text-black shadow-[2px_2px_0_#000]">
             C
@@ -494,7 +615,7 @@ export default function NotionLiteApp() {
           </div>
         </div>
 
-        <div className="relative flex min-w-0 items-center gap-2">
+        <div className="relative flex min-w-0 items-center gap-2" ref={settingsRef}>
           <button
             onClick={refreshWorkspaceData}
             disabled={refreshing}
@@ -697,31 +818,38 @@ export default function NotionLiteApp() {
 
         {activePage ? (
           <article className="mx-auto my-8 w-full max-w-4xl flex-1 rounded-[8px] border border-black bg-[#fef9ef] px-10 py-12 text-[#1d1c16] shadow-[6px_6px_0_#000] max-sm:mx-4 max-sm:px-5 max-sm:py-8">
-            <div className="mb-8 inline-flex max-w-full flex-col rounded-[10px] border border-black bg-[#f3ede4] px-4 py-3 shadow-[4px_4px_0_#000]">
-              <span className="mb-2 text-[11px] font-black uppercase tracking-[0.08em] text-[#6c685f]">
-                Page
-              </span>
-              <input
-                className="w-full min-w-0 bg-transparent text-[48px] font-black leading-[1.02] tracking-normal text-[#1d1c16] outline-none placeholder:text-[#8a867f] [text-shadow:3px_3px_0_#d8d2c7] max-sm:text-4xl"
-                value={activePage.title}
-                disabled={!canEdit}
-                placeholder="Untitled"
-                onChange={event => {
-                  const title = event.target.value
-                  setPages(previous => previous.map(page => (
-                    page.id === activePage.id ? { ...page, title } : page
-                  )))
-                }}
-                onBlur={event => updatePage(activePage.id, { title: event.target.value })}
-              />
-            </div>
-            {saving !== 'idle' && (
-              <div className="mb-6 flex justify-end">
-                <span className="rounded-[8px] border border-black bg-[#baf7c8] px-2 py-1 text-[11px] font-black text-black shadow-[2px_2px_0_#000]">
-                  {saving === 'saving' ? '저장 중' : '저장됨'}
+            <div className="mb-4 border-b border-black pb-3">
+              <div className="flex min-w-0 items-center gap-3 text-[#1d1c16]">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                  {activePageBreadcrumbPrefix.map((label, index) => (
+                    <span key={`${label}-${index}`} className="flex min-w-0 items-baseline gap-x-2 text-sm font-black text-[#6c685f]">
+                      <span className="max-w-48 truncate">{label}</span>
+                      <span>/</span>
+                    </span>
+                  ))}
+                  <input
+                    className="min-w-[12rem] flex-1 bg-transparent text-2xl font-black leading-tight tracking-normal text-[#1d1c16] outline-none placeholder:text-[#8a867f] max-sm:text-xl"
+                    value={activePage.title}
+                    disabled={!canEdit}
+                    placeholder="Untitled"
+                    onChange={event => {
+                      const title = event.target.value
+                      setPages(previous => previous.map(page => (
+                        page.id === activePage.id ? { ...page, title } : page
+                      )))
+                    }}
+                    onBlur={event => updatePage(activePage.id, { title: event.target.value })}
+                  />
+                </div>
+                <span
+                  className={`w-16 shrink-0 rounded-[8px] border border-black bg-[#baf7c8] px-2 py-1 text-center text-[11px] font-black text-black shadow-[2px_2px_0_#000] transition-opacity ${
+                    saving === 'idle' ? 'pointer-events-none opacity-0' : 'opacity-100'
+                  }`}
+                >
+                  {saving === 'saving' ? '저장' : '저장됨'}
                 </span>
               </div>
-            )}
+            </div>
             <DocumentEditor
               content={activePageContent}
               editable={Boolean(canEdit)}

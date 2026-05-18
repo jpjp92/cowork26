@@ -7,6 +7,24 @@ export async function GET(request: Request) {
   if (!user) return response
 
   const { searchParams } = new URL(request.url)
+  const pageId = searchParams.get('id')
+
+  // single page fetch
+  if (pageId) {
+    const { data: page, error: pageError } = await supabaseAdmin
+      .from('pages')
+      .select('id, workspace_id, parent_id, title, order_index, content, created_by, updated_by, created_at, updated_at')
+      .eq('id', pageId)
+      .single()
+
+    if (pageError || !page) return NextResponse.json({ error: 'Page not found' }, { status: 404 })
+
+    const canRead = await requireWorkspaceRole(page.workspace_id, user.id, ['owner', 'editor', 'viewer'])
+    if (!canRead) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    return NextResponse.json(page)
+  }
+
   const workspaceId = searchParams.get('workspaceId')
   if (!workspaceId) {
     return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 })

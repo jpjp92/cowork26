@@ -63,6 +63,23 @@ textarea {
   margin: 0.75rem 0;
 }
 
+.ProseMirror ul {
+  list-style-type: disc;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+}
+
+.ProseMirror li {
+  margin: 0.25rem 0;
+  padding-left: 0.15rem;
+}
+
+.ProseMirror li p {
+  margin: 0.2rem 0;
+}
+
 .ProseMirror blockquote {
   background: #e7e2d9;
   border: 1px solid #000;
@@ -80,12 +97,174 @@ textarea {
 }
 
 .ProseMirror pre {
-  background: #000;
+  background: #1e1e1e;
   border: 1px solid #000;
-  box-shadow: 4px 4px 0 #baf7c8;
-  color: #fff;
+  box-shadow: 4px 4px 0 #333;
+  color: #d4d4d4;
   overflow-x: auto;
   padding: 1rem;
+  position: relative;
+}
+
+.ProseMirror pre[data-language]::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: #2d2d2d;
+  border-bottom-left-radius: 4px;
+  color: #c0c0c0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.5rem;
+}
+
+/* language badge colors */
+.ProseMirror pre[data-language="python"]::before    { color: #ffd43b; }
+.ProseMirror pre[data-language="javascript"]::before,
+.ProseMirror pre[data-language="js"]::before        { color: #f7df1e; }
+.ProseMirror pre[data-language="typescript"]::before,
+.ProseMirror pre[data-language="ts"]::before        { color: #60a5fa; }
+.ProseMirror pre[data-language="rust"]::before      { color: #e08060; }
+.ProseMirror pre[data-language="go"]::before        { color: #00add8; }
+.ProseMirror pre[data-language="html"]::before      { color: #e55a2b; }
+.ProseMirror pre[data-language="css"]::before       { color: #a78bfa; }
+.ProseMirror pre[data-language="bash"]::before,
+.ProseMirror pre[data-language="sh"]::before,
+.ProseMirror pre[data-language="shell"]::before     { color: #89e051; }
+.ProseMirror pre[data-language="sql"]::before       { color: #f0a030; }
+.ProseMirror pre[data-language="json"]::before      { color: #f5c06f; }
+.ProseMirror pre[data-language="yaml"]::before,
+.ProseMirror pre[data-language="yml"]::before       { color: #cb9a4a; }
+.ProseMirror pre[data-language="java"]::before      { color: #f89820; }
+.ProseMirror pre[data-language="c"]::before,
+.ProseMirror pre[data-language="cpp"]::before       { color: #9bc6e8; }
+.ProseMirror pre[data-language="ruby"]::before,
+.ProseMirror pre[data-language="rb"]::before        { color: #e0534a; }
+.ProseMirror pre[data-language="php"]::before       { color: #8892bf; }
+.ProseMirror pre[data-language="swift"]::before     { color: #f05138; }
+.ProseMirror pre[data-language="kotlin"]::before    { color: #a97bff; }
+
+/* reset inline code style inside pre */
+.ProseMirror pre code {
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 0;
+}
+
+/* hljs token colors — VS Code Dark+ palette */
+.hljs-comment,
+.hljs-quote { color: #6a9955; font-style: italic; }
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-operator { color: #569cd6; }
+
+.hljs-string,
+.hljs-template-string,
+.hljs-regexp { color: #ce9178; }
+
+.hljs-number,
+.hljs-literal { color: #b5cea8; }
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-section { color: #dcdcaa; }
+
+.hljs-type,
+.hljs-class .hljs-title { color: #4ec9b0; }
+
+.hljs-built_in,
+.hljs-builtin-name { color: #dcdcaa; }
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attr,
+.hljs-attribute,
+.hljs-meta { color: #9cdcfe; }
+
+.hljs-tag { color: #569cd6; }
+
+.hljs-name { color: #4ec9b0; }
+
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: bold; }
+
+.ProseMirror .tableWrapper {
+  margin: 0.85rem 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.ProseMirror table {
+  border: 2px solid #000;
+  border-collapse: collapse;
+  border-spacing: 0;
+  box-shadow: 4px 4px 0 #000;
+  margin: 0;
+  table-layout: fixed;
+  width: auto;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  border: 2px solid #000;
+  color: #1d1c16;
+  min-width: 4.5rem;
+  min-height: 1.75rem;
+  padding: 0.35rem 0.5rem;
+  position: relative;
+  vertical-align: top;
+}
+
+.ProseMirror th p,
+.ProseMirror td p {
+  margin: 0.15rem 0;
+}
+
+.ProseMirror th {
+  background: #d8d2c7;
+  font-weight: 900;
+}
+
+.ProseMirror td {
+  background: #fffaf0;
+}
+
+.ProseMirror .selectedCell::after {
+  background: rgba(186, 247, 200, 0.45);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.ProseMirror .column-resize-handle {
+  background: #000;
+  bottom: -1px;
+  pointer-events: none;
+  position: absolute;
+  right: -2px;
+  top: 0;
+  width: 3px;
+}
+
+.ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+.ProseMirror.row-resize-cursor,
+.ProseMirror.row-resize-cursor th,
+.ProseMirror.row-resize-cursor td {
+  cursor: row-resize;
+}
+
+.ProseMirror tr.row-height-resizing th,
+.ProseMirror tr.row-height-resizing td {
+  box-shadow: inset 0 -3px 0 #000;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
