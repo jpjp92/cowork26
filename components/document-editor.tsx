@@ -393,7 +393,7 @@ export default function DocumentEditor({ content, editable, onChange }: Document
     if (!editor || editor.isDestroyed) return
     const nextContent = content ?? { type: 'doc', content: [{ type: 'paragraph' }] }
     if (JSON.stringify(editor.getJSON()) !== JSON.stringify(nextContent)) {
-      editor.commands.setContent(nextContent)
+      editor.commands.setContent(nextContent, { emitUpdate: false })
     }
   }, [content, editor])
 
