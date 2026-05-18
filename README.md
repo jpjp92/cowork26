@@ -1,117 +1,33 @@
 # Cowork26
 
-Next.js, Supabase, Tiptap 기반의 Notion-lite 협업 문서 앱입니다.
+Next.js + Supabase + Tiptap 기반 Notion-lite 협업 문서 앱.
 
-워크스페이스 단위로 페이지를 만들고, 멤버를 추가하고, 문서를 자동 저장하는 PoC입니다. 실시간 동시 편집은 아직 연결하지 않았고, 다른 사용자의 변경 사항은 헤더의 새로고침 버튼으로 다시 불러오는 구조입니다.
+워크스페이스 단위로 페이지를 만들고 멤버를 초대해 함께 편집합니다. 실시간 동시 편집은 미연결이며, 페이지 전환 시 최신 내용을 자동으로 불러옵니다.
 
-## 주요 기능
+---
 
-- 이메일 회원가입 / 로그인
-- Supabase Auth 세션 처리
-- 워크스페이스 생성, 조회, 이름 변경
-- 워크스페이스 멤버 조회 및 이메일 기반 추가
-- 역할 기반 권한 처리: `owner`, `editor`, `viewer`
-- 페이지 생성, 삭제
-- `parent_id` 기반 중첩 페이지 트리
-- Tiptap 기반 문서 편집
-- 문서 제목 blur 저장
-- 본문 자동 저장
-- 저장 상태 표시: 페이지 헤더 우측 `저장 중` / `저장됨`
-- 마크다운 표 붙여넣기 변환 (`**bold**`, `__bold__`, `*italic*`, `_italic_`, `~~strike~~`, `` `code` ``, 링크 인라인 파싱 포함)
-- divider 행(`---|---`) 없는 파이프 구분 표도 붙여넣기 변환 지원
-- 펜스 코드 블록(` ```python ``` `) 붙여넣기 시 코드 블록 노드로 자동 변환
-- syntax highlighting (lowlight 기반 36개 언어 지원, VS Code Dark+ 테마)
-- 코드 블록 우측 상단 언어 배지 표시 (언어별 고유 색상)
-- 목록 입력 후 `Tab` / `Shift+Tab` 들여쓰기 조절
-- Tiptap 표 열 너비 조절
-- 표 행 높이 드래그 조절
-- 최상단 앱 헤더 sticky 고정
-- 설정 메뉴 바깥 클릭 시 자동 닫힘
-- 잘못된 refresh token 자동 정리
-
-## 현재 제약
-
-- 실시간 동시 편집 미연결
-- Yjs / Hocuspocus 의존성은 설치되어 있지만 앱 플로우에 연결되지 않음
-- 자동 동기화 또는 폴링 없음
-- 멤버 제거 / 역할 변경 UI 없음
-- 초대 메일 발송 없음
-- 파일 업로드 없음
-- 페이지 순서 변경 없음
-
-## 기술 스택
-
-```txt
-App
-- Next.js 16
-- React 19
-- TypeScript
-- Tailwind CSS
-- Tiptap
-- @tiptap/extension-code-block-lowlight
-- lowlight (common, 36개 언어)
-
-Backend / Data
-- Supabase Auth
-- Supabase Postgres
-- Supabase service role API route access
-
-Installed for future collaboration work
-- Yjs
-- Hocuspocus provider
-```
-
-## 프로젝트 구조
-
-```txt
-app/
-  api/
-    _utils/auth.ts
-    pages/route.ts
-    workspaces/route.ts
-    workspaces/[id]/members/route.ts
-  globals.css
-  layout.tsx
-  page.tsx
-
-components/
-  auth-panel.tsx
-  document-editor.tsx
-  notion-lite-app.tsx
-
-lib/
-  supabase-admin.ts
-  supabase-browser.ts
-
-supabase/
-  migrations/
-    001_init.sql
-    002_notion_lite.sql
-```
-
-## 실행
+## 시작하기
 
 ```bash
+# 의존성 설치
 npm install
+
+# 개발 서버 실행
 npm run dev
-```
+# → http://localhost:3000
 
-기본 주소:
-
-```txt
-http://localhost:3000
-```
-
-검증:
-
-```bash
+# 타입 검사
 npm run typecheck
+
+# 프로덕션 빌드
 npm run build
 ```
 
+---
+
 ## 환경 변수
 
-`.env.local`에 Supabase 값을 설정합니다.
+`.env.local` 파일을 생성하고 아래 값을 설정합니다.
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=...
@@ -122,41 +38,107 @@ SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
 ```
 
-배포 환경에서는 `NEXT_PUBLIC_SITE_URL`을 실제 도메인으로 설정합니다.
+배포 환경에서는 `NEXT_PUBLIC_SITE_URL`을 실제 도메인으로 변경합니다.  
+Supabase Authentication → Redirect URLs에도 해당 도메인을 등록해야 합니다.
 
-```env
-NEXT_PUBLIC_SITE_URL=https://your-domain.example
-```
+---
 
 ## Supabase 세팅
 
-필수 마이그레이션:
+Supabase Dashboard → SQL Editor에서 마이그레이션을 순서대로 실행합니다.
 
-```txt
+```
+supabase/migrations/001_init.sql
 supabase/migrations/002_notion_lite.sql
 ```
 
-핵심 테이블:
+핵심 테이블: `workspaces` · `workspace_members` · `pages`  
+권한 검증은 API route에서 service role 클라이언트로 처리합니다.
 
-```txt
-workspaces
-workspace_members
-pages
+---
+
+## 기술 스택
+
+| 분류 | 패키지 |
+|------|--------|
+| 프레임워크 | Next.js 16, React 19, TypeScript |
+| 스타일 | Tailwind CSS |
+| 에디터 | Tiptap, @tiptap/extension-table, @tiptap/extension-code-block-lowlight |
+| 하이라이팅 | lowlight (common — 36개 언어, VS Code Dark+ 테마) |
+| 백엔드 | Supabase Auth, Supabase Postgres |
+| 미래 협업 | Yjs, Hocuspocus (설치만, 미연결) |
+
+---
+
+## 아키텍처
+
+```
+app/
+  layout.tsx                      # 루트 레이아웃
+  page.tsx                        # 진입점 → NotionLiteApp 렌더
+  globals.css                     # 전역 스타일 (ProseMirror, hljs 토큰 등)
+  api/
+    _utils/auth.ts                # JWT 검증 · 워크스페이스 권한 헬퍼
+    pages/route.ts                # GET(목록·단건) / POST / PATCH / DELETE
+    workspaces/route.ts           # GET / POST / PATCH
+    workspaces/[id]/members/      # GET / POST
+
+components/
+  auth-panel.tsx                  # 로그인 / 회원가입 폼
+  notion-lite-app.tsx             # 앱 전체 상태 관리 · 사이드바 · 헤더
+  document-editor.tsx             # Tiptap 에디터 (표, 코드 블록, 붙여넣기 파싱)
+
+lib/
+  supabase-admin.ts               # service role 클라이언트 (서버 전용)
+  supabase-browser.ts             # anon 클라이언트 (브라우저)
+
+supabase/
+  migrations/
+    001_init.sql
+    002_notion_lite.sql
 ```
 
-권한과 멤버십 확인은 API route에서 Supabase service role 클라이언트로 처리합니다.
+---
 
-## 사용 흐름
+## 주요 기능
 
-1. 사용자가 회원가입 또는 로그인합니다.
-2. 워크스페이스를 생성합니다.
-3. 워크스페이스 생성 시 기본 `Welcome` 페이지가 함께 생성됩니다.
-4. 좌측 사이드바에서 페이지를 선택하거나 새 페이지를 만듭니다.
-5. 페이지 제목은 문서 상단 경로 헤더에서 바로 수정합니다.
-6. 문서 본문은 입력 후 자동 저장됩니다.
-7. 저장 상태는 페이지 헤더 우측에 표시됩니다.
-8. 마크다운 표를 붙여넣으면 편집 가능한 표로 변환됩니다.
-9. `-`, `1.` 등으로 만든 목록은 `Tab` / `Shift+Tab`으로 들여쓰기와 내어쓰기를 조절합니다.
+**인증 · 워크스페이스**
+- 이메일 회원가입 / 로그인 (Supabase Auth)
+- 워크스페이스 생성, 조회, 이름 변경
+- 멤버 이메일 초대 · 역할 기반 권한: `owner` / `editor` / `viewer`
+- 잘못된 refresh token 자동 정리
+
+**페이지**
+- `parent_id` 기반 중첩 페이지 트리
+- 페이지 생성, 삭제
+- 사이드바 드래그로 페이지 순서 변경 (같은 레벨 내 형제끼리)
+- 페이지 전환 시 서버에서 최신 content 자동 fetch
+
+**에디터**
+- 문서 제목 수정 (blur 저장)
+- 본문 자동 저장 (1.5초 디바운스) · 저장 상태 표시
+- Tiptap 표: 열 너비 조절, 행 높이 드래그 조절
+- 목록 `Tab` / `Shift+Tab` 들여쓰기 조절
+
+**붙여넣기 변환**
+- 마크다운 파이프 표 → 편집 가능한 표 (divider 행 유무 무관)
+  - 셀 인라인 파싱: `**bold**` `__bold__` `*italic*` `_italic_` `~~strike~~` `` `code` `` 링크
+- 펜스 코드 블록(` ```lang ``` `) → 코드 블록 노드 (syntax highlighting 적용)
+
+**코드 블록**
+- lowlight 기반 syntax highlighting (36개 언어, VS Code Dark+ 테마)
+- 우측 상단 언어 배지 (언어별 고유 색상)
+
+---
+
+## 현재 제약
+
+- 실시간 동시 편집 미연결 (페이지 전환 시 fetch, 헤더 새로고침 버튼으로 수동 동기화)
+- 페이지를 다른 부모로 이동 (트리 구조 변경) 불가
+- 멤버 제거 / 역할 변경 UI 없음
+- 초대 메일 발송 없음
+- 파일 업로드 없음
+
 10. 표 열 너비는 기본 Tiptap 리사이즈로 조절합니다.
 11. 표 행 높이는 행 하단 경계 드래그로 조절합니다.
 12. 설정 메뉴에서 멤버 목록을 확인하고, 가입된 사용자 이메일로 멤버를 추가합니다.
