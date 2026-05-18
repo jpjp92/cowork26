@@ -379,8 +379,12 @@ export default function NotionLiteApp() {
         ? { ...page, content: pendingContent.current.get(page.id) ?? page.content }
         : item
     )))
-    setSaving('saved')
-    window.setTimeout(() => setSaving('idle'), 1200)
+    // 현재 보고 있는 페이지가 저장된 페이지일 때만 배지 표시
+    // (이전 페이지 지연 저장이 페이지 전환 후 완료되어도 배지가 뜨지 않도록)
+    if (pageId === activePageId) {
+      setSaving('saved')
+      window.setTimeout(() => setSaving('idle'), 1200)
+    }
   }
 
   const scheduleContentSave = (pageId: string, content: Record<string, unknown>) => {
