@@ -67,6 +67,8 @@ export default function NotionLiteApp() {
   const saveTimers = useRef(new Map<string, number>())
   const pendingContent = useRef(new Map<string, Record<string, unknown>>())
   const settingsRef = useRef<HTMLDivElement>(null)
+  const draggedIdRef = useRef<string | null>(null)
+  const [dragOver, setDragOver] = useState<{ id: string; position: 'above' | 'below' } | null>(null)
 
   const accessToken = session?.access_token
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
@@ -201,6 +203,21 @@ export default function NotionLiteApp() {
     }
     loadPages(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
   }, [activeWorkspaceId, loadPages])
+
+  useEffect(() => {
+    if (!activePageId || !accessToken) return
+    // 페이지 전환 시 최신 content 서버에서 fetch (다른 사용자 수정 반영)
+    fetch(`/api/pages?id=${activePageId}`, { headers: authHeaders() })
+      .then(res => res.ok ? res.json() : null)
+      .then((fresh: PageRecord | null) => {
+        if (!fresh) return
+        // pendingContent(미저장 로컬 편집)가 없는 경우에만 덮어씀
+        if (!pendingContent.current.has(activePageId)) {
+          setPages(prev => prev.map(p => p.id === fresh.id ? fresh : p))
+        }
+      })
+      .catch(() => { /* 조용히 무시 */ })
+  }, [activePageId, accessToken, authHeaders])
 
   useEffect(() => {
     setRenameWorkspaceName(activeWorkspace?.name ?? '')
@@ -474,11 +491,73 @@ export default function NotionLiteApp() {
     }
   }
 
+  const reorderPage = useCallback(async (draggedId: string, targetId: string, position: 'above' | 'below') => {
+    if (draggedId === targetId || !accessToken) return
+    const draggedPage = pages.find(p => p.id === draggedId)
+    const targetPage = pages.find(p => p.id === targetId)
+    if (!draggedPage || !targetPage) return
+    if (draggedPage.parent_id !== targetPage.parent_id) return
+
+    const siblings = [...(pageTree.get(targetPage.parent_id ?? 'root') ?? [])]
+    const withoutDragged = siblings.filter(p => p.id !== draggedId)
+    const targetIdx = withoutDragged.findIndex(p => p.id === targetId)
+    const insertIdx = position === 'above' ? targetIdx : targetIdx + 1
+    withoutDragged.splice(insertIdx, 0, draggedPage)
+
+    const reordered = withoutDragged.map((p, i) => ({ ...p, order_index: i }))
+
+    // optimistic update
+    setPages(prev => prev.map(p => reordered.find(r => r.id === p.id) ?? p))
+
+    // persist only changed order_index values
+    const changed = reordered.filter(r => {
+      const original = siblings.find(s => s.id === r.id)
+      return original?.order_index !== r.order_index
+    })
+    await Promise.all(changed.map(p =>
+      fetch('/api/pages', {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ id: p.id, orderIndex: p.order_index }),
+      })
+    ))
+  }, [accessToken, authHeaders, pages, pageTree])
+
   const renderPageList = (parentId: string | null, depth = 0): React.ReactNode => {
     const items = pageTree.get(parentId ?? 'root') ?? []
     return items.map(page => (
       <div key={page.id}>
-        <div className="group/page-row flex items-center gap-2" style={{ paddingLeft: depth * 14 }}>
+        {/* drop indicator — above */}
+        {dragOver?.id === page.id && dragOver.position === 'above' && (
+          <div className="mx-1 h-0.5 rounded bg-[#baf7c8]" style={{ marginLeft: depth * 14 + 4 }} />
+        )}
+        <div
+          className="group/page-row flex items-center gap-2"
+          style={{ paddingLeft: depth * 14 }}
+          draggable={canEdit}
+          onDragStart={() => { draggedIdRef.current = page.id }}
+          onDragEnd={() => { draggedIdRef.current = null; setDragOver(null) }}
+          onDragOver={e => {
+            e.preventDefault()
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+            const position = e.clientY < rect.top + rect.height / 2 ? 'above' : 'below'
+            setDragOver(prev =>
+              prev?.id === page.id && prev.position === position ? prev : { id: page.id, position }
+            )
+          }}
+          onDragLeave={e => {
+            if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+              setDragOver(null)
+            }
+          }}
+          onDrop={e => {
+            e.preventDefault()
+            const dragged = draggedIdRef.current
+            if (dragged) reorderPage(dragged, page.id, dragOver?.position ?? 'below')
+            draggedIdRef.current = null
+            setDragOver(null)
+          }}
+        >
           <button
             onClick={() => setActivePageId(page.id)}
             className={`flex h-9 min-w-0 flex-1 items-center truncate rounded-[8px] px-3 text-left text-sm ${
@@ -508,6 +587,10 @@ export default function NotionLiteApp() {
             </div>
           )}
         </div>
+        {/* drop indicator — below */}
+        {dragOver?.id === page.id && dragOver.position === 'below' && (
+          <div className="mx-1 h-0.5 rounded bg-[#baf7c8]" style={{ marginLeft: depth * 14 + 4 }} />
+        )}
         {renderPageList(page.id, depth + 1)}
       </div>
     ))

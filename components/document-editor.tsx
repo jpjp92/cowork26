@@ -3,14 +3,45 @@
 import { Extension, Mark, mergeAttributes } from '@tiptap/core'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { DOMParser as ProseMirrorDOMParser } from '@tiptap/pm/model'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import { Plugin } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Table } from '@tiptap/extension-table'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableRow } from '@tiptap/extension-table-row'
+import { createLowlight, common } from 'lowlight'
 import { useEffect } from 'react'
+
+const lowlight = createLowlight(common)
+
+const CodeBlockWithLang = CodeBlockLowlight.extend({
+  addProseMirrorPlugins() {
+    return [
+      ...(this.parent?.() ?? []),
+      new Plugin({
+        props: {
+          decorations(state) {
+            const decorations: Decoration[] = []
+            state.doc.descendants((node, pos) => {
+              if (node.type.name === 'codeBlock' && node.attrs.language) {
+                decorations.push(
+                  Decoration.node(pos, pos + node.nodeSize, {
+                    'data-language': node.attrs.language,
+                  })
+                )
+              }
+            })
+            return DecorationSet.create(state.doc, decorations)
+          },
+        },
+      }),
+    ]
+  },
+}).configure({ lowlight })
 
 interface DocumentEditorProps {
   content: Record<string, unknown> | null
@@ -87,6 +118,15 @@ const ListTabKeymap = Extension.create({
     }
   },
 })
+
+function parseMarkdownCodeBlock(text: string): { language: string | null; code: string } | null {
+  const match = text.trim().match(/^```(\w*)\r?\n([\s\S]*?)\n?```\s*$/)
+  if (!match) return null
+  return {
+    language: match[1].trim() || null,
+    code: match[2] ?? '',
+  }
+}
 
 function findTableRowPos(view: EditorView, row: HTMLTableRowElement) {
   const estimatedPos = view.posAtDOM(row, 0)
@@ -230,7 +270,8 @@ export default function DocumentEditor({ content, editable, onChange }: Document
     immediatelyRender: false,
     editable,
     extensions: [
-      StarterKit,
+      StarterKit.configure({ codeBlock: false }),
+      CodeBlockWithLang,
       ListTabKeymap,
       FontSize,
       Table.configure({
@@ -257,14 +298,28 @@ export default function DocumentEditor({ content, editable, onChange }: Document
         if (!text) return false
 
         const tableHtml = parseMarkdownTable(text)
-        if (!tableHtml) return false
+        if (tableHtml) {
+          event.preventDefault()
+          const wrapper = document.createElement('div')
+          wrapper.innerHTML = tableHtml
+          const slice = ProseMirrorDOMParser.fromSchema(view.state.schema).parseSlice(wrapper)
+          view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView())
+          return true
+        }
 
-        event.preventDefault()
-        const wrapper = document.createElement('div')
-        wrapper.innerHTML = tableHtml
-        const slice = ProseMirrorDOMParser.fromSchema(view.state.schema).parseSlice(wrapper)
-        view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView())
-        return true
+        const codeBlock = parseMarkdownCodeBlock(text)
+        if (codeBlock) {
+          event.preventDefault()
+          const { schema } = view.state
+          const codeBlockType = schema.nodes.codeBlock
+          if (!codeBlockType) return false
+          const content = codeBlock.code ? [schema.text(codeBlock.code)] : []
+          const node = codeBlockType.create({ language: codeBlock.language }, content)
+          view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView())
+          return true
+        }
+
+        return false
       },
       handleDOMEvents: {
         mousemove(view, event) {

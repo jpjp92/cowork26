@@ -19,6 +19,9 @@ Next.js, Supabase, Tiptap 기반의 Notion-lite 협업 문서 앱입니다.
 - 저장 상태 표시: 페이지 헤더 우측 `저장 중` / `저장됨`
 - 마크다운 표 붙여넣기 변환 (`**bold**`, `__bold__`, `*italic*`, `_italic_`, `~~strike~~`, `` `code` ``, 링크 인라인 파싱 포함)
 - divider 행(`---|---`) 없는 파이프 구분 표도 붙여넣기 변환 지원
+- 펜스 코드 블록(` ```python ``` `) 붙여넣기 시 코드 블록 노드로 자동 변환
+- syntax highlighting (lowlight 기반 36개 언어 지원, VS Code Dark+ 테마)
+- 코드 블록 우측 상단 언어 배지 표시 (언어별 고유 색상)
 - 목록 입력 후 `Tab` / `Shift+Tab` 들여쓰기 조절
 - Tiptap 표 열 너비 조절
 - 표 행 높이 드래그 조절
@@ -45,6 +48,8 @@ App
 - TypeScript
 - Tailwind CSS
 - Tiptap
+- @tiptap/extension-code-block-lowlight
+- lowlight (common, 36개 언어)
 
 Backend / Data
 - Supabase Auth
