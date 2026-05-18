@@ -763,7 +763,7 @@ export default function NotionLiteApp() {
                     saving === 'idle' ? 'pointer-events-none opacity-0' : 'opacity-100'
                   }`}
                 >
-                  {saving === 'saving' ? '저장 중' : '저장됨'}
+                  {saving === 'saving' ? '저장' : '저장됨'}
                 </span>
               </div>
             </div>
