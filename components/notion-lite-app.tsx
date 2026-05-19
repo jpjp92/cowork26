@@ -4,6 +4,7 @@ import { Session } from '@supabase/supabase-js'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AuthPanel from './auth-panel'
+import FloatingAiButton from './floating-ai-button'
 import { supabase } from '../lib/supabase-browser'
 
 const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false })
@@ -879,6 +880,7 @@ export default function NotionLiteApp() {
         )}
         </section>
       </div>
+      <FloatingAiButton />
     </main>
   )
 }
