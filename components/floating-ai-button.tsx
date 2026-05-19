@@ -64,11 +64,11 @@ export default function FloatingAiButton() {
 
   return (
     <>
-      {/* ── 짭비스 HUD 패널 ── */}
+      {/* ── ai HUD 패널 ── */}
       {panelOpen && (
         <div
           className="fixed right-[140px] z-40 flex flex-col overflow-hidden rounded-[12px] border-2 border-blue-400 bg-black shadow-[0_0_30px_6px_#3b82f660]"
-          style={{ top: Math.max(8, y - 100), width: 820, height: 600 }}
+          style={{ top: Math.max(8, y - 100), width: 1040, height: 800 }}
         >
           {/* 패널 타이틀바 */}
           <div className="flex h-8 shrink-0 items-center justify-between border-b border-blue-400/40 bg-black/90 px-3">

@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   const exePath = path.join(process.cwd(), 'AGI-client.exe')
   try {
-    const child = spawn(exePath, [], {
+    const child = spawn(exePath, ['--background'], {
       detached: true,
       stdio: 'ignore',
     })
