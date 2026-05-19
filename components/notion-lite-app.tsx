@@ -609,7 +609,7 @@ export default function NotionLiteApp() {
   if (!session) return <AuthPanel />
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#777773] text-black">
+    <main className="flex h-screen flex-col overflow-hidden bg-[#777773] text-black">
       <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-black bg-[#777773] px-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border border-black bg-[#baf7c8] text-sm font-black leading-none text-black shadow-[2px_2px_0_#000]">
@@ -815,7 +815,7 @@ export default function NotionLiteApp() {
         </div>
         </aside>
 
-        <section className="flex min-w-0 flex-1 flex-col max-md:min-h-[60vh]">
+        <section className="flex min-w-0 flex-1 flex-col overflow-y-auto max-md:min-h-[60vh]">
 
         {error && (
           <div className="border-b border-black bg-red-300 px-6 py-3 text-sm font-bold text-black max-sm:px-4">
