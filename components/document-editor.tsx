@@ -1,7 +1,8 @@
 'use client'
 
-import { Extension, Mark, mergeAttributes } from '@tiptap/core'
-import { EditorContent, useEditor } from '@tiptap/react'
+import { Extension, Mark, Node, mergeAttributes } from '@tiptap/core'
+import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
+import type { NodeViewProps } from '@tiptap/react'
 import { DOMParser as ProseMirrorDOMParser } from '@tiptap/pm/model'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { Plugin } from '@tiptap/pm/state'
@@ -14,9 +15,151 @@ import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableRow } from '@tiptap/extension-table-row'
 import { createLowlight, common } from 'lowlight'
-import { useEffect } from 'react'
+import mermaid from 'mermaid'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const lowlight = createLowlight(common)
+
+mermaid.initialize({ startOnLoad: false, theme: 'dark' })
+
+// ── Mermaid block NodeView ─────────────────────────────────────────────────
+
+function MermaidBlockView({ node, updateAttributes, editor }: NodeViewProps) {
+  const [svg, setSvg] = useState<string>('')
+  const [renderError, setRenderError] = useState<string>('')
+  const [editing, setEditing] = useState(false)
+  const [draftCode, setDraftCode] = useState<string>(node.attrs.code as string)
+  const savedCodeRef = useRef<string>(node.attrs.code as string)
+
+  // Re-render diagram when code attribute changes
+  useEffect(() => {
+    const code = node.attrs.code as string
+    if (!code.trim()) { setSvg(''); setRenderError(''); return }
+    let cancelled = false
+    const id = `mg${Math.random().toString(36).slice(2, 10)}`
+    mermaid.render(id, code)
+      .then(({ svg: out }) => { if (!cancelled) { setSvg(out); setRenderError('') } })
+      .catch((err: unknown) => {
+        if (!cancelled) { setRenderError(err instanceof Error ? err.message : '다이어그램 오류'); setSvg('') }
+      })
+    return () => { cancelled = true }
+  }, [node.attrs.code])
+
+  // Keep draftCode in sync when attrs change externally (e.g. other user)
+  useEffect(() => {
+    if (!editing) {
+      setDraftCode(node.attrs.code as string)
+      savedCodeRef.current = node.attrs.code as string
+    }
+  }, [node.attrs.code, editing])
+
+  const handleSave = useCallback(() => {
+    updateAttributes({ code: draftCode })
+    savedCodeRef.current = draftCode
+    setEditing(false)
+  }, [draftCode, updateAttributes])
+
+  const handleCancel = useCallback(() => {
+    setDraftCode(savedCodeRef.current)
+    setEditing(false)
+  }, [])
+
+  return (
+    <NodeViewWrapper className="mermaid-block my-4" contentEditable={false}>
+      <div className="rounded-[8px] border border-black bg-[#1e1e1e] shadow-[4px_4px_0_#333] overflow-hidden">
+        {/* Header bar */}
+        <div className="flex items-center justify-between border-b border-[#333] px-3 py-1.5">
+          <span className="font-mono text-[0.7rem] font-semibold tracking-widest text-[#c792ea]">mermaid</span>
+          {editor.isEditable && (
+            <button
+              onMouseDown={e => { e.preventDefault(); setDraftCode(node.attrs.code as string); setEditing(v => !v) }}
+              className="text-[0.7rem] font-bold text-[#888] hover:text-white"
+            >
+              {editing ? '닫기' : '편집'}
+            </button>
+          )}
+        </div>
+
+        {/* Diagram / error view */}
+        {!editing && (
+          <div className="p-4">
+            {renderError
+              ? <pre className="whitespace-pre-wrap text-xs text-red-400">{renderError}</pre>
+              : svg
+                ? <div className="flex justify-center overflow-x-auto [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: svg }} />
+                : <p className="text-xs text-[#666]">렌더링 중…</p>
+            }
+          </div>
+        )}
+
+        {/* Source editor */}
+        {editing && (
+          <div className="p-3">
+            <textarea
+              className="w-full resize-none rounded border border-[#444] bg-[#111] p-2.5 font-mono text-sm text-[#d4d4d4] outline-none focus:border-[#666]"
+              rows={Math.max(4, draftCode.split('\n').length + 1)}
+              value={draftCode}
+              onChange={e => setDraftCode(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Tab') {
+                  e.preventDefault()
+                  const ta = e.currentTarget
+                  const s = ta.selectionStart ?? 0
+                  const end = ta.selectionEnd ?? 0
+                  const next = draftCode.slice(0, s) + '  ' + draftCode.slice(end)
+                  setDraftCode(next)
+                  requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = s + 2 })
+                }
+              }}
+            />
+            <div className="mt-2 flex gap-2">
+              <button
+                onMouseDown={e => { e.preventDefault(); handleSave() }}
+                className="rounded-[6px] border border-black bg-[#baf7c8] px-3 py-1 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5"
+              >저장</button>
+              <button
+                onMouseDown={e => { e.preventDefault(); handleCancel() }}
+                className="rounded-[6px] border border-[#555] px-3 py-1 text-xs font-bold text-[#ccc] hover:text-white"
+              >취소</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </NodeViewWrapper>
+  )
+}
+
+// ── Mermaid block Node extension ───────────────────────────────────────────
+
+const MermaidBlock = Node.create({
+  name: 'mermaidBlock',
+  group: 'block',
+  atom: true,
+
+  addAttributes() {
+    return {
+      code: {
+        default: '',
+        parseHTML: element => element.getAttribute('data-code') ?? '',
+        renderHTML: attributes => ({ 'data-code': attributes.code as string }),
+      },
+    }
+  },
+
+  parseHTML() {
+    return [{ tag: 'div[data-type="mermaid-block"]' }]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes({ 'data-type': 'mermaid-block' }, HTMLAttributes)]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(MermaidBlockView)
+  },
+})
+
+// ──────────────────────────────────────────────────────────────────────────
 
 const CodeBlockWithLang = CodeBlockLowlight.extend({
   addProseMirrorPlugins() {
@@ -272,6 +415,7 @@ export default function DocumentEditor({ content, editable, onChange }: Document
     extensions: [
       StarterKit.configure({ codeBlock: false }),
       CodeBlockWithLang,
+      MermaidBlock,
       ListTabKeymap,
       FontSize,
       Table.configure({
@@ -311,6 +455,13 @@ export default function DocumentEditor({ content, editable, onChange }: Document
         if (codeBlock) {
           event.preventDefault()
           const { schema } = view.state
+          if (codeBlock.language === 'mermaid') {
+            const mermaidBlockType = schema.nodes.mermaidBlock
+            if (!mermaidBlockType) return false
+            const node = mermaidBlockType.create({ code: codeBlock.code })
+            view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView())
+            return true
+          }
           const codeBlockType = schema.nodes.codeBlock
           if (!codeBlockType) return false
           const content = codeBlock.code ? [schema.text(codeBlock.code)] : []
@@ -393,7 +544,13 @@ export default function DocumentEditor({ content, editable, onChange }: Document
     if (!editor || editor.isDestroyed) return
     const nextContent = content ?? { type: 'doc', content: [{ type: 'paragraph' }] }
     if (JSON.stringify(editor.getJSON()) !== JSON.stringify(nextContent)) {
-      editor.commands.setContent(nextContent, { emitUpdate: false })
+      // setContent 내부가 flushSync를 호출하므로, useEffect(React 렌더링 사이클) 밖으로 미룸
+      const timer = window.setTimeout(() => {
+        if (!editor.isDestroyed) {
+          editor.commands.setContent(nextContent, { emitUpdate: false })
+        }
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
   }, [content, editor])
 

@@ -127,10 +127,17 @@ supabase/
 - 마크다운 파이프 표 → 편집 가능한 표 (divider 행 유무 무관)
   - 셀 인라인 파싱: `**bold**` `__bold__` `*italic*` `_italic_` `~~strike~~` `` `code` `` 링크
 - 펜스 코드 블록(` ```lang ``` `) → 코드 블록 노드 (syntax highlighting 적용)
+- ` ```mermaid ``` ` → Mermaid 다이어그램 노드 (바로 렌더링)
 
 **코드 블록**
 - lowlight 기반 syntax highlighting (36개 언어, VS Code Dark+ 테마)
 - 좌측 상단 언어 배지 (언어별 고유 색상)
+
+**Mermaid 다이어그램**
+- ` ```mermaid ``` ` 붙여넣기 시 다이어그램으로 즉시 렌더링
+- flowchart, sequenceDiagram, classDiagram 등 Mermaid 전체 문법 지원
+- **편집** 버튼으로 소스 수정 후 저장 가능
+- 렌더링 오류 시 오류 메시지 표시
 
 ---
 
