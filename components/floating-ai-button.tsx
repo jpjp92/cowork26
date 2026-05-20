@@ -5,25 +5,83 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 const AGI_HUD_URL = (process.env.NEXT_PUBLIC_JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777') + '/hud/hud.html'
 
-/** 현재 페이지 컨텍스트 수집 — iframe에 postMessage로 전달 */
-function collectPageContext(): string {
+/** SVG 엘리먼트 → canvas → base64 PNG (Mermaid 다이어그램 캡처용) */
+async function svgToBase64Png(svgEl: SVGElement): Promise<string | null> {
+  try {
+    const w = Math.max(svgEl.clientWidth, 400)
+    const h = Math.max(svgEl.clientHeight, 300)
+    const svgData = new XMLSerializer().serializeToString(svgEl)
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+    const blobUrl = URL.createObjectURL(blob)
+    return await new Promise<string | null>((resolve) => {
+      const img = new window.Image()
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width = w
+          canvas.height = h
+          const ctx = canvas.getContext('2d')
+          if (!ctx) { resolve(null); return }
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, w, h)
+          ctx.drawImage(img, 0, 0, w, h)
+          URL.revokeObjectURL(blobUrl)
+          // data:image/png;base64, 접두어 제거 → base64만 반환
+          resolve(canvas.toDataURL('image/png').replace('data:image/png;base64,', ''))
+        } catch { resolve(null) }
+      }
+      img.onerror = () => { URL.revokeObjectURL(blobUrl); resolve(null) }
+      img.src = blobUrl
+    })
+  } catch { return null }
+}
+
+/** 현재 페이지 컨텍스트 + 이미지(Mermaid/SVG 다이어그램) 수집 */
+async function collectPageContext(): Promise<{ context: string; images: string[] }> {
   try {
     const url = window.location.href
     const title = document.title
-    // 선택된 텍스트 (드래그 선택 시 우선 사용)
     const selected = window.getSelection()?.toString().trim() ?? ''
-    // 메인 콘텐츠 영역 텍스트 (main > article > body 순서로 시도)
     const mainEl = document.querySelector('main') ?? document.querySelector('article') ?? document.body
     const rawText = (mainEl as HTMLElement).innerText ?? ''
-    // 공백 정리 + 최대 1500자 (LLM 컨텍스트 낭비 방지)
     const bodyText = rawText.replace(/\s{3,}/g, '\n').trim().slice(0, 1500)
+
+    // ── Mermaid/SVG 다이어그램 → base64 PNG (최대 4개) ───────────
+    const images: string[] = []
+    const svgCandidates = Array.from(
+      mainEl.querySelectorAll<SVGElement>(
+        '.mermaid svg, [class*="mermaid"] svg, [class*="diagram"] svg, figure svg, .react-flow svg'
+      )
+    ).slice(0, 4)
+    for (const svgEl of svgCandidates) {
+      const b64 = await svgToBase64Png(svgEl)
+      if (b64) images.push(b64)
+    }
+
+    // ── Mermaid 소스 코드 텍스트 (렌더링 전 코드블록) ─────────────
+    const mermaidSrcs: string[] = []
+    mainEl.querySelectorAll<HTMLElement>('pre.mermaid, code.language-mermaid, [data-mermaid]').forEach(el => {
+      const src = (el.getAttribute('data-mermaid') || el.textContent || '').trim()
+      if (src) mermaidSrcs.push(src.slice(0, 500))
+    })
+
+    // ── 본문 이미지 URL (아이콘 제외, 80px 이상) ─────────────────
+    const imgUrls: string[] = []
+    mainEl.querySelectorAll<HTMLImageElement>('img').forEach(img => {
+      if (img.naturalWidth > 80 && img.naturalHeight > 80 && img.src && !img.src.startsWith('data:')) {
+        imgUrls.push(img.src)
+      }
+    })
 
     let ctx = `[현재 페이지 정보]\nURL: ${url}\n제목: ${title}`
     if (selected) ctx += `\n선택된 텍스트: ${selected}`
     if (bodyText) ctx += `\n\n페이지 내용:\n${bodyText}`
-    return ctx
+    if (mermaidSrcs.length > 0) ctx += `\n\n[다이어그램 소스]\n${mermaidSrcs.join('\n---\n')}`
+    if (imgUrls.length > 0) ctx += `\n\n[이미지 URL]\n${imgUrls.slice(0, 8).join('\n')}`
+
+    return { context: ctx, images }
   } catch {
-    return ''
+    return { context: '', images: [] }
   }
 }
 
@@ -40,11 +98,11 @@ export default function FloatingAiButton() {
   const moved = useRef(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
-  /** iframe에 페이지 컨텍스트 전송 */
-  const sendPageContext = useCallback(() => {
-    const ctx = collectPageContext()
+  /** iframe에 페이지 컨텍스트 + 이미지 전송 */
+  const sendPageContext = useCallback(async () => {
+    const { context, images } = await collectPageContext()
     iframeRef.current?.contentWindow?.postMessage(
-      { type: 'page_context', context: ctx },
+      { type: 'page_context', context, images },
       '*',
     )
   }, [])
