@@ -7,6 +7,12 @@ import AuthPanel from './auth-panel'
 import { supabase } from '../lib/supabase-browser'
 
 const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false })
+const DEBUG_SAVE_FLOW = process.env.NODE_ENV !== 'production'
+
+function debugSaveFlow(message: string, data?: Record<string, unknown>) {
+  if (!DEBUG_SAVE_FLOW) return
+  console.log(`[save-flow] ${message}`, data ?? {})
+}
 
 interface Workspace {
   id: string
@@ -54,11 +60,13 @@ export default function NotionLiteApp() {
   const [newPageTitle, setNewPageTitle] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState<'idle' | 'saved' | 'loaded'>('idle')
+  const [visibleSavingStatus, setVisibleSavingStatus] = useState<'saved' | 'loaded'>('loaded')
   const [creatingWorkspace, setCreatingWorkspace] = useState(false)
   const [renamingWorkspace, setRenamingWorkspace] = useState(false)
   const [creatingPage, setCreatingPage] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [loadingPageId, setLoadingPageId] = useState('')
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
@@ -66,14 +74,20 @@ export default function NotionLiteApp() {
   const [inviteLoading, setInviteLoading] = useState(false)
   const saveTimers = useRef(new Map<string, number>())
   const pendingContent = useRef(new Map<string, Record<string, unknown>>())
+  const contentSaveInFlight = useRef(new Set<string>())
   const settingsRef = useRef<HTMLDivElement>(null)
   const draggedIdRef = useRef<string | null>(null)
+  const activePageIdRef = useRef(activePageId)
+  const loadingPageIdRef = useRef('')
+  const savingResetTimerRef = useRef<number | null>(null)
+  const titleFocusValueRef = useRef(new Map<string, string>())
   const [dragOver, setDragOver] = useState<{ id: string; position: 'above' | 'below' } | null>(null)
 
   const accessToken = session?.access_token
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
   const activePage = pages.find(page => page.id === activePageId) ?? null
   const activePageContent = activePage ? pendingContent.current.get(activePage.id) ?? activePage.content : null
+  const activePageLoading = Boolean(activePage && loadingPageId === activePage.id)
   const canEdit = activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'editor'
   const canManageMembers = activeWorkspace?.role === 'owner'
 
@@ -104,15 +118,44 @@ export default function NotionLiteApp() {
     'Content-Type': 'application/json',
   }), [accessToken])
 
+  useEffect(() => {
+    activePageIdRef.current = activePageId
+  }, [activePageId])
+
+  const showSavingStatus = useCallback((status: 'saved' | 'loaded') => {
+    if (savingResetTimerRef.current) {
+      window.clearTimeout(savingResetTimerRef.current)
+    }
+
+    setSaving(status)
+    setVisibleSavingStatus(status)
+    savingResetTimerRef.current = window.setTimeout(() => {
+      setSaving('idle')
+      savingResetTimerRef.current = null
+    }, 1200)
+  }, [])
+
+  const selectActivePage = useCallback((pageId: string) => {
+    activePageIdRef.current = pageId
+    loadingPageIdRef.current = pageId
+    setLoadingPageId(pageId)
+    if (savingResetTimerRef.current) {
+      window.clearTimeout(savingResetTimerRef.current)
+      savingResetTimerRef.current = null
+    }
+    setSaving('idle')
+    setActivePageId(pageId)
+  }, [])
+
   const resetClientState = useCallback(() => {
     setSession(null)
     setWorkspaces([])
     setPages([])
     setMembers([])
     setActiveWorkspaceId('')
-    setActivePageId('')
+    selectActivePage('')
     setSettingsOpen(false)
-  }, [])
+  }, [selectActivePage])
 
   const loadWorkspaces = useCallback(async () => {
     if (!accessToken) return
@@ -136,9 +179,11 @@ export default function NotionLiteApp() {
 
     const data = await response.json() as PageRecord[]
     setPages(data)
-    setActivePageId(current => (
-      data.some(page => page.id === current) ? current : data[0]?.id || ''
-    ))
+    setActivePageId(current => {
+      const nextPageId = data.some(page => page.id === current) ? current : data[0]?.id || ''
+      activePageIdRef.current = nextPageId
+      return nextPageId
+    })
   }, [accessToken, authHeaders])
 
   const loadMembers = useCallback(async (workspaceId: string) => {
@@ -198,28 +243,58 @@ export default function NotionLiteApp() {
   useEffect(() => {
     if (!activeWorkspaceId) {
       setPages([])
-      setActivePageId('')
+      selectActivePage('')
       return
     }
     loadPages(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
-  }, [activeWorkspaceId, loadPages])
+  }, [activeWorkspaceId, loadPages, selectActivePage])
 
   useEffect(() => {
     if (!activePageId || !accessToken) return
+    loadingPageIdRef.current = activePageId
+    setLoadingPageId(activePageId)
+    const abortController = new AbortController()
+
     // 페이지 전환 시 최신 content 서버에서 fetch (다른 사용자 수정 반영)
-    fetch(`/api/pages?id=${activePageId}`, { headers: authHeaders() })
+    fetch(`/api/pages?id=${activePageId}`, {
+      headers: authHeaders(),
+      signal: abortController.signal,
+    })
       .then(res => res.ok ? res.json() : null)
       .then((fresh: PageRecord | null) => {
         if (!fresh) return
-        // pendingContent(미저장 로컬 편집)가 없는 경우에만 덮어씀
-        if (!pendingContent.current.has(activePageId)) {
+        if (fresh.id !== activePageIdRef.current) return
+
+        debugSaveFlow('page loaded', {
+          pageId: fresh.id,
+          title: fresh.title,
+          updatedAt: fresh.updated_at,
+          hasSaveTimer: saveTimers.current.has(fresh.id),
+          hasSaveInFlight: contentSaveInFlight.current.has(fresh.id),
+          hasPendingContent: pendingContent.current.has(fresh.id),
+        })
+        showSavingStatus('loaded')
+
+        const hasUnsavedLocalContent = (
+          saveTimers.current.has(fresh.id) || contentSaveInFlight.current.has(fresh.id)
+        )
+
+        // 미저장 로컬 편집이 없는 경우에만 서버 최신본으로 덮어씀
+        if (!hasUnsavedLocalContent) {
+          pendingContent.current.delete(fresh.id)
           setPages(prev => prev.map(p => p.id === fresh.id ? fresh : p))
-          setSaving('loaded')
-          window.setTimeout(() => setSaving('idle'), 1200)
         }
       })
       .catch(() => { /* 조용히 무시 */ })
-  }, [activePageId, accessToken, authHeaders])
+      .finally(() => {
+        if (activePageIdRef.current === activePageId) {
+          loadingPageIdRef.current = ''
+          setLoadingPageId('')
+        }
+      })
+
+    return () => abortController.abort()
+  }, [activePageId, accessToken, authHeaders, showSavingStatus])
 
   useEffect(() => {
     setRenameWorkspaceName(activeWorkspace?.name ?? '')
@@ -250,6 +325,9 @@ export default function NotionLiteApp() {
       window.clearTimeout(timer)
     }
     saveTimers.current.clear()
+    if (savingResetTimerRef.current) {
+      window.clearTimeout(savingResetTimerRef.current)
+    }
   }, [])
 
   const pageTree = useMemo(() => {
@@ -287,7 +365,7 @@ export default function NotionLiteApp() {
       setWorkspaceName('')
       if (data.page) {
         setPages([data.page])
-        setActivePageId(data.page.id)
+        selectActivePage(data.page.id)
       }
     } finally {
       setCreatingWorkspace(false)
@@ -315,7 +393,7 @@ export default function NotionLiteApp() {
 
       const page = await response.json() as PageRecord
       setPages(previous => [...previous, page])
-      setActivePageId(page.id)
+      selectActivePage(page.id)
       setNewPageTitle('')
     } finally {
       setCreatingPage(false)
@@ -353,42 +431,77 @@ export default function NotionLiteApp() {
     patch: Partial<Pick<PageRecord, 'title' | 'content'>>,
   ) => {
     if (!accessToken || !canEdit) return
-    const response = await fetch('/api/pages', {
-      method: 'PATCH',
-      headers: authHeaders(),
-      body: JSON.stringify({ id: pageId, ...patch }),
+    const isContentSave = patch.content !== undefined
+    const isTitleSave = patch.title !== undefined
+    debugSaveFlow('patch start', {
+      pageId,
+      activePageId: activePageIdRef.current,
+      isContentSave,
+      isTitleSave,
+      loadingPageId: loadingPageIdRef.current,
+      contentBlocks: Array.isArray(patch.content?.content) ? patch.content.content.length : null,
     })
+    if (isContentSave) contentSaveInFlight.current.add(pageId)
 
-    if (!response.ok) {
-      setError((await readError(response, '페이지를 저장하지 못했습니다.')).message)
-      return
-    }
+    try {
+      const response = await fetch('/api/pages', {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ id: pageId, ...patch }),
+      })
 
-    const page = await response.json() as PageRecord
-    const currentPendingContent = pendingContent.current.get(page.id)
-    const savedContent = page.content ?? null
-    if (
-      currentPendingContent &&
-      JSON.stringify(currentPendingContent) === JSON.stringify(savedContent)
-    ) {
-      pendingContent.current.delete(page.id)
-    }
+      if (!response.ok) {
+        setError((await readError(response, '페이지를 저장하지 못했습니다.')).message)
+        return
+      }
 
-    setPages(previous => previous.map(item => (
-      item.id === page.id
-        ? { ...page, content: pendingContent.current.get(page.id) ?? page.content }
-        : item
-    )))
-    // 현재 보고 있는 페이지가 저장된 페이지일 때만 배지 표시
-    // (이전 페이지 지연 저장이 페이지 전환 후 완료되어도 배지가 뜨지 않도록)
-    if (pageId === activePageId) {
-      setSaving('saved')
-      window.setTimeout(() => setSaving('idle'), 1200)
+      const page = await response.json() as PageRecord
+      debugSaveFlow('patch success', {
+        pageId: page.id,
+        activePageId: activePageIdRef.current,
+        isContentSave,
+        isTitleSave,
+        updatedAt: page.updated_at,
+        willShowSaved: pageId === activePageIdRef.current,
+      })
+      const currentPendingContent = pendingContent.current.get(page.id)
+      const savedContent = page.content ?? null
+      if (
+        currentPendingContent &&
+        JSON.stringify(currentPendingContent) === JSON.stringify(savedContent)
+      ) {
+        pendingContent.current.delete(page.id)
+      }
+
+      setPages(previous => previous.map(item => (
+        item.id === page.id
+          ? { ...page, content: pendingContent.current.get(page.id) ?? page.content }
+          : item
+      )))
+      // 현재 보고 있는 페이지가 저장된 페이지일 때만 배지 표시
+      // (이전 페이지 지연 저장이 페이지 전환 후 완료되어도 배지가 뜨지 않도록)
+      if (pageId === activePageIdRef.current) {
+        showSavingStatus('saved')
+      }
+    } finally {
+      if (isContentSave) contentSaveInFlight.current.delete(pageId)
     }
   }
 
   const scheduleContentSave = (pageId: string, content: Record<string, unknown>) => {
     if (!canEdit) return
+    if (loadingPageIdRef.current === pageId) {
+      debugSaveFlow('schedule ignored while loading', {
+        pageId,
+        loadingPageId: loadingPageIdRef.current,
+      })
+      return
+    }
+    debugSaveFlow('schedule content save', {
+      pageId,
+      activePageId: activePageIdRef.current,
+      contentBlocks: Array.isArray(content.content) ? content.content.length : null,
+    })
     pendingContent.current.set(pageId, content)
 
     const existingTimer = saveTimers.current.get(pageId)
@@ -402,6 +515,23 @@ export default function NotionLiteApp() {
       })
     }, 1500)
     saveTimers.current.set(pageId, nextTimer)
+  }
+
+  const flushPendingContentSaves = async () => {
+    const pendingEntries = Array.from(pendingContent.current.entries())
+    if (pendingEntries.length === 0) return
+
+    for (const pageId of pendingContent.current.keys()) {
+      const saveTimer = saveTimers.current.get(pageId)
+      if (saveTimer) {
+        window.clearTimeout(saveTimer)
+        saveTimers.current.delete(pageId)
+      }
+    }
+
+    await Promise.all(pendingEntries.map(([pageId, content]) => (
+      updatePage(pageId, { content })
+    )))
   }
 
   const deletePage = async (pageId: string) => {
@@ -440,7 +570,11 @@ export default function NotionLiteApp() {
 
     const remaining = pages.filter(page => !deletedIds.has(page.id))
     setPages(remaining)
-    setActivePageId(current => deletedIds.has(current) ? remaining[0]?.id ?? '' : current)
+    setActivePageId(current => {
+      const nextPageId = deletedIds.has(current) ? remaining[0]?.id ?? '' : current
+      activePageIdRef.current = nextPageId
+      return nextPageId
+    })
   }
 
   const inviteMember = async () => {
@@ -474,11 +608,7 @@ export default function NotionLiteApp() {
     setError('')
 
     try {
-      for (const timer of saveTimers.current.values()) {
-        window.clearTimeout(timer)
-      }
-      saveTimers.current.clear()
-      pendingContent.current.clear()
+      await flushPendingContentSaves()
 
       const refreshedWorkspaces = await loadWorkspaces()
       const nextWorkspaceId = activeWorkspaceId || refreshedWorkspaces?.[0]?.id || ''
@@ -488,8 +618,7 @@ export default function NotionLiteApp() {
           await loadMembers(nextWorkspaceId)
         }
       }
-      setSaving('loaded')
-      window.setTimeout(() => setSaving('idle'), 1200)
+      showSavingStatus('loaded')
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : '새로고침에 실패했습니다.')
     } finally {
@@ -565,7 +694,7 @@ export default function NotionLiteApp() {
           }}
         >
           <button
-            onClick={() => setActivePageId(page.id)}
+            onClick={() => selectActivePage(page.id)}
             className={`flex h-9 min-w-0 flex-1 items-center truncate rounded-[8px] px-3 text-left text-sm ${
               page.id === activePageId
                 ? 'border border-black bg-[#baf7c8] font-black text-black shadow-[2px_2px_0_#000]'
@@ -838,7 +967,7 @@ export default function NotionLiteApp() {
                   <input
                     className="min-w-[12rem] flex-1 bg-transparent text-2xl font-black leading-tight tracking-normal text-[#1d1c16] outline-none placeholder:text-[#8a867f] max-sm:text-xl"
                     value={activePage.title}
-                    disabled={!canEdit}
+                    disabled={!canEdit || activePageLoading}
                     placeholder="Untitled"
                     onChange={event => {
                       const title = event.target.value
@@ -846,23 +975,33 @@ export default function NotionLiteApp() {
                         page.id === activePage.id ? { ...page, title } : page
                       )))
                     }}
-                    onBlur={event => updatePage(activePage.id, { title: event.target.value })}
+                    onFocus={event => {
+                      titleFocusValueRef.current.set(activePage.id, event.target.value)
+                    }}
+                    onBlur={event => {
+                      const previousTitle = titleFocusValueRef.current.get(activePage.id) ?? activePage.title
+                      titleFocusValueRef.current.delete(activePage.id)
+                      if (event.target.value.trim() === previousTitle.trim()) return
+
+                      updatePage(activePage.id, { title: event.target.value })
+                    }}
                   />
                 </div>
                 <span
                   className={`w-16 shrink-0 rounded-[8px] border border-black px-2 py-1 text-center text-[11px] font-black text-black shadow-[2px_2px_0_#000] transition-opacity ${
                     saving === 'idle' ? 'pointer-events-none opacity-0' : 'opacity-100'
                   } ${
-                    saving === 'loaded' ? 'bg-[#fde68a]' : 'bg-[#baf7c8]'
+                    visibleSavingStatus === 'loaded' ? 'bg-[#fde68a]' : 'bg-[#baf7c8]'
                   }`}
                 >
-                  {saving === 'loaded' ? '불러옴' : '저장됨'}
+                  {visibleSavingStatus === 'loaded' ? '불러옴' : '저장됨'}
                 </span>
               </div>
             </div>
             <DocumentEditor
+              key={activePage.id}
               content={activePageContent}
-              editable={Boolean(canEdit)}
+              editable={Boolean(canEdit && !activePageLoading)}
               onChange={content => scheduleContentSave(activePage.id, content)}
             />
           </article>
