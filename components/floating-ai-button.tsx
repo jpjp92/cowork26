@@ -5,15 +5,49 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 const AGI_HUD_URL = (process.env.NEXT_PUBLIC_JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777') + '/hud/hud.html'
 
+/** 현재 페이지 컨텍스트 수집 — iframe에 postMessage로 전달 */
+function collectPageContext(): string {
+  try {
+    const url = window.location.href
+    const title = document.title
+    // 선택된 텍스트 (드래그 선택 시 우선 사용)
+    const selected = window.getSelection()?.toString().trim() ?? ''
+    // 메인 콘텐츠 영역 텍스트 (main > article > body 순서로 시도)
+    const mainEl = document.querySelector('main') ?? document.querySelector('article') ?? document.body
+    const rawText = (mainEl as HTMLElement).innerText ?? ''
+    // 공백 정리 + 최대 1500자 (LLM 컨텍스트 낭비 방지)
+    const bodyText = rawText.replace(/\s{3,}/g, '\n').trim().slice(0, 1500)
+
+    let ctx = `[현재 페이지 정보]\nURL: ${url}\n제목: ${title}`
+    if (selected) ctx += `\n선택된 텍스트: ${selected}`
+    if (bodyText) ctx += `\n\n페이지 내용:\n${bodyText}`
+    return ctx
+  } catch {
+    return ''
+  }
+}
+
 export default function FloatingAiButton() {
   const [y, setY] = useState(300)
   const [panelOpen, setPanelOpen] = useState(false)
   const [launched, setLaunched] = useState(false)
   const [launching, setLaunching] = useState(false)
+  // 최초 1회 패널이 열리면 iframe을 DOM에 유지 (닫아도 unmount 안 함 → 재로딩 방지)
+  const [iframeMounted, setIframeMounted] = useState(false)
   const dragging = useRef(false)
   const startY = useRef(0)
   const startTop = useRef(0)
   const moved = useRef(false)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  /** iframe에 페이지 컨텍스트 전송 */
+  const sendPageContext = useCallback(() => {
+    const ctx = collectPageContext()
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'page_context', context: ctx },
+      '*',
+    )
+  }, [])
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -38,16 +72,22 @@ export default function FloatingAiButton() {
     dragging.current = false
     if (!moved.current) {
       // 패널 열기/닫기 토글
-      setPanelOpen(prev => !prev)
-      // 최초 1회만 exe 백그라운드 실행
+      setPanelOpen(prev => {
+        const next = !prev
+        if (next) {
+          setIframeMounted(true) // 최초 열릴 때 iframe 마운트 (이후 유지)
+          // 패널이 열릴 때 최신 페이지 컨텍스트 전송 (약간 딜레이 — iframe 렌더 대기)
+          setTimeout(sendPageContext, 300)
+        }
+        return next
+      })
+      // 최초 1회만 exe 백그라운드 실행 (패널 렌더링을 막지 않음)
       if (!launched) {
         setLaunching(true)
-        try {
-          await fetch('/api/agi', { method: 'POST' })
-          setLaunched(true)
-        } finally {
-          setLaunching(false)
-        }
+        fetch('/api/agi', { method: 'POST' })
+          .then(() => setLaunched(true))
+          .catch(() => {})
+          .finally(() => setLaunching(false))
       }
     }
   }, [launched])
@@ -62,35 +102,56 @@ export default function FloatingAiButton() {
     return () => window.removeEventListener('beforeunload', handleUnload)
   }, [])
 
+  // URL 변경(라우팅) 시 컨텍스트 재전송
+  useEffect(() => {
+    if (!panelOpen) return
+    sendPageContext()
+  }, [panelOpen, sendPageContext])
+
+  // 마우스 업 시 선택 텍스트 변경 감지 → 패널 열려있으면 컨텍스트 갱신
+  useEffect(() => {
+    const onSelect = () => { if (panelOpen) sendPageContext() }
+    document.addEventListener('mouseup', onSelect)
+    return () => document.removeEventListener('mouseup', onSelect)
+  }, [panelOpen, sendPageContext])
+
   return (
     <>
       {/* ── ai HUD 패널 ── */}
-      {panelOpen && (
-        <div
-          className="fixed right-[140px] z-40 flex flex-col overflow-hidden rounded-[12px] border-2 border-blue-400 bg-black shadow-[0_0_30px_6px_#3b82f660]"
-          style={{ top: Math.max(8, y - 100), width: 1040, height: 800 }}
-        >
-          {/* 패널 타이틀바 */}
-          <div className="flex h-8 shrink-0 items-center justify-between border-b border-blue-400/40 bg-black/90 px-3">
-            <span className="text-[11px] font-black tracking-widest text-blue-300 drop-shadow-[0_0_5px_#3b82f6]">
-              ◈ 짭비스 시스템
-            </span>
-            <button
-              onClick={() => setPanelOpen(false)}
-              className="text-xs font-black text-blue-400 hover:text-white"
-            >
-              ✕
-            </button>
-          </div>
-          {/* HUD iframe */}
+      {/* 패널 컨테이너: panelOpen이 false면 display:none (iframe은 살아있어 재로딩 없음) */}
+      <div
+        className="fixed right-[140px] z-40 flex flex-col overflow-hidden rounded-[12px] border-2 border-blue-400 bg-black shadow-[0_0_30px_6px_#3b82f660]"
+        style={{
+          top: Math.max(8, y - 100),
+          width: 1040,
+          height: 800,
+          display: panelOpen ? 'flex' : 'none',
+        }}
+      >
+        {/* 패널 타이틀바 */}
+        <div className="flex h-8 shrink-0 items-center justify-between border-b border-blue-400/40 bg-black/90 px-3">
+          <span className="text-[11px] font-black tracking-widest text-blue-300 drop-shadow-[0_0_5px_#3b82f6]">
+            ◈ 짭비스 시스템
+          </span>
+          <button
+            onClick={() => setPanelOpen(false)}
+            className="text-xs font-black text-blue-400 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+        {/* HUD iframe — iframeMounted가 true일 때만 렌더링 (이후 display:none으로 숨겨도 살아있음) */}
+        {iframeMounted && (
           <iframe
+            ref={iframeRef}
             src={AGI_HUD_URL}
             className="h-full w-full border-none bg-black"
             allow="microphone; camera"
             title="짭비스 HUD"
+            onLoad={sendPageContext}
           />
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ── 플로팅 버튼 ── */}
       <button
