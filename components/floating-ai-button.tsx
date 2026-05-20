@@ -3,7 +3,8 @@
 import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const AGI_HUD_URL = (process.env.NEXT_PUBLIC_JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777') + '/hud/hud.html'
+const AGI_PRIMARY_URL = process.env.NEXT_PUBLIC_JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777'
+const AGI_FALLBACK_URL = 'http://localhost:1777'
 
 /** SVG 엘리먼트 → canvas → base64 PNG (Mermaid 다이어그램 캡처용) */
 async function svgToBase64Png(svgEl: SVGElement): Promise<string | null> {
@@ -90,6 +91,17 @@ export default function FloatingAiButton() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [launched, setLaunched] = useState(false)
   const [launching, setLaunching] = useState(false)
+  const [agiBaseUrl, setAgiBaseUrl] = useState(AGI_PRIMARY_URL)
+
+  // 공인 서버 health check → 실패 시 localhost로 폴백
+  useEffect(() => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 2000)
+    fetch(`${AGI_PRIMARY_URL}/health`, { signal: controller.signal })
+      .then(r => { if (!r.ok) throw new Error('not ok') })
+      .catch(() => setAgiBaseUrl(AGI_FALLBACK_URL))
+      .finally(() => clearTimeout(timer))
+  }, [])
   // 최초 1회 패널이 열리면 iframe을 DOM에 유지 (닫아도 unmount 안 함 → 재로딩 방지)
   const [iframeMounted, setIframeMounted] = useState(false)
   const dragging = useRef(false)
@@ -202,7 +214,7 @@ export default function FloatingAiButton() {
         {iframeMounted && (
           <iframe
             ref={iframeRef}
-            src={AGI_HUD_URL}
+            src={agiBaseUrl + '/hud/hud.html'}
             className="h-full w-full border-none bg-black"
             allow="microphone; camera"
             title="짭비스 HUD"
