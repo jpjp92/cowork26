@@ -54,7 +54,7 @@ export default function NotionLiteApp() {
   const [renameWorkspaceName, setRenameWorkspaceName] = useState('')
   const [newPageTitle, setNewPageTitle] = useState('')
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [saving, setSaving] = useState<'idle' | 'saved' | 'loaded'>('idle')
   const [creatingWorkspace, setCreatingWorkspace] = useState(false)
   const [renamingWorkspace, setRenamingWorkspace] = useState(false)
   const [creatingPage, setCreatingPage] = useState(false)
@@ -215,6 +215,8 @@ export default function NotionLiteApp() {
         // pendingContent(미저장 로컬 편집)가 없는 경우에만 덮어씀
         if (!pendingContent.current.has(activePageId)) {
           setPages(prev => prev.map(p => p.id === fresh.id ? fresh : p))
+          setSaving('loaded')
+          window.setTimeout(() => setSaving('idle'), 1200)
         }
       })
       .catch(() => { /* 조용히 무시 */ })
@@ -352,7 +354,6 @@ export default function NotionLiteApp() {
     patch: Partial<Pick<PageRecord, 'title' | 'content'>>,
   ) => {
     if (!accessToken || !canEdit) return
-    setSaving('saving')
     const response = await fetch('/api/pages', {
       method: 'PATCH',
       headers: authHeaders(),
@@ -360,7 +361,6 @@ export default function NotionLiteApp() {
     })
 
     if (!response.ok) {
-      setSaving('idle')
       setError((await readError(response, '페이지를 저장하지 못했습니다.')).message)
       return
     }
@@ -380,8 +380,12 @@ export default function NotionLiteApp() {
         ? { ...page, content: pendingContent.current.get(page.id) ?? page.content }
         : item
     )))
-    setSaving('saved')
-    window.setTimeout(() => setSaving('idle'), 1200)
+    // 현재 보고 있는 페이지가 저장된 페이지일 때만 배지 표시
+    // (이전 페이지 지연 저장이 페이지 전환 후 완료되어도 배지가 뜨지 않도록)
+    if (pageId === activePageId) {
+      setSaving('saved')
+      window.setTimeout(() => setSaving('idle'), 1200)
+    }
   }
 
   const scheduleContentSave = (pageId: string, content: Record<string, unknown>) => {
@@ -485,6 +489,8 @@ export default function NotionLiteApp() {
           await loadMembers(nextWorkspaceId)
         }
       }
+      setSaving('loaded')
+      window.setTimeout(() => setSaving('idle'), 1200)
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : '새로고침에 실패했습니다.')
     } finally {
@@ -604,7 +610,7 @@ export default function NotionLiteApp() {
   if (!session) return <AuthPanel />
 
   return (
-    <main className="flex min-h-screen flex-col bg-[#777773] text-black">
+    <main className="flex h-screen flex-col overflow-hidden bg-[#777773] text-black">
       <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-black bg-[#777773] px-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border border-black bg-[#baf7c8] text-sm font-black leading-none text-black shadow-[2px_2px_0_#000]">
@@ -623,7 +629,9 @@ export default function NotionLiteApp() {
             className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
             title="새로고침"
           >
-            {refreshing ? '…' : '↻'}
+            {refreshing
+              ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span>
+              : '↻'}
           </button>
           <button
             onClick={() => setSettingsOpen(open => !open)}
@@ -808,7 +816,7 @@ export default function NotionLiteApp() {
         </div>
         </aside>
 
-        <section className="flex min-w-0 flex-1 flex-col max-md:min-h-[60vh]">
+        <section className="flex min-w-0 flex-1 flex-col overflow-y-auto max-md:min-h-[60vh]">
 
         {error && (
           <div className="border-b border-black bg-red-300 px-6 py-3 text-sm font-bold text-black max-sm:px-4">
@@ -843,11 +851,13 @@ export default function NotionLiteApp() {
                   />
                 </div>
                 <span
-                  className={`w-16 shrink-0 rounded-[8px] border border-black bg-[#baf7c8] px-2 py-1 text-center text-[11px] font-black text-black shadow-[2px_2px_0_#000] transition-opacity ${
+                  className={`w-16 shrink-0 rounded-[8px] border border-black px-2 py-1 text-center text-[11px] font-black text-black shadow-[2px_2px_0_#000] transition-opacity ${
                     saving === 'idle' ? 'pointer-events-none opacity-0' : 'opacity-100'
+                  } ${
+                    saving === 'loaded' ? 'bg-[#fde68a]' : 'bg-[#baf7c8]'
                   }`}
                 >
-                  {saving === 'saving' ? '저장' : '저장됨'}
+                  {saving === 'loaded' ? '불러옴' : '저장됨'}
                 </span>
               </div>
             </div>
