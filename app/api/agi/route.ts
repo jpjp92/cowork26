@@ -26,6 +26,11 @@ function clearPidFile(): void {
   try { fs.unlinkSync(PID_FILE) } catch { /* 없으면 무시 */ }
 }
 
+/** PID가 실제로 살아있는지 확인 (signal 0 = 존재 여부만 체크) */
+function isProcessAlive(pid: number): boolean {
+  try { kill(pid, 0); return true } catch { return false }
+}
+
 // 서버 메모리에도 캐시 (핫패스용)
 let agiPid: number | null = readPidFile()
 
@@ -43,6 +48,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true })
     }
   } catch { /* body 없음 — 일반 실행 요청 */ }
+
+  // 이미 실행 중인 프로세스가 있으면 재사용 (새로고침 후 중복 실행 방지)
+  const existingPid = agiPid ?? readPidFile()
+  if (existingPid !== null && isProcessAlive(existingPid)) {
+    agiPid = existingPid  // 메모리 캐시 동기화
+    return NextResponse.json({ ok: true, pid: existingPid, reused: true })
+  }
 
   const exePath = path.join(process.cwd(), 'AGI-client.exe')
   try {
