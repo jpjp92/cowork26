@@ -61,6 +61,7 @@ export async function POST(request: Request) {
     const child = spawn(exePath, ['--background'], {
       detached: true,
       stdio: 'ignore',
+      windowsHide: true,   // 콘솔 창 숨김 (작업표시줄 아이콘 방지)
     })
     child.unref()
     agiPid = child.pid ?? null
