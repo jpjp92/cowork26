@@ -75,6 +75,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, mode: 'manual' })
   }
 
+  // EXE 존재 여부를 spawn 전에 확인 (spawn ENOENT는 비동기 이벤트라 try/catch 불가)
+  if (!fs.existsSync(exePath)) {
+    return NextResponse.json({ error: 'exe_not_found' }, { status: 404 })
+  }
+
   try {
     const child = spawn(exePath, ['--background'], {
       detached: true,
@@ -87,11 +92,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, pid: agiPid })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
-    // ENOENT = EXE 파일 없음 → 프론트에서 설치 UI 표시
-    const code = (err as NodeJS.ErrnoException).code
-    if (code === 'ENOENT') {
-      return NextResponse.json({ error: 'exe_not_found' }, { status: 404 })
-    }
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
