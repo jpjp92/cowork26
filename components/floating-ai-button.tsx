@@ -92,6 +92,12 @@ export default function FloatingAiButton() {
   const [launched, setLaunched] = useState(false)
   const [launching, setLaunching] = useState(false)
   const [agiBaseUrl] = useState(AGI_PRIMARY_URL)
+  // ── exe 설치 관련 상태 ──────────────────────────────────────────────
+  const [needsInstall, setNeedsInstall] = useState(false)
+  const [installing, setInstalling] = useState(false)
+  const [installProgress, setInstallProgress] = useState(0)
+  const [installDone, setInstallDone] = useState(false)
+  const [installError, setInstallError] = useState(false)
 
   // 최초 1회 패널이 열리면 iframe을 DOM에 유지 (닫아도 unmount 안 함 → 재로딩 방지)
   const [iframeMounted, setIframeMounted] = useState(false)
@@ -153,10 +159,45 @@ export default function FloatingAiButton() {
     }
   }, [launched])
 
+  // ── AGI 클라이언트 EXE 다운로드 + 저장 ─────────────────────────
+  // GET /api/agi → 서버가 AGI서버에서 받아 process.cwd()/AGI-client.exe에 직접 저장
+  // 완료 후 POST /api/agi 재시도 → 바로 EXE 실행 (재시작 불필요)
+  const startInstall = useCallback(async () => {
+    setInstalling(true)
+    setInstallProgress(0)
+    setInstallError(false)
+    try {
+      // 진행 중 표시 (서버 다운로드라 스트리밍 진행률 없음 → 50%로 고정)
+      setInstallProgress(30)
+      const resp = await fetch('/api/agi')
+      if (!resp.ok) throw new Error('server error')
+      setInstallProgress(100)
+      localStorage.setItem('agi_installed', '1')
+      setInstallDone(true)
+      // EXE가 저장됐으니 바로 실행 시도
+      fetch('/api/agi', { method: 'POST' })
+        .then(res => { if (res.ok) setLaunched(true) })
+        .catch(() => {})
+    } catch {
+      setInstallError(true)
+    } finally {
+      setInstalling(false)
+    }
+  }, [])
+
   // ── 페이지 로드 시 즉시 AGI 백그라운드 자동 실행 ────────────────
+  // Vercel(Linux)에서는 spawn 불가 → exe_not_found 항상 반환
   useEffect(() => {
     fetch('/api/agi', { method: 'POST' })
-      .then(() => setLaunched(true))
+      .then(async (res) => {
+        if (res.ok) { setLaunched(true); return }
+        const body = await res.json().catch(() => ({}))
+        if (body?.error === 'exe_not_found') {
+          // EXE 없으면 localStorage 무시하고 무조건 설치 패널 표시
+          localStorage.removeItem('agi_installed')
+          setNeedsInstall(true)
+        }
+      })
       .catch(() => {})
   }, [])
 
@@ -185,6 +226,62 @@ export default function FloatingAiButton() {
 
   return (
     <>
+      {/* ── 설치 패널 ── */}
+      {needsInstall && (
+        <div
+          className="fixed right-[140px] z-50 flex flex-col overflow-hidden rounded-[12px] border-2 border-blue-400 bg-black shadow-[0_0_30px_6px_#3b82f660]"
+          style={{ top: Math.max(8, y - 60), width: 420 }}
+        >
+          <div className="flex h-8 shrink-0 items-center justify-between border-b border-blue-400/40 bg-black/90 px-3">
+            <span className="text-[11px] font-black tracking-widest text-blue-300 drop-shadow-[0_0_5px_#3b82f6]">
+              ◈ 짭비스 AI 설치
+            </span>
+            <button onClick={() => setNeedsInstall(false)} className="text-xs font-black text-blue-400 hover:text-white">✕</button>
+          </div>
+          <div className="flex flex-col gap-3 p-4">
+            {!installDone ? (
+              <>
+                <p className="text-[12px] text-blue-200">
+                  {installing ? '짭비스 AI를 설치 중입니다...' : 'AGI 클라이언트가 필요합니다. 설치를 시작하세요.'}
+                </p>
+                {/* 진행률 바 */}
+                {installing && (
+                  <div className="h-3 w-full overflow-hidden rounded-full bg-blue-950 border border-blue-700">
+                    <div
+                      className="h-full rounded-full bg-blue-400 transition-all duration-200 shadow-[0_0_8px_#3b82f6]"
+                      style={{ width: `${installProgress}%` }}
+                    />
+                  </div>
+                )}
+                {installing && (
+                  <p className="text-center text-[11px] text-blue-400 font-mono">{installProgress}%</p>
+                )}
+                {installError && (
+                  <p className="text-[11px] text-red-400">다운로드 실패. 서버 상태를 확인하세요.</p>
+                )}
+                <button
+                  onClick={startInstall}
+                  disabled={installing}
+                  className="rounded-md border border-blue-400 bg-blue-950 px-4 py-2 text-[12px] font-black text-blue-300 hover:bg-blue-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {installing ? '설치 중...' : '▶ 설치 시작'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-[12px] text-green-400 font-black">✓ 설치 완료! 짭비스 AI를 시작합니다.</p>
+                <button
+                  onClick={() => setNeedsInstall(false)}
+                  className="rounded-md border border-green-400 bg-green-950 px-4 py-2 text-[12px] font-black text-green-300 hover:bg-green-900 transition-colors"
+                >
+                  닫기
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── ai HUD 패널 ── */}
       {/* 패널 컨테이너: panelOpen이 false면 display:none (iframe은 살아있어 재로딩 없음) */}
       <div
