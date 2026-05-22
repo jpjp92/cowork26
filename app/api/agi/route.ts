@@ -4,9 +4,36 @@ import { kill } from 'process'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
+import { createHash } from 'crypto'
 
 // 짭비스 AGI 서버 주소 (환경변수 없으면 기본 서버)
 const SERVER_URL = process.env.JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777'
+
+/**
+ * 이 PC의 MAC 주소 기반 hud_token 계산.
+ * EXE(Python)의 get_machine_id()와 동일 알고리즘:
+ *   UUID5(DNS, "agi-{mac_int}")
+ * Node.js에는 uuid5가 없으므로 SHA1(DNS_NAMESPACE + "agi-{mac_int}")로 직접 구현.
+ * 같은 입력 → 항상 같은 출력 → MAC이 같으면 항상 같은 토큰.
+ */
+function getMachineHudToken(): string {
+  try {
+    // 물리 MAC 주소 찾기 (루프백/가상 NIC 제외)
+    const ifaces = Object.values(os.networkInterfaces()).flat()
+    const mac = ifaces.find(i => i && !i.internal && i.mac !== '00:00:00:00:00:00')?.mac ?? ''
+    const macInt = mac ? parseInt(mac.replace(/:/g, ''), 16) : 0
+    // UUID v5 수동 구현: SHA1(DNS_NAMESPACE_BYTES + name_bytes), 버전/변형 비트 세팅
+    const DNS_NS = Buffer.from('6ba7b8109dad11d180b400c04fd430c8', 'hex')
+    const nameBuf = Buffer.from(`agi-${macInt}`, 'utf8')
+    const hash = createHash('sha1').update(Buffer.concat([DNS_NS, nameBuf])).digest()
+    hash[6] = (hash[6] & 0x0f) | 0x50  // version 5
+    hash[8] = (hash[8] & 0x3f) | 0x80  // variant RFC4122
+    const h = hash.toString('hex')
+    return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20,32)}`
+  } catch {
+    return ''
+  }
+}
 
 // PID 파일 경로: Next.js 서버 재시작 후에도 직전 EXE 프로세스를 kill할 수 있도록 OS 임시폴더에 저장
 const PID_FILE = path.join(os.tmpdir(), 'cowork26-agi.pid')
@@ -65,14 +92,14 @@ export async function POST(request: Request) {
   const existingPid = agiPid ?? readPidFile()
   if (existingPid !== null && isProcessAlive(existingPid)) {
     agiPid = existingPid  // 메모리 캐시 동기화
-    return NextResponse.json({ ok: true, pid: existingPid, reused: true })
+    return NextResponse.json({ ok: true, pid: existingPid, reused: true, hud_token: getMachineHudToken() })
   }
 
   const exePath = path.join(process.cwd(), 'AGI-client.exe')
 
   // Vercel(Linux) 등 Windows가 아닌 환경에서는 spawn 불가 → ok 반환 (유저가 직접 EXE 실행)
   if (process.platform !== 'win32') {
-    return NextResponse.json({ ok: true, mode: 'manual' })
+    return NextResponse.json({ ok: true, mode: 'manual', hud_token: '' })
   }
 
   // EXE 존재 여부를 spawn 전에 확인 (spawn ENOENT는 비동기 이벤트라 try/catch 불가)
@@ -80,8 +107,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'exe_not_found' }, { status: 404 })
   }
 
+  const hudToken = getMachineHudToken()
   try {
-    const child = spawn(exePath, ['--background'], {
+    const exeArgs = ['--background']
+    if (hudToken) exeArgs.push(`--hud-token=${hudToken}`)
+    const child = spawn(exePath, exeArgs, {
       detached: true,
       stdio: 'ignore',
       windowsHide: true,   // 콘솔 창 숨김 (작업표시줄 아이콘 방지)
@@ -89,7 +119,7 @@ export async function POST(request: Request) {
     child.unref()
     agiPid = child.pid ?? null
     if (agiPid !== null) writePidFile(agiPid)
-    return NextResponse.json({ ok: true, pid: agiPid })
+    return NextResponse.json({ ok: true, pid: agiPid, hud_token: hudToken })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })

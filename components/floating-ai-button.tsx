@@ -101,6 +101,8 @@ export default function FloatingAiButton() {
 
   // 최초 1회 패널이 열리면 iframe을 DOM에 유지 (닫아도 unmount 안 함 → 재로딩 방지)
   const [iframeMounted, setIframeMounted] = useState(false)
+  // EXE와 HUD를 페어링하는 MAC 기반 토큰 (POST /api/agi 응답에서 수신)
+  const [hudToken, setHudToken] = useState('')
   const dragging = useRef(false)
   const startY = useRef(0)
   const startTop = useRef(0)
@@ -152,7 +154,13 @@ export default function FloatingAiButton() {
       if (!launched) {
         setLaunching(true)
         fetch('/api/agi', { method: 'POST' })
-          .then(() => setLaunched(true))
+          .then(async r => {
+            if (r.ok) {
+              setLaunched(true)
+              const data = await r.json().catch(() => ({}))
+              if (data?.hud_token) setHudToken(data.hud_token)
+            }
+          })
           .catch(() => {})
           .finally(() => setLaunching(false))
       }
@@ -176,7 +184,13 @@ export default function FloatingAiButton() {
       setInstallDone(true)
       // EXE가 저장됐으니 바로 실행 시도
       fetch('/api/agi', { method: 'POST' })
-        .then(res => { if (res.ok) setLaunched(true) })
+        .then(async res => {
+          if (res.ok) {
+            setLaunched(true)
+            const data = await res.json().catch(() => ({}))
+            if (data?.hud_token) setHudToken(data.hud_token)
+          }
+        })
         .catch(() => {})
     } catch {
       setInstallError(true)
@@ -190,7 +204,12 @@ export default function FloatingAiButton() {
   useEffect(() => {
     fetch('/api/agi', { method: 'POST' })
       .then(async (res) => {
-        if (res.ok) { setLaunched(true); return }
+        if (res.ok) {
+          setLaunched(true)
+          const data = await res.json().catch(() => ({}))
+          if (data?.hud_token) setHudToken(data.hud_token)
+          return
+        }
         const body = await res.json().catch(() => ({}))
         if (body?.error === 'exe_not_found') {
           // EXE 없으면 localStorage 무시하고 무조건 설치 패널 표시
@@ -309,7 +328,7 @@ export default function FloatingAiButton() {
         {iframeMounted && (
           <iframe
             ref={iframeRef}
-            src={agiBaseUrl + '/hud/hud.html'}
+            src={agiBaseUrl + '/hud/hud.html' + (hudToken ? '?hud_token=' + encodeURIComponent(hudToken) : '')}
             className="h-full w-full border-none bg-black"
             allow="microphone; camera"
             title="짭비스 HUD"
