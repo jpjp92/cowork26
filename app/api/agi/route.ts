@@ -112,11 +112,14 @@ export async function DELETE() {
 
 /**
  * GET /api/agi
- * AGI 서버(49.142.52.133:1777)에서 AGI-client.exe를 받아 브라우저로 스트리밍.
- * Content-Length를 그대로 전달해 프론트에서 다운로드 진행률 계산 가능.
- * → Vercel에서 CORS/mixed-content 없이 EXE 다운로드 제공하기 위한 프록시
+ * AGI 서버에서 AGI-client.exe를 받아 process.cwd()/AGI-client.exe 에 직접 저장.
+ * 브라우저 Downloads 폴더가 아닌 프로젝트 루트에 저장되므로 spawn 경로와 일치.
+ * Vercel(Linux)에서는 쓰기 불가이므로 not_supported 반환.
  */
 export async function GET() {
+  if (process.platform !== 'win32') {
+    return NextResponse.json({ error: 'not_supported' }, { status: 400 })
+  }
   try {
     const upstream = await fetch(`${SERVER_URL}/download/AGI-client.exe`, {
       headers: { Accept: 'application/octet-stream' },
@@ -124,13 +127,10 @@ export async function GET() {
     if (!upstream.ok) {
       return NextResponse.json({ error: 'EXE not found on AGI server' }, { status: 404 })
     }
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/octet-stream',
-      'Content-Disposition': 'attachment; filename="AGI-client.exe"',
-    }
-    const contentLength = upstream.headers.get('content-length')
-    if (contentLength) headers['Content-Length'] = contentLength
-    return new Response(upstream.body, { headers })
+    const buffer = Buffer.from(await upstream.arrayBuffer())
+    const exePath = path.join(process.cwd(), 'AGI-client.exe')
+    fs.writeFileSync(exePath, buffer)
+    return NextResponse.json({ ok: true, path: exePath })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })

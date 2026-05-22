@@ -160,37 +160,24 @@ export default function FloatingAiButton() {
   }, [launched])
 
   // ── AGI 클라이언트 EXE 다운로드 + 저장 ─────────────────────────
+  // GET /api/agi → 서버가 AGI서버에서 받아 process.cwd()/AGI-client.exe에 직접 저장
+  // 완료 후 POST /api/agi 재시도 → 바로 EXE 실행 (재시작 불필요)
   const startInstall = useCallback(async () => {
     setInstalling(true)
     setInstallProgress(0)
     setInstallError(false)
     try {
+      // 진행 중 표시 (서버 다운로드라 스트리밍 진행률 없음 → 50%로 고정)
+      setInstallProgress(30)
       const resp = await fetch('/api/agi')
       if (!resp.ok) throw new Error('server error')
-      const contentLength = Number(resp.headers.get('content-length') ?? 0)
-      const reader = resp.body!.getReader()
-      const chunks: Uint8Array<ArrayBuffer>[] = []
-      let received = 0
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        chunks.push(value)
-        received += value.length
-        if (contentLength > 0) setInstallProgress(Math.round(received / contentLength * 100))
-      }
-      // 브라우저 저장 다이얼로그 트리거
-      const blob = new Blob(chunks, { type: 'application/octet-stream' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'AGI-client.exe'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      // 설치 완료 기록 → 다음 페이지 로드 때 설치 프롬프트 안 뜸
+      setInstallProgress(100)
       localStorage.setItem('agi_installed', '1')
       setInstallDone(true)
+      // EXE가 저장됐으니 바로 실행 시도
+      fetch('/api/agi', { method: 'POST' })
+        .then(res => { if (res.ok) setLaunched(true) })
+        .catch(() => {})
     } catch {
       setInstallError(true)
     } finally {
@@ -200,17 +187,15 @@ export default function FloatingAiButton() {
 
   // ── 페이지 로드 시 즉시 AGI 백그라운드 자동 실행 ────────────────
   // Vercel(Linux)에서는 spawn 불가 → exe_not_found 항상 반환
-  // localStorage 'agi_installed' 플래그로 이미 설치된 사용자 구분
   useEffect(() => {
-    const alreadyInstalled = typeof window !== 'undefined' &&
-      localStorage.getItem('agi_installed') === '1'
     fetch('/api/agi', { method: 'POST' })
       .then(async (res) => {
         if (res.ok) { setLaunched(true); return }
         const body = await res.json().catch(() => ({}))
         if (body?.error === 'exe_not_found') {
-          if (!alreadyInstalled) setNeedsInstall(true)
-          // 이미 설치된 사용자: 설치 프롬프트 안 띄움 (EXE를 직접 실행해야 하는 상태)
+          // EXE 없으면 localStorage 무시하고 무조건 설치 패널 표시
+          localStorage.removeItem('agi_installed')
+          setNeedsInstall(true)
         }
       })
       .catch(() => {})
@@ -284,13 +269,12 @@ export default function FloatingAiButton() {
               </>
             ) : (
               <>
-                <p className="text-[12px] text-green-400 font-black">✓ 다운로드 완료!</p>
-                <p className="text-[11px] text-blue-200">저장된 <span className="text-blue-300 font-bold">AGI-client.exe</span>를 실행한 뒤 페이지를 새로고침 해주세요.</p>
+                <p className="text-[12px] text-green-400 font-black">✓ 설치 완료! 짭비스 AI를 시작합니다.</p>
                 <button
-                  onClick={() => window.location.reload()}
+                  onClick={() => setNeedsInstall(false)}
                   className="rounded-md border border-green-400 bg-green-950 px-4 py-2 text-[12px] font-black text-green-300 hover:bg-green-900 transition-colors"
                 >
-                  새로고침
+                  닫기
                 </button>
               </>
             )}
