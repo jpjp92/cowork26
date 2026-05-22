@@ -192,6 +192,17 @@ interface DocumentEditorProps {
   onChange: (content: Record<string, unknown>) => void
 }
 
+const EMPTY_DOC_CONTENT: Record<string, unknown> = {
+  type: 'doc',
+  content: [{ type: 'paragraph' }],
+}
+const DEBUG_SAVE_FLOW = process.env.NODE_ENV !== 'production'
+
+function debugSaveFlow(message: string, data?: Record<string, unknown>) {
+  if (!DEBUG_SAVE_FLOW) return
+  console.log(`[save-flow] editor ${message}`, data ?? {})
+}
+
 const MIN_ROW_HEIGHT = 28
 const MAX_ROW_HEIGHT = 160
 const ROW_RESIZE_HANDLE_SIZE = 6
@@ -409,6 +420,16 @@ function parseMarkdownTable(text: string) {
 }
 
 export default function DocumentEditor({ content, editable, onChange }: DocumentEditorProps) {
+  const resolvedContent = content ?? EMPTY_DOC_CONTENT
+  const onChangeRef = useRef(onChange)
+  const baselineContentRef = useRef(resolvedContent)
+  const applyingContentRef = useRef(false)
+  baselineContentRef.current = resolvedContent
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  }, [onChange])
+
   const editor = useEditor({
     immediatelyRender: false,
     editable,
@@ -429,10 +450,7 @@ export default function DocumentEditor({ content, editable, onChange }: Document
         placeholder: '자료를 붙여넣고, 회의 내용을 정리하고, 함께 편집하세요...',
       }),
     ],
-    content: content ?? {
-      type: 'doc',
-      content: [{ type: 'paragraph' }],
-    },
+    content: resolvedContent,
     editorProps: {
       attributes: {
         class: 'prose prose-neutral max-w-none',
@@ -532,27 +550,52 @@ export default function DocumentEditor({ content, editable, onChange }: Document
       },
     },
     onUpdate: ({ editor: activeEditor }) => {
-      onChange(activeEditor.getJSON() as Record<string, unknown>)
+      if (applyingContentRef.current) {
+        debugSaveFlow('update ignored while applying content')
+        return
+      }
+
+      const nextContent = activeEditor.getJSON() as Record<string, unknown>
+      const matchesLoadedContent = JSON.stringify(nextContent) === JSON.stringify(baselineContentRef.current)
+      if (matchesLoadedContent) {
+        debugSaveFlow('update ignored because content matches baseline', {
+          isFocused: activeEditor.isFocused,
+        })
+        return
+      }
+
+      debugSaveFlow('update forwarded to autosave', {
+        isFocused: activeEditor.isFocused,
+        contentBlocks: Array.isArray(nextContent.content) ? nextContent.content.length : null,
+      })
+      onChangeRef.current(nextContent)
     },
   })
 
   useEffect(() => {
-    editor?.setEditable(editable)
+    editor?.setEditable(editable, false)
   }, [editable, editor])
 
   useEffect(() => {
     if (!editor || editor.isDestroyed) return
-    const nextContent = content ?? { type: 'doc', content: [{ type: 'paragraph' }] }
+    const nextContent = resolvedContent
     if (JSON.stringify(editor.getJSON()) !== JSON.stringify(nextContent)) {
       // setContent 내부가 flushSync를 호출하므로, useEffect(React 렌더링 사이클) 밖으로 미룸
       const timer = window.setTimeout(() => {
         if (!editor.isDestroyed) {
+          debugSaveFlow('applying prop content', {
+            contentBlocks: Array.isArray(nextContent.content) ? nextContent.content.length : null,
+          })
+          applyingContentRef.current = true
           editor.commands.setContent(nextContent, { emitUpdate: false })
+          window.requestAnimationFrame(() => {
+            applyingContentRef.current = false
+          })
         }
       }, 0)
       return () => window.clearTimeout(timer)
     }
-  }, [content, editor])
+  }, [resolvedContent, editor])
 
   return (
     <div>
