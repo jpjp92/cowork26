@@ -142,7 +142,7 @@ export default function FloatingAiButton() {
         }
         return next
       })
-      // 최초 1회만 exe 백그라운드 실행 (패널 렌더링을 막지 않음)
+      // 이미 launched면 재실행 안 함 (자동 시작으로 이미 떠 있음)
       if (!launched) {
         setLaunching(true)
         fetch('/api/agi', { method: 'POST' })
@@ -152,6 +152,13 @@ export default function FloatingAiButton() {
       }
     }
   }, [launched])
+
+  // ── 페이지 로드 시 즉시 AGI 백그라운드 자동 실행 ────────────────
+  useEffect(() => {
+    fetch('/api/agi', { method: 'POST' })
+      .then(() => setLaunched(true))
+      .catch(() => {})
+  }, [])
 
   // 페이지 종료 시 exe kill
   useEffect(() => {
