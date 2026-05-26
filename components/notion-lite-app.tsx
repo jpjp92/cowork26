@@ -20,6 +20,7 @@ interface Workspace {
   name: string
   role: 'owner' | 'editor' | 'viewer'
   created_at: string
+  order_index?: number
 }
 
 interface PageRecord {
@@ -49,6 +50,13 @@ async function readError(response: Response, fallback: string) {
   }
 }
 
+function getWorkspaceRoleSymbol(role?: Workspace['role']) {
+  if (role === 'owner') return '●'
+  if (role === 'editor') return '◆'
+  if (role === 'viewer') return '○'
+  return '–'
+}
+
 export default function NotionLiteApp() {
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
@@ -66,6 +74,7 @@ export default function NotionLiteApp() {
   const [renamingWorkspace, setRenamingWorkspace] = useState(false)
   const [creatingPage, setCreatingPage] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [loadingPageId, setLoadingPageId] = useState('')
   const [members, setMembers] = useState<WorkspaceMember[]>([])
@@ -77,12 +86,16 @@ export default function NotionLiteApp() {
   const pendingContent = useRef(new Map<string, Record<string, unknown>>())
   const contentSaveInFlight = useRef(new Set<string>())
   const settingsRef = useRef<HTMLDivElement>(null)
+  const workspaceMenuRef = useRef<HTMLDivElement>(null)
+  const workspaceDraggedIdRef = useRef<string | null>(null)
+  const workspaceDragClickBlockedRef = useRef(false)
   const draggedIdRef = useRef<string | null>(null)
   const activePageIdRef = useRef(activePageId)
   const loadingPageIdRef = useRef('')
   const savingResetTimerRef = useRef<number | null>(null)
   const titleFocusValueRef = useRef(new Map<string, string>())
   const [dragOver, setDragOver] = useState<{ id: string; position: 'above' | 'below' } | null>(null)
+  const [workspaceDragOver, setWorkspaceDragOver] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
 
   const accessToken = session?.access_token
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
@@ -166,7 +179,7 @@ export default function NotionLiteApp() {
 
     const data = await response.json() as Workspace[]
     setWorkspaces(data)
-    setActiveWorkspaceId(current => current || data[0]?.id || '')
+    setActiveWorkspaceId(current => data.some(workspace => workspace.id === current) ? current : data[0]?.id || '')
     return data
   }, [accessToken, authHeaders])
 
@@ -321,6 +334,21 @@ export default function NotionLiteApp() {
     return () => document.removeEventListener('pointerdown', handlePointerDown)
   }, [settingsOpen])
 
+  useEffect(() => {
+    if (!workspaceMenuOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return
+      if (!workspaceMenuRef.current?.contains(event.target)) {
+        setWorkspaceMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [workspaceMenuOpen])
+
   useEffect(() => () => {
     for (const timer of saveTimers.current.values()) {
       window.clearTimeout(timer)
@@ -361,15 +389,64 @@ export default function NotionLiteApp() {
       }
 
       const data = await response.json() as { workspace: Workspace; page?: PageRecord }
-      setWorkspaces(previous => [...previous, data.workspace])
+      setWorkspaces(previous => [...previous, { ...data.workspace, order_index: previous.length }])
       setActiveWorkspaceId(data.workspace.id)
       setWorkspaceName('')
+      setWorkspaceMenuOpen(false)
       if (data.page) {
         setPages([data.page])
         selectActivePage(data.page.id)
       }
     } finally {
       setCreatingWorkspace(false)
+    }
+  }
+
+  const selectWorkspace = (workspaceId: string) => {
+    setActiveWorkspaceId(workspaceId)
+    setWorkspaceMenuOpen(false)
+  }
+
+  const persistWorkspaceOrder = async (orderedWorkspaces: Workspace[]) => {
+    if (!accessToken) return
+
+    const response = await fetch('/api/workspaces', {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ orderIds: orderedWorkspaces.map(workspace => workspace.id) }),
+    })
+
+    if (!response.ok) {
+      throw await readError(response, '워크스페이스 순서를 저장하지 못했습니다.')
+    }
+  }
+
+  const reorderWorkspaces = async (
+    sourceId: string,
+    targetId: string,
+    position: 'before' | 'after',
+  ) => {
+    if (sourceId === targetId) return
+
+    const previousWorkspaces = workspaces
+    const sourceIndex = workspaces.findIndex(workspace => workspace.id === sourceId)
+    const targetIndex = workspaces.findIndex(workspace => workspace.id === targetId)
+    if (sourceIndex < 0 || targetIndex < 0) return
+
+    const nextWorkspaces = [...workspaces]
+    const [source] = nextWorkspaces.splice(sourceIndex, 1)
+    const adjustedTargetIndex = nextWorkspaces.findIndex(workspace => workspace.id === targetId)
+    const insertIndex = position === 'before' ? adjustedTargetIndex : adjustedTargetIndex + 1
+    nextWorkspaces.splice(insertIndex, 0, source)
+
+    setWorkspaces(nextWorkspaces.map((workspace, index) => ({ ...workspace, order_index: index })))
+    setError('')
+
+    try {
+      await persistWorkspaceOrder(nextWorkspaces)
+    } catch (err) {
+      setWorkspaces(previousWorkspaces)
+      setError(err instanceof Error ? err.message : '워크스페이스 순서를 저장하지 못했습니다.')
     }
   }
 
@@ -696,13 +773,13 @@ export default function NotionLiteApp() {
         >
           <button
             onClick={() => selectActivePage(page.id)}
-            className={`flex h-9 min-w-0 flex-1 items-center truncate rounded-[8px] px-3 text-left text-sm ${
+            className={`flex h-9 min-w-0 flex-1 items-center rounded-[8px] px-3 text-left text-sm ${
               page.id === activePageId
                 ? 'border border-black bg-[#baf7c8] font-black text-black shadow-[2px_2px_0_#000]'
                 : 'font-semibold text-white hover:bg-[#50504d]'
             }`}
           >
-            {page.title}
+            <span className="block min-w-0 truncate">{page.title}</span>
           </button>
           {canEdit && (
             <div className="ml-2 flex shrink-0 gap-2 opacity-0 transition-opacity group-hover/page-row:opacity-100 group-focus-within/page-row:opacity-100">
@@ -856,16 +933,149 @@ export default function NotionLiteApp() {
           <p className="mb-2 px-1 text-[11px] font-black uppercase tracking-normal text-white">
             Workspace
           </p>
-          <select
-            className="mb-2 w-full rounded-[8px] border border-black bg-[#50504d] px-2.5 py-2 text-sm font-black text-white outline-none focus:-translate-y-0.5 focus:bg-white focus:text-black focus:shadow-[3px_3px_0_#000]"
-            value={activeWorkspaceId}
-            onChange={event => setActiveWorkspaceId(event.target.value)}
-          >
-            <option value="">워크스페이스 선택</option>
-            {workspaces.map(workspace => (
-              <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
-            ))}
-          </select>
+          <div className="relative mb-2" ref={workspaceMenuRef}>
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={workspaceMenuOpen}
+              onClick={() => setWorkspaceMenuOpen(open => !open)}
+              className="grid min-h-14 w-full grid-cols-[36px_minmax(0,1fr)_28px] items-center gap-2.5 rounded-[8px] border border-black bg-[#50504d] p-2 text-left text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#f7f4ec] hover:text-black hover:shadow-[3px_3px_0_#000] focus:-translate-y-0.5 focus:bg-[#f7f4ec] focus:text-black focus:shadow-[3px_3px_0_#000] focus:outline-none"
+            >
+              <span
+                className="grid h-9 w-9 place-items-center rounded-[8px] border border-black bg-[#baf7c8] text-[15px] font-black leading-none text-black"
+                title={activeWorkspace ? `권한: ${activeWorkspace.role}` : '워크스페이스 상태'}
+                aria-hidden="true"
+              >
+                {getWorkspaceRoleSymbol(activeWorkspace?.role)}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-black uppercase">
+                  {activeWorkspace?.name ?? '워크스페이스 선택'}
+                </span>
+                <span className="mt-0.5 block text-[11px] font-black uppercase opacity-80">
+                  {activeWorkspace ? `${activeWorkspace.role} · ${pages.length} pages` : `${workspaces.length} workspaces`}
+                </span>
+              </span>
+              <span className="workspace-chevron grid h-7 w-7 place-items-center rounded-[8px] border border-black bg-[#baf7c8]" />
+            </button>
+
+            {workspaceMenuOpen && (
+              <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-full rounded-[8px] border border-black bg-[#50504d] p-2.5 text-white shadow-[5px_5px_0_#000]" role="menu">
+                <div className="mb-2 flex items-center justify-between border-b border-black px-0.5 pb-2.5">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black uppercase">Switch workspace</p>
+                    <p className="mt-0.5 truncate text-[11px] font-bold text-neutral-100">워크 스페이스 생성 및 위치 변경 </p>
+                  </div>
+                  <span className="shrink-0 border border-black bg-[#baf7c8] px-1.5 text-[11px] font-black text-black">
+                    {workspaces.length}
+                  </span>
+                </div>
+
+                <div className="grid max-h-56 gap-1.5 overflow-y-auto py-1 pr-0.5">
+                  {workspaces.map(workspace => {
+                    const isActive = workspace.id === activeWorkspaceId
+                    const dragPosition = workspaceDragOver?.id === workspace.id ? workspaceDragOver.position : null
+
+                    return (
+                      <button
+                        key={workspace.id}
+                        type="button"
+                        draggable
+                        role="menuitem"
+                        aria-current={isActive}
+                        title="드래그해서 순서 변경"
+                        onClick={event => {
+                          if (workspaceDragClickBlockedRef.current) {
+                            event.preventDefault()
+                            workspaceDragClickBlockedRef.current = false
+                            return
+                          }
+                          selectWorkspace(workspace.id)
+                        }}
+                        onDragStart={event => {
+                          workspaceDraggedIdRef.current = workspace.id
+                          workspaceDragClickBlockedRef.current = true
+                          event.dataTransfer.effectAllowed = 'move'
+                          event.dataTransfer.setData('text/plain', workspace.id)
+                        }}
+                        onDragOver={event => {
+                          const draggedId = workspaceDraggedIdRef.current
+                          if (!draggedId || draggedId === workspace.id) return
+                          event.preventDefault()
+                          event.dataTransfer.dropEffect = 'move'
+                          const rect = event.currentTarget.getBoundingClientRect()
+                          const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+                          setWorkspaceDragOver({ id: workspace.id, position })
+                        }}
+                        onDragLeave={() => {
+                          setWorkspaceDragOver(current => current?.id === workspace.id ? null : current)
+                        }}
+                        onDrop={event => {
+                          const draggedId = workspaceDraggedIdRef.current
+                          if (!draggedId || draggedId === workspace.id) return
+                          event.preventDefault()
+                          const rect = event.currentTarget.getBoundingClientRect()
+                          const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+                          setWorkspaceDragOver(null)
+                          reorderWorkspaces(draggedId, workspace.id, position)
+                        }}
+                        onDragEnd={() => {
+                          workspaceDraggedIdRef.current = null
+                          setWorkspaceDragOver(null)
+                          window.setTimeout(() => {
+                            workspaceDragClickBlockedRef.current = false
+                          }, 0)
+                        }}
+                        className={[
+                          'grid w-full cursor-grab grid-cols-[6px_minmax(0,1fr)_auto_14px] items-center gap-1.5 rounded-[8px] border border-black bg-[#62625f] p-1.5 text-left text-white active:cursor-grabbing',
+                          'hover:bg-[#f7f4ec] hover:text-black',
+                          isActive ? 'bg-[#242421] text-white hover:bg-[#242421] hover:text-white' : '',
+                          dragPosition === 'before' ? 'shadow-[inset_0_3px_0_#baf7c8]' : '',
+                          dragPosition === 'after' ? 'shadow-[inset_0_-3px_0_#baf7c8]' : '',
+                        ].filter(Boolean).join(' ')}
+                      >
+                        <span className={`h-[30px] w-1.5 rounded-full border ${isActive ? 'border-white bg-[#baf7c8]' : 'border-black bg-transparent'}`} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-black uppercase leading-tight">{workspace.name}</span>
+                          <span className="mt-0.5 block text-[9px] font-black uppercase leading-none opacity-75">workspace</span>
+                        </span>
+                        <span className="min-w-[42px] rounded-full border border-black bg-[#baf7c8] px-1 py-0.5 text-center text-[9px] font-black uppercase leading-none text-black">
+                          {workspace.role}
+                        </span>
+                        <span className="min-w-3.5 text-center text-xs font-black leading-none">{isActive ? '✓' : ''}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <form
+                  className="mt-2 border-t border-black pt-2.5"
+                  onSubmit={event => {
+                    event.preventDefault()
+                    createWorkspace()
+                  }}
+                >
+                  <div className="grid grid-cols-[minmax(0,1fr)_38px] items-center gap-2">
+                    <input
+                      className="h-[38px] min-w-0 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:shadow-[3px_3px_0_#000]"
+                      placeholder="새 워크스페이스"
+                      value={workspaceName}
+                      onChange={event => setWorkspaceName(event.target.value)}
+                    />
+                    <button
+                      type="submit"
+                      disabled={!workspaceName.trim() || creatingWorkspace}
+                      className={`${creatingWorkspace ? '' : 'workspace-plus'} relative h-[38px] rounded-[8px] border border-black bg-[#baf7c8] text-black shadow-[2px_2px_0_#000] disabled:opacity-40`}
+                      title="워크스페이스 생성"
+                      aria-label="워크스페이스 생성"
+                    >
+                      {creatingWorkspace ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : null}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </div>
           {canManageMembers && activeWorkspace && (
             <div className="mb-2 flex gap-2">
               <input
@@ -885,22 +1095,6 @@ export default function NotionLiteApp() {
               </button>
             </div>
           )}
-          <div className="flex gap-2">
-            <input
-              className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
-              placeholder="새 워크스페이스"
-              value={workspaceName}
-              onChange={event => setWorkspaceName(event.target.value)}
-              onKeyDown={event => event.key === 'Enter' && createWorkspace()}
-            />
-            <button
-              onClick={createWorkspace}
-              disabled={!workspaceName.trim() || creatingWorkspace}
-              className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-[#baf7c8] text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
-            >
-              {creatingWorkspace ? '…' : '+'}
-            </button>
-          </div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col p-3">
