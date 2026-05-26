@@ -36,10 +36,16 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
+
+NEXT_PUBLIC_ENABLE_AGI=false
+JJAPVIS_SERVER_URL=...
+NEXT_PUBLIC_JJAPVIS_SERVER_URL=...
 ```
 
 배포 환경에서는 `NEXT_PUBLIC_SITE_URL`을 실제 도메인으로 변경합니다.  
 Supabase Authentication → Redirect URLs에도 해당 도메인을 등록해야 합니다.
+
+`NEXT_PUBLIC_ENABLE_AGI`가 `true`일 때만 플로팅 AGI 버튼을 렌더링합니다. Vercel 배포 환경에서는 Windows EXE 실행이 불가능하고 HTTP iframe이 차단될 수 있으므로 기본값은 `false`로 둡니다.
 
 ---
 
@@ -229,6 +235,7 @@ POST   /api/workspaces/:id/members
 - 워크스페이스 선택은 네이티브 select가 아니라 커스텀 드롭다운입니다.
 - 워크스페이스 역할 상태는 `owner` = `●`, `editor` = `◆`, `viewer` = `○`로 표시합니다.
 - 워크스페이스 드롭다운에서 항목을 드래그하면 사용자별 표시 순서가 저장됩니다.
+- 페이지 목록의 긴 제목은 버튼 안에서 `...`으로 말줄임 처리됩니다.
 - 페이지 목록의 하위 페이지 추가 / 삭제 버튼은 해당 행 hover 또는 focus 때만 보입니다.
 - 페이지 헤더는 `워크스페이스 / 상위 페이지 / 현재 페이지` 형태의 경로형 제목입니다.
 - 문서 저장 상태는 페이지 헤더 우측에 고정 폭 배지로 표시합니다.

@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase-browser'
 
 const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false })
 const DEBUG_SAVE_FLOW = process.env.NODE_ENV !== 'production'
+const ENABLE_AGI = process.env.NEXT_PUBLIC_ENABLE_AGI === 'true'
 
 function debugSaveFlow(message: string, data?: Record<string, unknown>) {
   if (!DEBUG_SAVE_FLOW) return
@@ -1223,7 +1224,7 @@ export default function NotionLiteApp() {
         )}
         </section>
       </div>
-      <FloatingAiButton />
+      {ENABLE_AGI && <FloatingAiButton />}
     </main>
   )
 }
