@@ -263,12 +263,12 @@ export default function FloatingAiButton() {
   // 연결 확인 → needsInstall 해제 / 15초 초과 → 미설치 패널
   const pollClientConnected = useCallback((token: string) => {
     let attempts = 0
-    const MAX = 15
-    const SERVER = process.env.NEXT_PUBLIC_JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777'
+    const MAX = 20
     const timer = setInterval(async () => {
       attempts++
       try {
-        const r = await fetch(`${SERVER}/client/connected${token ? '?hud_token=' + encodeURIComponent(token) : ''}`)
+        const qs = token ? '?hud_token=' + encodeURIComponent(token) : ''
+        const r = await fetch(`/api/agi/connected${qs}`, { cache: 'no-store' })
         if (r.ok) {
           const d = await r.json().catch(() => ({}))
           if (d?.connected) {
@@ -277,10 +277,10 @@ export default function FloatingAiButton() {
             return
           }
         }
-      } catch { /* 서버 일시 불가 → 계속 시도 */ }
+      } catch { /* 일시 불가 → 계속 시도 */ }
       if (attempts >= MAX) {
         clearInterval(timer)
-        setNeedsInstall(true) // 15초 후에도 연결 없음 → 미설치
+        setNeedsInstall(true) // 20초 후에도 연결 없음 → 미설치
       }
     }, 1000)
   }, [])
