@@ -36,10 +36,16 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
+
+NEXT_PUBLIC_ENABLE_AGI=false
+JJAPVIS_SERVER_URL=...
+NEXT_PUBLIC_JJAPVIS_SERVER_URL=...
 ```
 
 배포 환경에서는 `NEXT_PUBLIC_SITE_URL`을 실제 도메인으로 변경합니다.  
 Supabase Authentication → Redirect URLs에도 해당 도메인을 등록해야 합니다.
+
+`NEXT_PUBLIC_ENABLE_AGI`가 `true`일 때만 플로팅 AGI 버튼을 렌더링합니다. Vercel 배포 환경에서는 Windows EXE 실행이 불가능하고 HTTP iframe이 차단될 수 있으므로 기본값은 `false`로 둡니다.
 
 ---
 
@@ -50,10 +56,13 @@ Supabase Dashboard → SQL Editor에서 마이그레이션을 순서대로 실�
 ```
 supabase/migrations/001_init.sql
 supabase/migrations/002_notion_lite.sql
+supabase/migrations/003_workspace_member_order.sql
 ```
 
 핵심 테이블: `workspaces` · `workspace_members` · `pages`  
 권한 검증은 API route에서 service role 클라이언트로 처리합니다.
+
+`003_workspace_member_order.sql`은 `workspace_members.order_index`를 추가합니다. 이 값은 사용자별 워크스페이스 목록 정렬 순서를 저장합니다.
 
 ---
 
@@ -96,6 +105,14 @@ supabase/
   migrations/
     001_init.sql
     002_notion_lite.sql
+    003_workspace_member_order.sql
+
+docs/
+  plans/
+    PLAN_20260513.md              # 초기 스프레드시트 PoC 계획
+    PLAN_20260514.md              # Notion-lite 피벗 및 현재 계획
+  history/
+    DEV_260526.md                 # 2026-05-26 개발 변경 기록
 ```
 
 ---
@@ -105,6 +122,8 @@ supabase/
 **인증 · 워크스페이스**
 - 이메일 회원가입 / 로그인 (Supabase Auth)
 - 워크스페이스 생성, 조회, 이름 변경
+- 커스텀 워크스페이스 스위처
+- 워크스페이스 드래그 순서 변경 (사용자별 `workspace_members.order_index` 저장)
 - 멤버 이메일 초대 · 역할 기반 권한: `owner` / `editor` / `viewer`
 - 잘못된 refresh token 자동 정리
 
@@ -213,6 +232,10 @@ POST   /api/workspaces/:id/members
 - 최상단 헤더는 스크롤 중에도 고정됩니다.
 - 좌측 사이드바(워크스페이스 선택 + 페이지 목록)는 스크롤 시에도 고정됩니다. 에디터 영역만 독립적으로 스크롤됩니다.
 - 좌측 사이드바에서 워크스페이스와 페이지를 관리합니다.
+- 워크스페이스 선택은 네이티브 select가 아니라 커스텀 드롭다운입니다.
+- 워크스페이스 역할 상태는 `owner` = `●`, `editor` = `◆`, `viewer` = `○`로 표시합니다.
+- 워크스페이스 드롭다운에서 항목을 드래그하면 사용자별 표시 순서가 저장됩니다.
+- 페이지 목록의 긴 제목은 버튼 안에서 `...`으로 말줄임 처리됩니다.
 - 페이지 목록의 하위 페이지 추가 / 삭제 버튼은 해당 행 hover 또는 focus 때만 보입니다.
 - 페이지 헤더는 `워크스페이스 / 상위 페이지 / 현재 페이지` 형태의 경로형 제목입니다.
 - 문서 저장 상태는 페이지 헤더 우측에 고정 폭 배지로 표시합니다.
@@ -225,7 +248,17 @@ POST   /api/workspaces/:id/members
 - Yjs + Hocuspocus 실시간 협업 연결
 - 브라우저 포커스 복귀 시 자동 동기화
 - 멤버 제거 / 역할 변경
-- 페이지 순서 변경
 - 페이지 이동
 - 페이지 snapshot / history
 - 초대 메일 또는 공유 링크
+
+## 문서
+
+프로젝트 문서는 `docs/plans`와 `docs/history`를 기준으로 관리합니다.
+
+```txt
+docs/plans/PLAN_YYYYMMDD.md
+docs/history/DEV_YYMMDD.md
+```
+
+이전 `docs/specs` 문서는 날짜별 plan 문서로 통합했습니다.

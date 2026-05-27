@@ -1,0 +1,788 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Workspace Dropdown Review</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #050505;
+        --page: #777773;
+        --panel: #62625f;
+        --control: #50504d;
+        --mint: #baf7c8;
+        --paper: #f7f4ec;
+        --muted: #dedbd2;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .app {
+        display: grid;
+        min-height: 100vh;
+        grid-template-rows: 64px 1fr;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--ink);
+        padding: 0 16px;
+        background: var(--page);
+      }
+
+      .brand {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 12px;
+        color: white;
+      }
+
+      .mark {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: var(--mint);
+        box-shadow: 2px 2px 0 var(--ink);
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 900;
+      }
+
+      .brand-title {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .brand-email {
+        margin: 3px 0 0;
+        color: #f1f1ed;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .body {
+        display: grid;
+        min-height: 0;
+        grid-template-columns: 312px 1fr;
+      }
+
+      .sidebar {
+        border-right: 1px solid var(--ink);
+        background: var(--panel);
+      }
+
+      .sidebar-section {
+        border-bottom: 1px solid var(--ink);
+        padding: 12px;
+      }
+
+      .label-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 4px 8px;
+      }
+
+      .label {
+        margin: 0;
+        color: white;
+        font-size: 11px;
+        font-weight: 900;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      .count {
+        border: 1px solid var(--ink);
+        background: var(--mint);
+        padding: 1px 6px;
+        font-size: 11px;
+        font-weight: 900;
+      }
+
+      .switcher {
+        position: relative;
+      }
+
+      .trigger {
+        display: grid;
+        width: 100%;
+        min-height: 56px;
+        grid-template-columns: 36px minmax(0, 1fr) 28px;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: var(--control);
+        padding: 8px;
+        color: white;
+        text-align: left;
+        box-shadow: 2px 2px 0 var(--ink);
+      }
+
+      .trigger:hover,
+      .trigger[aria-expanded="true"] {
+        transform: translateY(-1px);
+        background: var(--paper);
+        color: var(--ink);
+        box-shadow: 3px 3px 0 var(--ink);
+      }
+
+      .avatar {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        place-items: center;
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: var(--mint);
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 900;
+      }
+
+      .workspace-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 14px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .workspace-meta {
+        margin-top: 3px;
+        font-size: 11px;
+        font-weight: 900;
+        opacity: 0.78;
+        text-transform: uppercase;
+      }
+
+      .chevron {
+        display: grid;
+        position: relative;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: var(--mint);
+        color: var(--ink);
+        font-size: 0;
+      }
+
+      .chevron::before {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 8px;
+        height: 8px;
+        border-right: 2px solid var(--ink);
+        border-bottom: 2px solid var(--ink);
+        content: "";
+        transform: translate(-50%, -65%) rotate(45deg);
+        transition: transform 160ms ease;
+      }
+
+      .trigger[aria-expanded="true"] .chevron::before {
+        transform: translate(-50%, -35%) rotate(225deg);
+      }
+
+      .menu {
+        position: absolute;
+        z-index: 10;
+        top: calc(100% + 8px);
+        left: 0;
+        width: 100%;
+        min-width: 0;
+        max-width: calc(100vw - 24px);
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: var(--control);
+        padding: 10px;
+        color: white;
+        box-shadow: 5px 5px 0 var(--ink);
+      }
+
+      .menu[hidden] {
+        display: none;
+      }
+
+      .menu-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--ink);
+        padding: 2px 2px 10px;
+      }
+
+      .menu-title {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .menu-subtitle {
+        margin: 3px 0 0;
+        color: #e8e8df;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .list {
+        display: grid;
+        max-height: 220px;
+        gap: 6px;
+        overflow-y: auto;
+        padding: 10px 2px;
+      }
+
+      .item {
+        display: grid;
+        width: 100%;
+        grid-template-columns: 6px minmax(0, 1fr) auto 14px;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: #62625f;
+        padding: 7px;
+        color: white;
+        cursor: grab;
+        text-align: left;
+      }
+
+      .item:active {
+        cursor: grabbing;
+      }
+
+      .item:hover,
+      .item[aria-current="true"] {
+        background: var(--paper);
+        color: var(--ink);
+      }
+
+      .item.is-dragging {
+        opacity: 0.45;
+        transform: scale(0.985);
+      }
+
+      .item.drop-before {
+        box-shadow: inset 0 3px 0 var(--mint);
+      }
+
+      .item.drop-after {
+        box-shadow: inset 0 -3px 0 var(--mint);
+      }
+
+      .item .workspace-name {
+        display: block;
+        font-size: 12px;
+        line-height: 1.2;
+      }
+
+      .item .workspace-meta {
+        display: block;
+        margin-top: 2px;
+        font-size: 9px;
+        line-height: 1.1;
+      }
+
+      .item-bar {
+        width: 6px;
+        height: 30px;
+        border: 1px solid var(--ink);
+        border-radius: 999px;
+        background: transparent;
+      }
+
+      .item[aria-current="true"] .item-bar {
+        background: var(--mint);
+      }
+
+      .role {
+        border: 1px solid var(--ink);
+        border-radius: 999px;
+        background: var(--mint);
+        min-width: 42px;
+        padding: 2px 5px;
+        color: var(--ink);
+        font-size: 9px;
+        font-weight: 900;
+        line-height: 1.1;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
+      .check {
+        min-width: 14px;
+        font-size: 12px;
+        font-weight: 900;
+        line-height: 1;
+        text-align: center;
+      }
+
+      .create-shell {
+        border-top: 1px solid var(--ink);
+        padding-top: 10px;
+      }
+
+      .create-toggle {
+        display: grid;
+        width: 100%;
+        min-height: 40px;
+        grid-template-columns: 28px minmax(0, 1fr);
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: var(--mint);
+        padding: 6px 9px;
+        color: var(--ink);
+        text-align: left;
+        box-shadow: 2px 2px 0 var(--ink);
+        font-size: 12px;
+        font-weight: 900;
+        text-transform: uppercase;
+        transition: opacity 160ms ease, transform 160ms ease, max-height 180ms ease, margin 180ms ease;
+      }
+
+      .create-toggle:hover {
+        transform: translateY(-1px);
+        box-shadow: 3px 3px 0 var(--ink);
+      }
+
+      .create-icon {
+        display: grid;
+        width: 28px;
+        height: 28px;
+        place-items: center;
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: white;
+        font-size: 16px;
+        font-weight: 900;
+      }
+
+      .create {
+        display: grid;
+        max-height: 0;
+        grid-template-columns: minmax(0, 1fr) 38px;
+        align-items: center;
+        gap: 8px;
+        overflow: hidden;
+        opacity: 0;
+        transform: translateY(6px);
+        transition: max-height 220ms ease, opacity 170ms ease, transform 220ms ease;
+      }
+
+      .create-shell[data-mode="form"] .create-toggle {
+        max-height: 0;
+        margin: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        overflow: hidden;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
+      }
+
+      .create-shell[data-mode="form"] .create {
+        max-height: 48px;
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .create input {
+        min-width: 0;
+        height: 38px;
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: white;
+        padding: 0 11px;
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 800;
+        outline: none;
+      }
+
+      .create input:focus {
+        box-shadow: 3px 3px 0 var(--ink);
+      }
+
+      .create-submit {
+        display: grid;
+        position: relative;
+        height: 38px;
+        place-items: center;
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: var(--mint);
+        box-shadow: 2px 2px 0 var(--ink);
+        color: var(--ink);
+        font-size: 0;
+      }
+
+      .create-submit::before,
+      .create-submit::after {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        display: block;
+        width: 14px;
+        height: 2px;
+        background: var(--ink);
+        content: "";
+        transform: translate(-50%, -50%);
+      }
+
+      .create-submit::after {
+        transform: translate(-50%, -50%) rotate(90deg);
+      }
+
+      .content {
+        display: grid;
+        min-width: 0;
+        place-items: center;
+        padding: 24px;
+      }
+
+      .preview {
+        width: min(760px, 100%);
+        border: 1px solid var(--ink);
+        border-radius: 8px;
+        background: var(--paper);
+        padding: 28px;
+        box-shadow: 6px 6px 0 var(--ink);
+      }
+
+      .preview h1 {
+        margin: 0;
+        font-size: clamp(26px, 5vw, 52px);
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .preview p {
+        max-width: 54ch;
+        margin: 14px 0 0;
+        color: #3b3933;
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1.65;
+      }
+
+      @media (max-width: 760px) {
+        .body {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto 1fr;
+        }
+
+        .sidebar {
+          border-right: 0;
+          border-bottom: 1px solid var(--ink);
+        }
+
+        .menu {
+          right: 0;
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="mark">C</span>
+          <div>
+            <p class="brand-title">Cowork26</p>
+            <p class="brand-email">demo@cowork26.dev</p>
+          </div>
+        </div>
+      </header>
+
+      <div class="body">
+        <aside class="sidebar">
+          <section class="sidebar-section">
+            <div class="label-row">
+              <p class="label">Workspace</p>
+              <span class="count" id="workspace-count">4</span>
+            </div>
+
+            <div class="switcher" id="switcher">
+              <button class="trigger" id="trigger" type="button" aria-haspopup="menu" aria-expanded="false">
+                <span class="avatar" id="active-avatar">PR</span>
+                <span>
+                  <span class="workspace-name" id="active-name">Product Room</span>
+                  <span class="workspace-meta" id="active-meta">owner · 12 pages</span>
+                </span>
+                <span class="chevron" aria-hidden="true"></span>
+              </button>
+
+              <div class="menu" id="menu" role="menu" hidden>
+                <div class="menu-head">
+                  <div>
+                    <p class="menu-title">Switch workspace</p>
+                    <p class="menu-subtitle">빠르게 공간을 바꾸고 생성합니다.</p>
+                  </div>
+                  <span class="count" id="menu-count">4</span>
+                </div>
+
+                <div class="list" id="workspace-list"></div>
+
+                <div class="create-shell" id="create-shell" data-mode="idle">
+                  <button class="create-toggle" id="create-toggle" type="button">
+                    <span class="create-icon">+</span>
+                    <span>New workspace</span>
+                  </button>
+                  <form class="create" id="create-form">
+                    <input id="create-input" placeholder="새 워크스페이스" autocomplete="off">
+                    <button class="create-submit" type="submit" title="워크스페이스 생성" aria-label="워크스페이스 생성"></button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </section>
+        </aside>
+
+        <section class="content">
+          <article class="preview">
+            <h1 id="preview-title">Product Room</h1>
+            <p id="preview-copy">
+              커스텀 워크스페이스 드롭다운의 선택 상태, 역할 배지, 생성 플로우, 모바일 폭을 검토하기 위한 독립 테스트 화면입니다.
+            </p>
+          </article>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const workspaces = [
+        { id: 'product', name: 'Product Room', role: 'owner', pages: 12 },
+        { id: 'design', name: 'Design Lab', role: 'editor', pages: 8 },
+        { id: 'growth', name: 'Growth Experiments 2026', role: 'viewer', pages: 21 },
+        { id: 'ops', name: 'Operations Weekly', role: 'editor', pages: 5 },
+      ]
+
+      let activeId = workspaces[0].id
+      let draggedId = ''
+      let dragClickBlocked = false
+
+      const trigger = document.querySelector('#trigger')
+      const menu = document.querySelector('#menu')
+      const switcher = document.querySelector('#switcher')
+      const list = document.querySelector('#workspace-list')
+      const activeAvatar = document.querySelector('#active-avatar')
+      const activeName = document.querySelector('#active-name')
+      const activeMeta = document.querySelector('#active-meta')
+      const previewTitle = document.querySelector('#preview-title')
+      const previewCopy = document.querySelector('#preview-copy')
+      const createForm = document.querySelector('#create-form')
+      const createShell = document.querySelector('#create-shell')
+      const createToggle = document.querySelector('#create-toggle')
+      const createInput = document.querySelector('#create-input')
+      const workspaceCount = document.querySelector('#workspace-count')
+      const menuCount = document.querySelector('#menu-count')
+
+      function initials(name) {
+        return name
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map(part => part[0])
+          .join('')
+          .toUpperCase()
+      }
+
+      function setOpen(open) {
+        trigger.setAttribute('aria-expanded', String(open))
+        menu.hidden = !open
+        if (!open) {
+          createShell.dataset.mode = 'idle'
+          createInput.value = ''
+        }
+      }
+
+      function render() {
+        const active = workspaces.find(workspace => workspace.id === activeId) ?? workspaces[0]
+        activeId = active.id
+
+        activeAvatar.textContent = initials(active.name)
+        activeName.textContent = active.name
+        activeMeta.textContent = `${active.role} · ${active.pages} pages`
+        previewTitle.textContent = active.name
+        previewCopy.textContent = `${active.role} 권한으로 보고 있는 워크스페이스입니다. 리스트 hover, 선택 표시, 긴 이름 처리, 새 공간 생성 흐름을 확인하세요.`
+        workspaceCount.textContent = workspaces.length
+        menuCount.textContent = workspaces.length
+
+        list.replaceChildren(...workspaces.map(workspace => {
+          const item = document.createElement('button')
+          item.type = 'button'
+          item.className = 'item'
+          item.draggable = true
+          item.dataset.id = workspace.id
+          item.setAttribute('role', 'menuitem')
+          item.setAttribute('aria-current', String(workspace.id === activeId))
+          item.setAttribute('title', '드래그해서 순서 변경')
+          item.innerHTML = `
+            <span class="item-bar" aria-hidden="true"></span>
+            <span>
+              <span class="workspace-name">${workspace.name}</span>
+              <span class="workspace-meta">${workspace.pages} pages</span>
+            </span>
+            <span class="role">${workspace.role}</span>
+            ${workspace.id === activeId ? '<span class="check" aria-hidden="true">✓</span>' : ''}
+          `
+          item.addEventListener('click', event => {
+            if (dragClickBlocked) {
+              event.preventDefault()
+              dragClickBlocked = false
+              return
+            }
+            activeId = workspace.id
+            render()
+            setOpen(false)
+            trigger.focus()
+          })
+          item.addEventListener('dragstart', event => {
+            draggedId = workspace.id
+            dragClickBlocked = true
+            item.classList.add('is-dragging')
+            event.dataTransfer.effectAllowed = 'move'
+            event.dataTransfer.setData('text/plain', workspace.id)
+          })
+          item.addEventListener('dragend', () => {
+            draggedId = ''
+            clearDropHints()
+            item.classList.remove('is-dragging')
+            window.setTimeout(() => {
+              dragClickBlocked = false
+            }, 0)
+          })
+          item.addEventListener('dragover', event => {
+            if (!draggedId || draggedId === workspace.id) return
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'move'
+            showDropHint(item, event)
+          })
+          item.addEventListener('dragleave', () => {
+            item.classList.remove('drop-before', 'drop-after')
+          })
+          item.addEventListener('drop', event => {
+            if (!draggedId || draggedId === workspace.id) return
+            event.preventDefault()
+            const position = getDropPosition(item, event)
+            reorderWorkspace(draggedId, workspace.id, position)
+            clearDropHints()
+            render()
+          })
+          return item
+        }))
+      }
+
+      function getDropPosition(item, event) {
+        const rect = item.getBoundingClientRect()
+        return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+      }
+
+      function showDropHint(item, event) {
+        clearDropHints()
+        item.classList.add(getDropPosition(item, event) === 'before' ? 'drop-before' : 'drop-after')
+      }
+
+      function clearDropHints() {
+        list.querySelectorAll('.drop-before, .drop-after').forEach(item => {
+          item.classList.remove('drop-before', 'drop-after')
+        })
+      }
+
+      function reorderWorkspace(sourceId, targetId, position) {
+        const sourceIndex = workspaces.findIndex(workspace => workspace.id === sourceId)
+        const targetIndex = workspaces.findIndex(workspace => workspace.id === targetId)
+        if (sourceIndex < 0 || targetIndex < 0) return
+
+        const [source] = workspaces.splice(sourceIndex, 1)
+        const adjustedTargetIndex = workspaces.findIndex(workspace => workspace.id === targetId)
+        const insertIndex = position === 'before' ? adjustedTargetIndex : adjustedTargetIndex + 1
+        workspaces.splice(insertIndex, 0, source)
+      }
+
+      trigger.addEventListener('click', () => {
+        setOpen(trigger.getAttribute('aria-expanded') !== 'true')
+      })
+
+      document.addEventListener('pointerdown', event => {
+        if (!switcher.contains(event.target)) setOpen(false)
+      })
+
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+          if (createShell.dataset.mode === 'form') {
+            createShell.dataset.mode = 'idle'
+            createInput.value = ''
+            createToggle.focus()
+          } else {
+            setOpen(false)
+            trigger.focus()
+          }
+        }
+      })
+
+      createToggle.addEventListener('click', () => {
+        createShell.dataset.mode = 'form'
+        window.setTimeout(() => createInput.focus(), 180)
+      })
+
+      createForm.addEventListener('submit', event => {
+        event.preventDefault()
+        const name = createInput.value.trim()
+        if (!name) return
+
+        const workspace = {
+          id: `workspace-${Date.now()}`,
+          name,
+          role: 'owner',
+          pages: 1,
+        }
+        workspaces.push(workspace)
+        activeId = workspace.id
+        createInput.value = ''
+        render()
+        setOpen(false)
+        trigger.focus()
+      })
+
+      render()
+    </script>
+  </body>
+</html>
