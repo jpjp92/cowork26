@@ -419,7 +419,7 @@ export default function FloatingAiButton() {
           style={{
             position: 'absolute', left: 0, top: 0,
             width: 18, height: 18, cursor: 'nwse-resize',
-            background: 'linear-gradient(45deg, transparent 40%, #3b82f6 40%)',
+            background: 'linear-gradient(315deg, transparent 40%, #3b82f6 40%)',
             borderRadius: '10px 0 0 0',
           }}
         />
