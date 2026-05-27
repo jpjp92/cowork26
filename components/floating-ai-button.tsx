@@ -112,13 +112,15 @@ export default function FloatingAiButton() {
   // 패널 크기 (vw/vh 기반 초기값, SSR 안전)
   const [panelW, setPanelW] = useState(1040)
   const [panelH, setPanelH] = useState(700)
+  const [panelTopOffset, setPanelTopOffset] = useState(0)
   const resizing = useRef(false)
-  const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 })
+  const resizeDir = useRef<'bl' | 'tl'>('bl')
+  const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0, topOffset: 0 })
 
   // 클라이언트에서만 화면 크기 기반 설정
   useEffect(() => {
-    setPanelW(Math.round(window.innerWidth  * 0.70))
-    setPanelH(Math.round(window.innerHeight * 0.60))
+    setPanelW(Math.round(window.innerWidth  * 0.85))
+    setPanelH(Math.round(window.innerHeight * 0.80))
   }, [])
 
   const sendPageContext = useCallback(async () => {
@@ -129,20 +131,31 @@ export default function FloatingAiButton() {
     )
   }, [])
 
-  // 패널 리사이즈 핸들러
-  const onResizeDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+  // 패널 리사이즈 핸들러 (좌하단 'bl' / 좌상단 'tl')
+  const onResizeDown = useCallback((dir: 'bl' | 'tl') => (e: React.PointerEvent<HTMLDivElement>) => {
     resizing.current = true
-    resizeStart.current = { x: e.clientX, y: e.clientY, w: panelW, h: panelH }
+    resizeDir.current = dir
+    resizeStart.current = { x: e.clientX, y: e.clientY, w: panelW, h: panelH, topOffset: panelTopOffset }
     e.currentTarget.setPointerCapture(e.pointerId)
     e.stopPropagation()
-  }, [panelW, panelH])
+  }, [panelW, panelH, panelTopOffset])
 
   const onResizeMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!resizing.current) return
     const dx = e.clientX - resizeStart.current.x
     const dy = e.clientY - resizeStart.current.y
-    setPanelW(Math.max(400, resizeStart.current.w + dx))
-    setPanelH(Math.max(300, resizeStart.current.h + dy))
+    // 왼쪽 핸들: 왼쪽으로 드래그 시 폭 증가 (dx 반전)
+    setPanelW(Math.max(400, resizeStart.current.w - dx))
+    if (resizeDir.current === 'bl') {
+      // 좌하단: 아래로 드래그 시 높이 증가
+      setPanelH(Math.max(300, resizeStart.current.h + dy))
+    } else {
+      // 좌상단: 위로 드래그 시 높이 증가, top도 같이 올라감 (하단 고정)
+      const newH = Math.max(300, resizeStart.current.h - dy)
+      const actualDH = newH - resizeStart.current.h
+      setPanelH(newH)
+      setPanelTopOffset(resizeStart.current.topOffset - actualDH)
+    }
   }, [])
 
   const onResizeUp = useCallback(() => { resizing.current = false }, [])
@@ -369,7 +382,7 @@ export default function FloatingAiButton() {
       <div
         className="fixed right-[140px] z-40 flex flex-col overflow-hidden rounded-[12px] border-2 border-blue-400 bg-black shadow-[0_0_30px_6px_#3b82f660]"
         style={{
-          top: Math.max(8, y - 100),
+          top: Math.max(8, y - 100 + panelTopOffset),
           width: panelW,
           height: panelH,
           display: panelOpen ? 'flex' : 'none',
@@ -398,16 +411,28 @@ export default function FloatingAiButton() {
             onLoad={sendPageContext}
           />
         )}
-        {/* 리사이즈 핸들 — 우하단 코너 드래그 */}
+        {/* 리사이즈 핸들 — 좌상단 */}
         <div
-          onPointerDown={onResizeDown}
+          onPointerDown={onResizeDown('tl')}
           onPointerMove={onResizeMove}
           onPointerUp={onResizeUp}
           style={{
-            position: 'absolute', right: 0, bottom: 0,
+            position: 'absolute', left: 0, top: 0,
             width: 18, height: 18, cursor: 'nwse-resize',
-            background: 'linear-gradient(135deg, transparent 40%, #3b82f6 40%)',
-            borderRadius: '0 0 10px 0',
+            background: 'linear-gradient(45deg, transparent 40%, #3b82f6 40%)',
+            borderRadius: '10px 0 0 0',
+          }}
+        />
+        {/* 리사이즈 핸들 — 좌하단 */}
+        <div
+          onPointerDown={onResizeDown('bl')}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeUp}
+          style={{
+            position: 'absolute', left: 0, bottom: 0,
+            width: 18, height: 18, cursor: 'nesw-resize',
+            background: 'linear-gradient(225deg, transparent 40%, #3b82f6 40%)',
+            borderRadius: '0 0 0 10px',
           }}
         />
       </div>
