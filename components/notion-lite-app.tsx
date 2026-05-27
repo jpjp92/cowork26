@@ -787,7 +787,7 @@ export default function NotionLiteApp() {
           >
             {/* 가로 연결선 — depth > 0 항목에만 표시 */}
             {depth > 0 && (
-              <div className={`absolute -left-px top-1/2 h-px w-3 ${isActive ? 'bg-[#baf7c8]' : 'bg-[#4a4a47]'}`} />
+              <div className={`absolute -left-px top-1/2 h-px w-3 ${isActive ? 'bg-[#baf7c8]' : 'bg-[#6e6e6b]'}`} />
             )}
 
             {/* 셰브론 — 하위 페이지 있을 때만 활성 */}
@@ -850,7 +850,7 @@ export default function NotionLiteApp() {
 
           {/* 하위 페이지 — 세로 가이드라인 + 가로 연결선 */}
           {!isCollapsed && hasChildren && (
-            <div className="ml-5 border-l border-[#4a4a47]">
+            <div className="ml-5 border-l border-[#6e6e6b]">
               {renderPageList(page.id, depth + 1)}
             </div>
           )}
