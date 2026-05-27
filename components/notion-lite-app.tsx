@@ -58,6 +58,12 @@ function getWorkspaceRoleSymbol(role?: Workspace['role']) {
   return '–'
 }
 
+function getRoleBadgeClass(role: string) {
+  if (role === 'owner') return 'bg-[#baf7c8] text-black'
+  if (role === 'editor') return 'bg-[#fde68a] text-black'
+  return 'bg-[#c4b5fd] text-black'
+}
+
 export default function NotionLiteApp() {
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
@@ -921,9 +927,9 @@ export default function NotionLiteApp() {
                           <p className="truncate text-xs font-bold text-white">
                             {member.email ?? member.user_id}
                           </p>
-                          <p className="mt-1 text-[11px] font-black uppercase text-[#baf7c8]">
+                          <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${getRoleBadgeClass(member.role)}`}>
                             {member.role}
-                          </p>
+                          </span>
                         </div>
                       ))}
                       {!membersLoading && members.length === 0 && (
@@ -1089,7 +1095,7 @@ export default function NotionLiteApp() {
                           <span className="block truncate text-xs font-black uppercase leading-tight">{workspace.name}</span>
                           <span className="mt-0.5 block text-[9px] font-black uppercase leading-none opacity-75">workspace</span>
                         </span>
-                        <span className="min-w-[42px] rounded-full border border-black bg-[#baf7c8] px-1 py-0.5 text-center text-[9px] font-black uppercase leading-none text-black">
+                        <span className={`min-w-[42px] rounded-full border border-black px-1 py-0.5 text-center text-[9px] font-black uppercase leading-none ${getRoleBadgeClass(workspace.role)}`}>
                           {workspace.role}
                         </span>
                         <span className="min-w-3.5 text-center text-xs font-black leading-none">{isActive ? '✓' : ''}</span>
