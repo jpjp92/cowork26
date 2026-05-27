@@ -285,23 +285,39 @@ export default function FloatingAiButton() {
     }, 1000)
   }, [])
 
-  // ── 페이지 로드 시 즉시 AGI 백그라운드 실행 ────────────────────
+  // ── 페이지 로드 시 AGI 연결 확인 후 필요 시만 실행 ────────────────
   useEffect(() => {
     if (agiStartedRef.current) return
     agiStartedRef.current = true
-    fetch('/api/agi', { method: 'POST' })
-      .then(async (res) => {
-        if (res.ok) {
-          setLaunched(true)
-          const data = await res.json().catch(() => ({}))
-          if (data?.hud_token) setHudToken(data.hud_token)
-          if (data?.mode === 'protocol' && data?.agi_url) {
-            const a = document.createElement('a'); a.href = data.agi_url; a.click()
-            pollClientConnected(data.hud_token ?? '')
+    ;(async () => {
+      // 1) 이미 연결 중인지 먼저 확인
+      try {
+        const r = await fetch('/api/agi/connected', { cache: 'no-store' })
+        if (r.ok) {
+          const d = await r.json().catch(() => ({}))
+          if (d?.connected) {
+            setLaunched(true)
+            setNeedsInstall(false)
+            return  // 이미 떠 있음 → agi:// 재실행 불필요
           }
         }
-      })
-      .catch(() => {})
+      } catch { /* 서버 일시 불가 → 아래서 실행 시도 */ }
+
+      // 2) 연결 없음 → agi:// 로 실행
+      fetch('/api/agi', { method: 'POST' })
+        .then(async (res) => {
+          if (res.ok) {
+            setLaunched(true)
+            const data = await res.json().catch(() => ({}))
+            if (data?.hud_token) setHudToken(data.hud_token)
+            if (data?.mode === 'protocol' && data?.agi_url) {
+              const a = document.createElement('a'); a.href = data.agi_url; a.click()
+              pollClientConnected(data.hud_token ?? '')
+            }
+          }
+        })
+        .catch(() => {})
+    })()
   }, [])
 
   // URL 변경(라우팅) 시 컨텍스트 재전송
