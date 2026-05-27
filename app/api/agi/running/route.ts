@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { execSync } from 'child_process'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/agi/running
  * AGI-client.exe 프로세스가 현재 실행 중인지 확인.

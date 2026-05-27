@@ -202,7 +202,7 @@ export default function FloatingAiButton() {
               const data = await r.json().catch(() => ({}))
               if (data?.hud_token) setHudToken(data.hud_token)
               if (data?.mode === 'protocol' && data?.agi_url) {
-                const a = document.createElement('a'); a.href = data.agi_url; a.click()
+                window.location.assign(data.agi_url)
                 pollClientConnected(data.hud_token ?? '')
               }
             }
@@ -246,7 +246,7 @@ export default function FloatingAiButton() {
             const d = await res.json().catch(() => ({}))
             if (d?.hud_token) setHudToken(d.hud_token)
             if (d?.mode === 'protocol' && d?.agi_url) {
-              const a = document.createElement('a'); a.href = d.agi_url; a.click()
+              window.location.assign(d.agi_url)
             }
           }
         })
@@ -313,7 +313,7 @@ export default function FloatingAiButton() {
             const data = await res.json().catch(() => ({}))
             if (data?.hud_token) setHudToken(data.hud_token)
             if (data?.mode === 'protocol' && data?.agi_url) {
-              const a = document.createElement('a'); a.href = data.agi_url; a.click()
+              window.location.assign(data.agi_url)
               pollClientConnected(data.hud_token ?? '')
             }
           }

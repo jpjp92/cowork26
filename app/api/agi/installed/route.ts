@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import fs from 'fs'
 
+export const dynamic = 'force-dynamic'
+
 const EXE_PATH = 'C:\\Program Files (x86)\\JjapVis AGI\\AGI-client.exe'
 
 /**
