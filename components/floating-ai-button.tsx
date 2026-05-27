@@ -159,6 +159,9 @@ export default function FloatingAiButton() {
               setLaunched(true)
               const data = await r.json().catch(() => ({}))
               if (data?.hud_token) setHudToken(data.hud_token)
+              if (data?.mode === 'protocol' && data?.agi_url) {
+                const a = document.createElement('a'); a.href = data.agi_url; a.click()
+              }
             }
           })
           .catch(() => {})
@@ -167,28 +170,41 @@ export default function FloatingAiButton() {
     }
   }, [launched])
 
-  // ── AGI 클라이언트 EXE 다운로드 + 저장 ─────────────────────────
-  // GET /api/agi → 서버가 AGI서버에서 받아 process.cwd()/AGI-client.exe에 직접 저장
-  // 완료 후 POST /api/agi 재시도 → 바로 EXE 실행 (재시작 불필요)
+  // ── AGI 클라이언트 MSI 다운로드 + 저장 ─────────────────────────
+  // GET /api/agi: 로컬 Windows → 서버가 AGI서버에서 받아 process.cwd()에 저장
+  //              Vercel    → { download_url } 반환 → 브라우저가 MSI 직접 다운로드
   const startInstall = useCallback(async () => {
     setInstalling(true)
     setInstallProgress(0)
     setInstallError(false)
     try {
-      // 진행 중 표시 (서버 다운로드라 스트리밍 진행률 없음 → 50%로 고정)
       setInstallProgress(30)
       const resp = await fetch('/api/agi')
       if (!resp.ok) throw new Error('server error')
+      const data = await resp.json().catch(() => ({}))
+
+      if (data?.download_url) {
+        // Vercel 모드: 브라우저로 MSI 직접 다운로드 (Downloads 폴더에 저장됨)
+        window.open(data.download_url, '_blank')
+        setInstallProgress(100)
+        localStorage.setItem('agi_installed', '1')
+        setInstallDone(true)
+        return
+      }
+
+      // 로컬 Windows 모드: 서버가 EXE/MSI를 process.cwd()에 저장 → 바로 실행
       setInstallProgress(100)
       localStorage.setItem('agi_installed', '1')
       setInstallDone(true)
-      // EXE가 저장됐으니 바로 실행 시도
       fetch('/api/agi', { method: 'POST' })
         .then(async res => {
           if (res.ok) {
             setLaunched(true)
-            const data = await res.json().catch(() => ({}))
-            if (data?.hud_token) setHudToken(data.hud_token)
+            const d = await res.json().catch(() => ({}))
+            if (d?.hud_token) setHudToken(d.hud_token)
+            if (d?.mode === 'protocol' && d?.agi_url) {
+              const a = document.createElement('a'); a.href = d.agi_url; a.click()
+            }
           }
         })
         .catch(() => {})
@@ -199,8 +215,8 @@ export default function FloatingAiButton() {
     }
   }, [])
 
-  // ── 페이지 로드 시 즉시 AGI 백그라운드 자동 실행 ────────────────
-  // Vercel(Linux)에서는 spawn 불가 → exe_not_found 항상 반환
+  // ── 페이지 로드 시 즉시 AGI 백그라운드 실행 ────────────────────
+  // MSI 설치 후 agi:// 프로토콜로 EXE 실행. 미설치 시 needsInstall 패널 표시.
   useEffect(() => {
     fetch('/api/agi', { method: 'POST' })
       .then(async (res) => {
@@ -208,26 +224,12 @@ export default function FloatingAiButton() {
           setLaunched(true)
           const data = await res.json().catch(() => ({}))
           if (data?.hud_token) setHudToken(data.hud_token)
-          return
-        }
-        const body = await res.json().catch(() => ({}))
-        if (body?.error === 'exe_not_found') {
-          // EXE 없으면 localStorage 무시하고 무조건 설치 패널 표시
-          localStorage.removeItem('agi_installed')
-          setNeedsInstall(true)
+          if (data?.mode === 'protocol' && data?.agi_url) {
+            const a = document.createElement('a'); a.href = data.agi_url; a.click()
+          }
         }
       })
       .catch(() => {})
-  }, [])
-
-  // 페이지 종료 시 exe kill
-  useEffect(() => {
-    const handleUnload = () => {
-      navigator.sendBeacon('/api/agi', JSON.stringify({ _method: 'DELETE' }))
-      fetch('/api/agi', { method: 'DELETE', keepalive: true }).catch(() => {})
-    }
-    window.addEventListener('beforeunload', handleUnload)
-    return () => window.removeEventListener('beforeunload', handleUnload)
   }, [])
 
   // URL 변경(라우팅) 시 컨텍스트 재전송
@@ -261,7 +263,9 @@ export default function FloatingAiButton() {
             {!installDone ? (
               <>
                 <p className="text-[12px] text-blue-200">
-                  {installing ? '짭비스 AI를 설치 중입니다...' : 'AGI 클라이언트가 필요합니다. 설치를 시작하세요.'}
+                  {installing
+                    ? 'MSI 다운로드 중...'
+                    : 'AGI 클라이언트(MSI)가 필요합니다. 다운로드 후 설치하세요.'}
                 </p>
                 {/* 진행률 바 */}
                 {installing && (
@@ -283,12 +287,12 @@ export default function FloatingAiButton() {
                   disabled={installing}
                   className="rounded-md border border-blue-400 bg-blue-950 px-4 py-2 text-[12px] font-black text-blue-300 hover:bg-blue-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {installing ? '설치 중...' : '▶ 설치 시작'}
+                  {installing ? 'MSI 다운로드 중...' : '▶ MSI 다운로드 & 설치'}
                 </button>
               </>
             ) : (
               <>
-                <p className="text-[12px] text-green-400 font-black">✓ 설치 완료! 짭비스 AI를 시작합니다.</p>
+                <p className="text-[12px] text-green-400 font-black">✓ MSI 다운로드 완료! 파일을 실행해 설치하세요.</p>
                 <button
                   onClick={() => setNeedsInstall(false)}
                   className="rounded-md border border-green-400 bg-green-950 px-4 py-2 text-[12px] font-black text-green-300 hover:bg-green-900 transition-colors"
