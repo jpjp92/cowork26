@@ -259,8 +259,8 @@ export default function FloatingAiButton() {
   }, [])
 
   // ── AGI 클라이언트 연결 상태 polling ───────────────────────────────
-  // agi:// 열기 후 서버에 클라이언트 WS 연결 여부를 1초 간격으로 최대 15초 확인.
-  // 연결 확인 → needsInstall 해제 / 15초 초과 → 미설치 패널
+  // agi:// 열기 후 서버에 클라이언트 WS 연결 여부를 1초 간격으로 최대 20초 확인.
+  // 연결 확인 → needsInstall 해제 / 20초 초과 → 미설치 패널
   const pollClientConnected = useCallback((token: string) => {
     let attempts = 0
     const MAX = 20
@@ -274,13 +274,16 @@ export default function FloatingAiButton() {
           if (d?.connected) {
             clearInterval(timer)
             setNeedsInstall(false)
+            localStorage.setItem('agi_installed', '1')
             return
           }
         }
       } catch { /* 일시 불가 → 계속 시도 */ }
       if (attempts >= MAX) {
         clearInterval(timer)
-        setNeedsInstall(true) // 20초 후에도 연결 없음 → 미설치
+        // agi_installed 있으면 설치는 됐는데 실행 안 된 것 → 패널 미표시
+        const isInstalled = typeof localStorage !== 'undefined' && localStorage.getItem('agi_installed') === '1'
+        if (!isInstalled) setNeedsInstall(true)
       }
     }, 1000)
   }, [])
@@ -290,6 +293,9 @@ export default function FloatingAiButton() {
     if (agiStartedRef.current) return
     agiStartedRef.current = true
     ;(async () => {
+      const alreadyLaunched = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('agi_launched') === '1'
+      const isInstalled     = typeof localStorage  !== 'undefined' && localStorage.getItem('agi_installed') === '1'
+
       // 1) 이미 연결 중인지 먼저 확인
       try {
         const r = await fetch('/api/agi/connected', { cache: 'no-store' })
@@ -298,16 +304,30 @@ export default function FloatingAiButton() {
           if (d?.connected) {
             setLaunched(true)
             setNeedsInstall(false)
-            return  // 이미 떠 있음 → agi:// 재실행 불필요
+            sessionStorage.setItem('agi_launched', '1')
+            return  // 이미 연결됨 → 끝
           }
         }
-      } catch { /* 서버 일시 불가 → 아래서 실행 시도 */ }
+      } catch { /* 서버 일시 불가 */ }
 
-      // 2) 연결 없음 → agi:// 로 실행
+      // 2) 이번 세션에 이미 agi:// 를 실행했으면 → 재실행 안 함, polling만
+      if (alreadyLaunched) {
+        pollClientConnected('')
+        return
+      }
+
+      // 3) 설치된 적 없으면 → 설치 패널
+      if (!isInstalled) {
+        setNeedsInstall(true)
+        return
+      }
+
+      // 4) 설치는 됐고 연결 안 됨 → agi:// 실행
       fetch('/api/agi', { method: 'POST' })
         .then(async (res) => {
           if (res.ok) {
             setLaunched(true)
+            sessionStorage.setItem('agi_launched', '1')
             const data = await res.json().catch(() => ({}))
             if (data?.hud_token) setHudToken(data.hud_token)
             if (data?.mode === 'protocol' && data?.agi_url) {
