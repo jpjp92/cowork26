@@ -97,6 +97,7 @@ export default function NotionLiteApp() {
   const titleFocusValueRef = useRef(new Map<string, string>())
   const [dragOver, setDragOver] = useState<{ id: string; position: 'above' | 'below' } | null>(null)
   const [workspaceDragOver, setWorkspaceDragOver] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
+  const [collapsedPages, setCollapsedPages] = useState<Set<string>>(new Set())
 
   const accessToken = session?.access_token
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
@@ -148,6 +149,15 @@ export default function NotionLiteApp() {
       setSaving('idle')
       savingResetTimerRef.current = null
     }, 1200)
+  }, [])
+
+  const toggleCollapse = useCallback((pageId: string) => {
+    setCollapsedPages(prev => {
+      const next = new Set(prev)
+      if (next.has(pageId)) next.delete(pageId)
+      else next.add(pageId)
+      return next
+    })
   }, [])
 
   const selectActivePage = useCallback((pageId: string) => {
@@ -739,75 +749,114 @@ export default function NotionLiteApp() {
 
   const renderPageList = (parentId: string | null, depth = 0): React.ReactNode => {
     const items = pageTree.get(parentId ?? 'root') ?? []
-    return items.map(page => (
-      <div key={page.id}>
-        {/* drop indicator — above */}
-        {dragOver?.id === page.id && dragOver.position === 'above' && (
-          <div className="mx-1 h-0.5 rounded bg-[#baf7c8]" style={{ marginLeft: depth * 14 + 4 }} />
-        )}
-        <div
-          className="group/page-row flex items-center gap-2"
-          style={{ paddingLeft: depth * 14 }}
-          draggable={canEdit}
-          onDragStart={() => { draggedIdRef.current = page.id }}
-          onDragEnd={() => { draggedIdRef.current = null; setDragOver(null) }}
-          onDragOver={e => {
-            e.preventDefault()
-            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-            const position = e.clientY < rect.top + rect.height / 2 ? 'above' : 'below'
-            setDragOver(prev =>
-              prev?.id === page.id && prev.position === position ? prev : { id: page.id, position }
-            )
-          }}
-          onDragLeave={e => {
-            if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+    return items.map(page => {
+      const hasChildren = (pageTree.get(page.id)?.length ?? 0) > 0
+      const isCollapsed = collapsedPages.has(page.id)
+      const isActive = page.id === activePageId
+
+      return (
+        <div key={page.id}>
+          {dragOver?.id === page.id && dragOver.position === 'above' && (
+            <div className="h-0.5 rounded bg-[#baf7c8]" style={{ marginLeft: depth > 0 ? 12 + 20 : 0 }} />
+          )}
+          <div
+            className={`group/page-row relative flex items-center gap-1 ${depth > 0 ? 'pl-3' : ''}`}
+            draggable={canEdit}
+            onDragStart={() => { draggedIdRef.current = page.id }}
+            onDragEnd={() => { draggedIdRef.current = null; setDragOver(null) }}
+            onDragOver={e => {
+              e.preventDefault()
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+              const position = e.clientY < rect.top + rect.height / 2 ? 'above' : 'below'
+              setDragOver(prev =>
+                prev?.id === page.id && prev.position === position ? prev : { id: page.id, position }
+              )
+            }}
+            onDragLeave={e => {
+              if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+                setDragOver(null)
+              }
+            }}
+            onDrop={e => {
+              e.preventDefault()
+              const dragged = draggedIdRef.current
+              if (dragged) reorderPage(dragged, page.id, dragOver?.position ?? 'below')
+              draggedIdRef.current = null
               setDragOver(null)
-            }
-          }}
-          onDrop={e => {
-            e.preventDefault()
-            const dragged = draggedIdRef.current
-            if (dragged) reorderPage(dragged, page.id, dragOver?.position ?? 'below')
-            draggedIdRef.current = null
-            setDragOver(null)
-          }}
-        >
-          <button
-            onClick={() => selectActivePage(page.id)}
-            className={`flex h-9 min-w-0 flex-1 items-center rounded-[8px] px-3 text-left text-sm ${
-              page.id === activePageId
-                ? 'border border-black bg-[#baf7c8] font-black text-black shadow-[2px_2px_0_#000]'
-                : 'font-semibold text-white hover:bg-[#50504d]'
-            }`}
+            }}
           >
-            <span className="block min-w-0 truncate">{page.title}</span>
-          </button>
-          {canEdit && (
-            <div className="ml-2 flex shrink-0 gap-2 opacity-0 transition-opacity group-hover/page-row:opacity-100 group-focus-within/page-row:opacity-100">
-              <button
-                onClick={() => createPage(page.id)}
-                className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8]"
-                title="하위 페이지 추가"
+            {/* 가로 연결선 — depth > 0 항목에만 표시 */}
+            {depth > 0 && (
+              <div className={`absolute -left-px top-1/2 h-px w-3 ${isActive ? 'bg-[#baf7c8]' : 'bg-[#4a4a47]'}`} />
+            )}
+
+            {/* 셰브론 — 하위 페이지 있을 때만 활성 */}
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); if (hasChildren) toggleCollapse(page.id) }}
+              className={`flex h-8 w-5 shrink-0 items-center justify-center transition-colors ${
+                hasChildren ? 'cursor-pointer text-neutral-400 hover:text-white' : 'pointer-events-none opacity-0'
+              }`}
+            >
+              <svg
+                className={`h-2.5 w-2.5 transition-transform duration-150 ${hasChildren && !isCollapsed ? 'rotate-90' : ''}`}
+                viewBox="0 0 8 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                +
-              </button>
-              <button
-                onClick={() => deletePage(page.id)}
-                className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-red-300 text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-red-200"
-                title="페이지 삭제"
-              >
-                x
-              </button>
+                <path d="M1.5 1L6.5 6L1.5 11" />
+              </svg>
+            </button>
+
+            {/* 페이지 버튼 */}
+            <button
+              onClick={() => selectActivePage(page.id)}
+              className={`flex h-8 min-w-0 flex-1 items-center rounded-[4px] px-2 text-left text-sm transition-colors ${
+                isActive
+                  ? 'border border-black bg-[#baf7c8] font-black text-black shadow-[2px_2px_0_#000]'
+                  : 'font-medium text-neutral-300 hover:bg-[#50504d] hover:text-white'
+              }`}
+            >
+              <span className="block min-w-0 truncate">{page.title}</span>
+            </button>
+
+            {/* 액션 버튼 — hover 시 표시 */}
+            {canEdit && (
+              <div className="flex shrink-0 gap-1 pl-1 opacity-0 transition-opacity group-hover/page-row:opacity-100 group-focus-within/page-row:opacity-100">
+                <button
+                  onClick={() => createPage(page.id)}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:bg-[#50504d] hover:text-white"
+                  title="하위 페이지 추가"
+                >
+                  +
+                </button>
+                <button
+                  onClick={() => deletePage(page.id)}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:text-red-300"
+                  title="페이지 삭제"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+          </div>
+
+          {dragOver?.id === page.id && dragOver.position === 'below' && (
+            <div className="h-0.5 rounded bg-[#baf7c8]" style={{ marginLeft: depth > 0 ? 12 + 20 : 0 }} />
+          )}
+
+          {/* 하위 페이지 — 세로 가이드라인 + 가로 연결선 */}
+          {!isCollapsed && hasChildren && (
+            <div className="ml-5 border-l border-[#4a4a47]">
+              {renderPageList(page.id, depth + 1)}
             </div>
           )}
         </div>
-        {/* drop indicator — below */}
-        {dragOver?.id === page.id && dragOver.position === 'below' && (
-          <div className="mx-1 h-0.5 rounded bg-[#baf7c8]" style={{ marginLeft: depth * 14 + 4 }} />
-        )}
-        {renderPageList(page.id, depth + 1)}
-      </div>
-    ))
+      )
+    })
   }
 
   if (authLoading) {
@@ -1122,7 +1171,7 @@ export default function NotionLiteApp() {
               {creatingPage ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : '+'}
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1 max-md:max-h-56">
+          <div className="page-tree-scroll min-h-0 flex-1 overflow-y-auto max-md:max-h-56">
             {activeWorkspaceId ? (
               pages.length > 0 ? renderPageList(null) : (
                 <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
