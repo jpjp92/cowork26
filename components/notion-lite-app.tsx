@@ -949,14 +949,23 @@ export default function NotionLiteApp() {
                         onKeyDown={event => event.key === 'Enter' && inviteMember()}
                       />
                       <div className="mt-2 flex gap-2">
-                        <select
-                          className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-[#62625f] px-2 text-xs font-black uppercase text-white outline-none"
-                          value={inviteRole}
-                          onChange={event => setInviteRole(event.target.value as 'editor' | 'viewer')}
-                        >
-                          <option value="editor">editor</option>
-                          <option value="viewer">viewer</option>
-                        </select>
+                        <div className="flex min-w-0 flex-1 overflow-hidden rounded-[8px] border border-black">
+                          <button
+                            type="button"
+                            onClick={() => setInviteRole('editor')}
+                            className={`flex-1 py-1.5 text-xs font-black uppercase transition-colors ${
+                              inviteRole === 'editor' ? 'bg-[#fde68a] text-black' : 'bg-[#62625f] text-neutral-300 hover:text-white'
+                            }`}
+                          >editor</button>
+                          <div className="w-px bg-black" />
+                          <button
+                            type="button"
+                            onClick={() => setInviteRole('viewer')}
+                            className={`flex-1 py-1.5 text-xs font-black uppercase transition-colors ${
+                              inviteRole === 'viewer' ? 'bg-[#c4b5fd] text-black' : 'bg-[#62625f] text-neutral-300 hover:text-white'
+                            }`}
+                          >viewer</button>
+                        </div>
                         <button
                           onClick={inviteMember}
                           disabled={!inviteEmail.trim() || inviteLoading}
