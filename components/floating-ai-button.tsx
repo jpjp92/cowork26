@@ -286,39 +286,30 @@ export default function FloatingAiButton() {
     if (agiStartedRef.current) return
     agiStartedRef.current = true
     ;(async () => {
-      // 1) 이미 WS 연결 중이면 끝
+      // 1) EXE 파일 존재 여부 즉시 확인 → 없으면 설치 패널, 끝
       try {
-        const r = await fetch('/api/agi/connected', { cache: 'no-store' })
-        if (r.ok && (await r.json().catch(() => ({}))).connected) {
-          setLaunched(true)
+        const ri = await fetch('/api/agi/installed', { cache: 'no-store' })
+        if (ri.ok && !(await ri.json().catch(() => ({}))).installed) {
+          setNeedsInstall(true)
           return
         }
       } catch { /* 무시 */ }
 
-      // 2) 이번 세션에 이미 agi:// 실행했으면 재실행 안 함 (새로고침 중복 방지)
-      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('agi_launched') === '1') {
-        pollClientConnected('')
-        return
-      }
-
-      // 3) EXE 파일 존재 여부 즉시 확인 (타임아웃 없음)
+      // 2) 프로세스 실행 중인지 확인 → 실행 중이면 agi:// 재실행 안 함
       try {
-        const ri = await fetch('/api/agi/installed', { cache: 'no-store' })
-        if (ri.ok) {
-          const di = await ri.json().catch(() => ({}))
-          if (!di?.installed) {
-            setNeedsInstall(true)  // 파일 없음 → 설치 패널
-            return
-          }
+        const rr = await fetch('/api/agi/running', { cache: 'no-store' })
+        if (rr.ok && (await rr.json().catch(() => ({}))).running) {
+          setLaunched(true)
+          pollClientConnected('')
+          return
         }
       } catch { /* 무시 */ }
 
-      // 4) 설치됨 + 연결 안 됨 → agi:// 실행
+      // 3) 프로세스 없음 → agi:// 실행
       fetch('/api/agi', { method: 'POST' })
         .then(async (res) => {
           if (res.ok) {
             setLaunched(true)
-            sessionStorage.setItem('agi_launched', '1')
             const data = await res.json().catch(() => ({}))
             if (data?.hud_token) setHudToken(data.hud_token)
             if (data?.mode === 'protocol' && data?.agi_url) {
