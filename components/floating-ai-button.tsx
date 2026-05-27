@@ -216,7 +216,8 @@ export default function FloatingAiButton() {
   }, [])
 
   // ── 페이지 로드 시 즉시 AGI 백그라운드 실행 ────────────────────
-  // MSI 설치 후 agi:// 프로토콜로 EXE 실행. 미설치 시 needsInstall 패널 표시.
+  // MSI 설치 후 agi:// 프로토콜로 EXE 실행.
+  // 미설치 감지: agi:// 클릭 후 2초 내 브라우저 포커스 이탈 없으면 → 설치 패널 표시.
   useEffect(() => {
     fetch('/api/agi', { method: 'POST' })
       .then(async (res) => {
@@ -225,7 +226,17 @@ export default function FloatingAiButton() {
           const data = await res.json().catch(() => ({}))
           if (data?.hud_token) setHudToken(data.hud_token)
           if (data?.mode === 'protocol' && data?.agi_url) {
+            let appLaunched = false
+            const onBlur = () => { appLaunched = true }
+            window.addEventListener('blur', onBlur, { once: true })
             const a = document.createElement('a'); a.href = data.agi_url; a.click()
+            setTimeout(() => {
+              window.removeEventListener('blur', onBlur)
+              if (!appLaunched) {
+                // agi:// 핸들러 없음 → MSI 미설치
+                setNeedsInstall(true)
+              }
+            }, 2000)
           }
         }
       })
