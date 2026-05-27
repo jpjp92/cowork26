@@ -108,8 +108,19 @@ export default function FloatingAiButton() {
   const startTop = useRef(0)
   const moved = useRef(false)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const agiStartedRef = useRef(false)
+  // 패널 크기 (vw/vh 기반 초기값, SSR 안전)
+  const [panelW, setPanelW] = useState(1040)
+  const [panelH, setPanelH] = useState(700)
+  const resizing = useRef(false)
+  const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 })
 
-  /** iframe에 페이지 컨텍스트 + 이미지 전송 */
+  // 클라이언트에서만 화면 크기 기반 설정
+  useEffect(() => {
+    setPanelW(Math.round(window.innerWidth  * 0.70))
+    setPanelH(Math.round(window.innerHeight * 0.60))
+  }, [])
+
   const sendPageContext = useCallback(async () => {
     const { context, images } = await collectPageContext()
     iframeRef.current?.contentWindow?.postMessage(
@@ -117,6 +128,24 @@ export default function FloatingAiButton() {
       '*',
     )
   }, [])
+
+  // 패널 리사이즈 핸들러
+  const onResizeDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    resizing.current = true
+    resizeStart.current = { x: e.clientX, y: e.clientY, w: panelW, h: panelH }
+    e.currentTarget.setPointerCapture(e.pointerId)
+    e.stopPropagation()
+  }, [panelW, panelH])
+
+  const onResizeMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizing.current) return
+    const dx = e.clientX - resizeStart.current.x
+    const dy = e.clientY - resizeStart.current.y
+    setPanelW(Math.max(400, resizeStart.current.w + dx))
+    setPanelH(Math.max(300, resizeStart.current.h + dy))
+  }, [])
+
+  const onResizeUp = useCallback(() => { resizing.current = false }, [])
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -161,6 +190,7 @@ export default function FloatingAiButton() {
               if (data?.hud_token) setHudToken(data.hud_token)
               if (data?.mode === 'protocol' && data?.agi_url) {
                 const a = document.createElement('a'); a.href = data.agi_url; a.click()
+                pollClientConnected(data.hud_token ?? '')
               }
             }
           })
@@ -215,10 +245,37 @@ export default function FloatingAiButton() {
     }
   }, [])
 
+  // ── AGI 클라이언트 연결 상태 polling ───────────────────────────────
+  // agi:// 열기 후 서버에 클라이언트 WS 연결 여부를 1초 간격으로 최대 15초 확인.
+  // 연결 확인 → needsInstall 해제 / 15초 초과 → 미설치 패널
+  const pollClientConnected = useCallback((token: string) => {
+    let attempts = 0
+    const MAX = 15
+    const SERVER = process.env.NEXT_PUBLIC_JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777'
+    const timer = setInterval(async () => {
+      attempts++
+      try {
+        const r = await fetch(`${SERVER}/client/connected${token ? '?hud_token=' + encodeURIComponent(token) : ''}`)
+        if (r.ok) {
+          const d = await r.json().catch(() => ({}))
+          if (d?.connected) {
+            clearInterval(timer)
+            setNeedsInstall(false)
+            return
+          }
+        }
+      } catch { /* 서버 일시 불가 → 계속 시도 */ }
+      if (attempts >= MAX) {
+        clearInterval(timer)
+        setNeedsInstall(true) // 15초 후에도 연결 없음 → 미설치
+      }
+    }, 1000)
+  }, [])
+
   // ── 페이지 로드 시 즉시 AGI 백그라운드 실행 ────────────────────
-  // MSI 설치 후 agi:// 프로토콜로 EXE 실행.
-  // 미설치 감지: agi:// 클릭 후 2초 내 브라우저 포커스 이탈 없으면 → 설치 패널 표시.
   useEffect(() => {
+    if (agiStartedRef.current) return
+    agiStartedRef.current = true
     fetch('/api/agi', { method: 'POST' })
       .then(async (res) => {
         if (res.ok) {
@@ -226,17 +283,8 @@ export default function FloatingAiButton() {
           const data = await res.json().catch(() => ({}))
           if (data?.hud_token) setHudToken(data.hud_token)
           if (data?.mode === 'protocol' && data?.agi_url) {
-            let appLaunched = false
-            const onBlur = () => { appLaunched = true }
-            window.addEventListener('blur', onBlur, { once: true })
             const a = document.createElement('a'); a.href = data.agi_url; a.click()
-            setTimeout(() => {
-              window.removeEventListener('blur', onBlur)
-              if (!appLaunched) {
-                // agi:// 핸들러 없음 → MSI 미설치
-                setNeedsInstall(true)
-              }
-            }, 2000)
+            pollClientConnected(data.hud_token ?? '')
           }
         }
       })
@@ -322,8 +370,8 @@ export default function FloatingAiButton() {
         className="fixed right-[140px] z-40 flex flex-col overflow-hidden rounded-[12px] border-2 border-blue-400 bg-black shadow-[0_0_30px_6px_#3b82f660]"
         style={{
           top: Math.max(8, y - 100),
-          width: 1040,
-          height: 800,
+          width: panelW,
+          height: panelH,
           display: panelOpen ? 'flex' : 'none',
         }}
       >
@@ -350,6 +398,18 @@ export default function FloatingAiButton() {
             onLoad={sendPageContext}
           />
         )}
+        {/* 리사이즈 핸들 — 우하단 코너 드래그 */}
+        <div
+          onPointerDown={onResizeDown}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeUp}
+          style={{
+            position: 'absolute', right: 0, bottom: 0,
+            width: 18, height: 18, cursor: 'nwse-resize',
+            background: 'linear-gradient(135deg, transparent 40%, #3b82f6 40%)',
+            borderRadius: '0 0 10px 0',
+          }}
+        />
       </div>
 
       {/* ── 플로팅 버튼 ── */}
