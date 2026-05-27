@@ -447,7 +447,7 @@ export default function DocumentEditor({ content, editable, onChange }: Document
       TableHeader,
       TableCell,
       Placeholder.configure({
-        placeholder: '자료를 붙여넣고, 회의 내용을 정리하고, 함께 편집하세요...',
+        placeholder: '내용을 입력하세요.',
       }),
     ],
     content: resolvedContent,

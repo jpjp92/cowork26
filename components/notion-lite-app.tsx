@@ -907,7 +907,7 @@ export default function NotionLiteApp() {
                           disabled={!inviteEmail.trim() || inviteLoading}
                           className="h-9 rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] disabled:opacity-40"
                         >
-                          {inviteLoading ? '추가 중' : '멤버 추가'}
+                          {inviteLoading ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : '멤버 추가'}
                         </button>
                       </div>
                     </div>
@@ -1092,7 +1092,7 @@ export default function NotionLiteApp() {
                 className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] disabled:opacity-40"
                 title="워크스페이스 이름 저장"
               >
-                {renamingWorkspace ? '…' : '✓'}
+                {renamingWorkspace ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : '✓'}
               </button>
             </div>
           )}
@@ -1119,7 +1119,7 @@ export default function NotionLiteApp() {
               disabled={!activeWorkspaceId || !canEdit || creatingPage}
               className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-[#50504d] text-sm font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
             >
-              {creatingPage ? '...' : '+'}
+              {creatingPage ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : '+'}
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto pr-1 max-md:max-h-56">
