@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '../../../../../lib/supabase-admin'
 import { getUserFromRequest, requireWorkspaceRole } from '../../../_utils/auth'
+import { createApiTiming } from '../../../_utils/timing'
 
 type RouteContext = {
   params: Promise<{ id: string }>
@@ -37,89 +38,103 @@ async function listUsersById() {
 }
 
 export async function GET(request: Request, context: RouteContext) {
-  const { user, response } = await getUserFromRequest(request)
-  if (!user) return response
-
-  const workspaceId = await getWorkspaceId(context)
-  const canRead = await requireWorkspaceRole(workspaceId, user.id, ['owner', 'editor', 'viewer'])
-  if (!canRead) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
-  const { data: members, error } = await supabaseAdmin
-    .from('workspace_members')
-    .select('user_id, role, created_at')
-    .eq('workspace_id', workspaceId)
-    .order('created_at', { ascending: true })
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const timing = createApiTiming('GET /api/workspaces/[id]/members')
+  let memberCount = 0
 
   try {
-    const usersById = await listUsersById()
-    return NextResponse.json(
-      (members ?? []).map(member => ({
-        ...member,
-        email: usersById.get(member.user_id)?.email ?? null,
-      }))
-    )
-  } catch (listError) {
-    return NextResponse.json(
-      { error: listError instanceof Error ? listError.message : 'Failed to load users' },
-      { status: 500 }
-    )
+    const { user, response } = await getUserFromRequest(request, timing)
+    if (!user) return response
+
+    const workspaceId = await getWorkspaceId(context)
+    const canRead = await requireWorkspaceRole(workspaceId, user.id, ['owner', 'editor', 'viewer'], timing)
+    if (!canRead) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const { data: members, error } = await timing.measure('members.select', () => supabaseAdmin
+      .from('workspace_members')
+      .select('user_id, role, created_at')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: true }))
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    memberCount = members?.length ?? 0
+
+    try {
+      const usersById = await timing.measure('auth.admin.listUsers', () => listUsersById())
+      return NextResponse.json(
+        (members ?? []).map(member => ({
+          ...member,
+          email: usersById.get(member.user_id)?.email ?? null,
+        }))
+      )
+    } catch (listError) {
+      return NextResponse.json(
+        { error: listError instanceof Error ? listError.message : 'Failed to load users' },
+        { status: 500 }
+      )
+    }
+  } finally {
+    timing.log({ memberCount })
   }
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  const { user, response } = await getUserFromRequest(request)
-  if (!user) return response
-
-  const workspaceId = await getWorkspaceId(context)
-  const isOwner = await requireWorkspaceRole(workspaceId, user.id, ['owner'])
-  if (!isOwner) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
-  const body = await request.json().catch(() => ({}))
-  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
-  const role: Exclude<WorkspaceRole, 'owner'> = body.role === 'viewer' ? 'viewer' : 'editor'
-
-  if (!email) {
-    return NextResponse.json({ error: 'email is required' }, { status: 400 })
-  }
+  const timing = createApiTiming('POST /api/workspaces/[id]/members')
 
   try {
-    const usersById = await listUsersById()
-    const invitedUser = Array.from(usersById.entries()).find(([, value]) => value.email?.toLowerCase() === email)
+    const { user, response } = await getUserFromRequest(request, timing)
+    if (!user) return response
 
-    if (!invitedUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    const workspaceId = await getWorkspaceId(context)
+    const isOwner = await requireWorkspaceRole(workspaceId, user.id, ['owner'], timing)
+    if (!isOwner) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const body = await timing.measure('request.json', () => request.json().catch(() => ({})))
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    const role: Exclude<WorkspaceRole, 'owner'> = body.role === 'viewer' ? 'viewer' : 'editor'
+
+    if (!email) {
+      return NextResponse.json({ error: 'email is required' }, { status: 400 })
     }
 
-    const [invitedUserId] = invitedUser
+    try {
+      const usersById = await timing.measure('auth.admin.listUsers', () => listUsersById())
+      const invitedUser = Array.from(usersById.entries()).find(([, value]) => value.email?.toLowerCase() === email)
 
-    const { error } = await supabaseAdmin
-      .from('workspace_members')
-      .upsert(
+      if (!invitedUser) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      }
+
+      const [invitedUserId] = invitedUser
+
+      const { error } = await timing.measure('member.upsert', () => supabaseAdmin
+        .from('workspace_members')
+        .upsert(
+          {
+            workspace_id: workspaceId,
+            user_id: invitedUserId,
+            role,
+          },
+          { onConflict: 'workspace_id,user_id' }
+        ))
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+      return NextResponse.json(
         {
           workspace_id: workspaceId,
           user_id: invitedUserId,
+          email,
           role,
         },
-        { onConflict: 'workspace_id,user_id' }
+        { status: 201 }
       )
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-    return NextResponse.json(
-      {
-        workspace_id: workspaceId,
-        user_id: invitedUserId,
-        email,
-        role,
-      },
-      { status: 201 }
-    )
-  } catch (listError) {
-    return NextResponse.json(
-      { error: listError instanceof Error ? listError.message : 'Failed to load users' },
-      { status: 500 }
-    )
+    } catch (listError) {
+      return NextResponse.json(
+        { error: listError instanceof Error ? listError.message : 'Failed to load users' },
+        { status: 500 }
+      )
+    }
+  } finally {
+    timing.log()
   }
 }
