@@ -43,7 +43,8 @@ NEXT_PUBLIC_JJAPVIS_SERVER_URL=...
 ```
 
 배포 환경에서는 `NEXT_PUBLIC_SITE_URL`을 실제 도메인으로 변경합니다.  
-Supabase Authentication → Redirect URLs에도 해당 도메인을 등록해야 합니다.
+Supabase Authentication → Redirect URLs에도 해당 도메인을 등록해야 합니다.  
+현재 dev 환경 기본값: `https://cowork26dev.vercel.app`
 
 `NEXT_PUBLIC_ENABLE_AGI`가 `true`일 때만 플로팅 AGI 버튼을 렌더링합니다. Vercel 배포 환경에서는 Windows EXE 실행이 불가능하고 HTTP iframe이 차단될 수 있으므로 기본값은 `false`로 둡니다.
 
@@ -113,6 +114,7 @@ docs/
     PLAN_20260514.md              # Notion-lite 피벗 및 현재 계획
   history/
     DEV_260526.md                 # 2026-05-26 개발 변경 기록
+    DEV_260527.md                 # 2026-05-27 이메일 인증 개선 · 코드 리뷰 이슈
 ```
 
 ---
@@ -121,6 +123,9 @@ docs/
 
 **인증 · 워크스페이스**
 - 이메일 회원가입 / 로그인 (Supabase Auth)
+- 회원가입 후 이메일 인증 필수 (Supabase Email Confirmations ON)
+- 미인증 상태 로그인 시 한국어 안내 메시지 + 인증 메일 재발송 버튼 표시
+- 인증 메일 리다이렉트 URL은 `NEXT_PUBLIC_SITE_URL` 환경변수로 고정 (localhost 발송 방지)
 - 워크스페이스 생성, 조회, 이름 변경
 - 커스텀 워크스페이스 스위처
 - 워크스페이스 드래그 순서 변경 (사용자별 `workspace_members.order_index` 저장)
@@ -200,7 +205,7 @@ viewer
 - 읽기 전용
 ```
 
-멤버 추가는 초대 링크나 메일 발송이 아니라, 이미 가입된 사용자의 이메일을 찾아 `workspace_members`에 추가하는 방식입니다.
+멤버 추가는 초대 링크나 메일 발송이 아니라, 이미 가입 및 이메일 인증을 완료한 사용자의 이메일을 찾아 `workspace_members`에 추가하는 방식입니다.
 
 ## API
 

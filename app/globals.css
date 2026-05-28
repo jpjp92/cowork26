@@ -51,6 +51,10 @@
   transform: translate(-50%, -50%) rotate(90deg);
 }
 
+.page-tree-scroll::-webkit-scrollbar { width: 4px; }
+.page-tree-scroll::-webkit-scrollbar-track { background: transparent; }
+.page-tree-scroll::-webkit-scrollbar-thumb { background: #4a4a47; border-radius: 4px; }
+
 :root {
   color-scheme: light;
   --background: #777773;

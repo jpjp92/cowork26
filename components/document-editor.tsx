@@ -15,12 +15,22 @@ import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableRow } from '@tiptap/extension-table-row'
 import { createLowlight, common } from 'lowlight'
-import mermaid from 'mermaid'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const lowlight = createLowlight(common)
 
-mermaid.initialize({ startOnLoad: false, theme: 'dark' })
+type MermaidApi = typeof import('mermaid').default
+
+let mermaidPromise: Promise<MermaidApi> | null = null
+
+function loadMermaid() {
+  mermaidPromise ??= import('mermaid').then(module => {
+    module.default.initialize({ startOnLoad: false, theme: 'dark' })
+    return module.default
+  })
+
+  return mermaidPromise
+}
 
 // ── Mermaid block NodeView ─────────────────────────────────────────────────
 
@@ -37,7 +47,8 @@ function MermaidBlockView({ node, updateAttributes, editor }: NodeViewProps) {
     if (!code.trim()) { setSvg(''); setRenderError(''); return }
     let cancelled = false
     const id = `mg${Math.random().toString(36).slice(2, 10)}`
-    mermaid.render(id, code)
+    loadMermaid()
+      .then(mermaid => mermaid.render(id, code))
       .then(({ svg: out }) => { if (!cancelled) { setSvg(out); setRenderError('') } })
       .catch((err: unknown) => {
         if (!cancelled) { setRenderError(err instanceof Error ? err.message : '다이어그램 오류'); setSvg('') }
@@ -447,7 +458,7 @@ export default function DocumentEditor({ content, editable, onChange }: Document
       TableHeader,
       TableCell,
       Placeholder.configure({
-        placeholder: '자료를 붙여넣고, 회의 내용을 정리하고, 함께 편집하세요...',
+        placeholder: '내용을 입력하세요.',
       }),
     ],
     content: resolvedContent,
