@@ -42,7 +42,8 @@ export async function POST(request: Request) {
     }
   } catch { /* body 없음 */ }
 
-  return NextResponse.json({ ok: true, mode: 'protocol', agi_url: 'agi://start' })
+  const token = getMachineHudToken()
+  return NextResponse.json({ ok: true, mode: 'protocol', agi_url: `agi://start?hud_token=${token}`, hud_token: token })
 }
 
 /**
