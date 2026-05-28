@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase-browser'
 const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false })
 const DEBUG_SAVE_FLOW = process.env.NODE_ENV !== 'production'
 const ENABLE_AGI = process.env.NEXT_PUBLIC_ENABLE_AGI === 'true'
+const PAGE_REVALIDATE_INTERVAL_MS = 30_000
 
 function debugSaveFlow(message: string, data?: Record<string, unknown>) {
   if (!DEBUG_SAVE_FLOW) return
@@ -83,7 +84,6 @@ export default function NotionLiteApp() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [loadingPageId, setLoadingPageId] = useState('')
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
@@ -98,7 +98,7 @@ export default function NotionLiteApp() {
   const workspaceDragClickBlockedRef = useRef(false)
   const draggedIdRef = useRef<string | null>(null)
   const activePageIdRef = useRef(activePageId)
-  const loadingPageIdRef = useRef('')
+  const pageFetchedAtRef = useRef(new Map<string, number>())
   const savingResetTimerRef = useRef<number | null>(null)
   const titleFocusValueRef = useRef(new Map<string, string>())
   const [dragOver, setDragOver] = useState<{ id: string; position: 'above' | 'below' } | null>(null)
@@ -109,7 +109,6 @@ export default function NotionLiteApp() {
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
   const activePage = pages.find(page => page.id === activePageId) ?? null
   const activePageContent = activePage ? pendingContent.current.get(activePage.id) ?? activePage.content : null
-  const activePageLoading = Boolean(activePage && loadingPageId === activePage.id)
   const canEdit = activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'editor'
   const canManageMembers = activeWorkspace?.role === 'owner'
 
@@ -168,8 +167,6 @@ export default function NotionLiteApp() {
 
   const selectActivePage = useCallback((pageId: string) => {
     activePageIdRef.current = pageId
-    loadingPageIdRef.current = pageId
-    setLoadingPageId(pageId)
     if (savingResetTimerRef.current) {
       window.clearTimeout(savingResetTimerRef.current)
       savingResetTimerRef.current = null
@@ -209,6 +206,10 @@ export default function NotionLiteApp() {
     if (!response.ok) throw await readError(response, '페이지를 불러오지 못했습니다.')
 
     const data = await response.json() as PageRecord[]
+    const fetchedAt = Date.now()
+    for (const page of data) {
+      pageFetchedAtRef.current.set(page.id, fetchedAt)
+    }
     setPages(data)
     setActivePageId(current => {
       const nextPageId = data.some(page => page.id === current) ? current : data[0]?.id || ''
@@ -282,8 +283,9 @@ export default function NotionLiteApp() {
 
   useEffect(() => {
     if (!activePageId || !accessToken) return
-    loadingPageIdRef.current = activePageId
-    setLoadingPageId(activePageId)
+    const lastFetchedAt = pageFetchedAtRef.current.get(activePageId) ?? 0
+    if (Date.now() - lastFetchedAt < PAGE_REVALIDATE_INTERVAL_MS) return
+
     const abortController = new AbortController()
 
     // 페이지 전환 시 최신 content 서버에서 fetch (다른 사용자 수정 반영)
@@ -315,14 +317,9 @@ export default function NotionLiteApp() {
           pendingContent.current.delete(fresh.id)
           setPages(prev => prev.map(p => p.id === fresh.id ? fresh : p))
         }
+        pageFetchedAtRef.current.set(fresh.id, Date.now())
       })
       .catch(() => { /* 조용히 무시 */ })
-      .finally(() => {
-        if (activePageIdRef.current === activePageId) {
-          loadingPageIdRef.current = ''
-          setLoadingPageId('')
-        }
-      })
 
     return () => abortController.abort()
   }, [activePageId, accessToken, authHeaders, showSavingStatus])
@@ -411,6 +408,7 @@ export default function NotionLiteApp() {
       setWorkspaceName('')
       setWorkspaceMenuOpen(false)
       if (data.page) {
+        pageFetchedAtRef.current.set(data.page.id, Date.now())
         setPages([data.page])
         selectActivePage(data.page.id)
       }
@@ -487,6 +485,7 @@ export default function NotionLiteApp() {
       }
 
       const page = await response.json() as PageRecord
+      pageFetchedAtRef.current.set(page.id, Date.now())
       setPages(previous => [...previous, page])
       selectActivePage(page.id)
       setNewPageTitle('')
@@ -533,7 +532,6 @@ export default function NotionLiteApp() {
       activePageId: activePageIdRef.current,
       isContentSave,
       isTitleSave,
-      loadingPageId: loadingPageIdRef.current,
       contentBlocks: Array.isArray(patch.content?.content) ? patch.content.content.length : null,
     })
     if (isContentSave) contentSaveInFlight.current.add(pageId)
@@ -551,6 +549,7 @@ export default function NotionLiteApp() {
       }
 
       const page = await response.json() as PageRecord
+      pageFetchedAtRef.current.set(page.id, Date.now())
       debugSaveFlow('patch success', {
         pageId: page.id,
         activePageId: activePageIdRef.current,
@@ -585,13 +584,6 @@ export default function NotionLiteApp() {
 
   const scheduleContentSave = (pageId: string, content: Record<string, unknown>) => {
     if (!canEdit) return
-    if (loadingPageIdRef.current === pageId) {
-      debugSaveFlow('schedule ignored while loading', {
-        pageId,
-        loadingPageId: loadingPageIdRef.current,
-      })
-      return
-    }
     debugSaveFlow('schedule content save', {
       pageId,
       activePageId: activePageIdRef.current,
@@ -656,6 +648,7 @@ export default function NotionLiteApp() {
 
     for (const deletedId of deletedIds) {
       pendingContent.current.delete(deletedId)
+      pageFetchedAtRef.current.delete(deletedId)
       const saveTimer = saveTimers.current.get(deletedId)
       if (saveTimer) {
         window.clearTimeout(saveTimer)
@@ -1227,7 +1220,7 @@ export default function NotionLiteApp() {
                   <input
                     className="min-w-[12rem] flex-1 bg-transparent text-2xl font-black leading-tight tracking-normal text-[#1d1c16] outline-none placeholder:text-[#8a867f] max-sm:text-xl"
                     value={activePage.title}
-                    disabled={!canEdit || activePageLoading}
+                    disabled={!canEdit}
                     placeholder="Untitled"
                     onChange={event => {
                       const title = event.target.value
@@ -1259,9 +1252,8 @@ export default function NotionLiteApp() {
               </div>
             </div>
             <DocumentEditor
-              key={activePage.id}
               content={activePageContent}
-              editable={Boolean(canEdit && !activePageLoading)}
+              editable={Boolean(canEdit)}
               onChange={content => scheduleContentSave(activePage.id, content)}
             />
           </article>
