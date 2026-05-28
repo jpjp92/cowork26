@@ -299,8 +299,18 @@ export default function FloatingAiButton() {
       try {
         const rr = await fetch('/api/agi/running', { cache: 'no-store' })
         if (rr.ok && (await rr.json().catch(() => ({}))).running) {
+          // 이미 실행 중: agi:// 재실행은 안 하지만 hud_token은 받아와야 함
+          try {
+            const rt = await fetch('/api/agi', { method: 'POST', cache: 'no-store' })
+            if (rt.ok) {
+              const td = await rt.json().catch(() => ({}))
+              if (td?.hud_token) setHudToken(td.hud_token)
+              pollClientConnected(td.hud_token ?? '')
+            } else {
+              pollClientConnected('')
+            }
+          } catch { pollClientConnected('') }
           setLaunched(true)
-          pollClientConnected('')
           return
         }
       } catch { /* 무시 */ }
