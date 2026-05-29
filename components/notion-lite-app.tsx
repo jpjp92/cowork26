@@ -4,12 +4,11 @@ import { Session } from '@supabase/supabase-js'
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AuthPanel from './auth-panel'
-import FloatingAiButton from './floating-ai-button'
+import FileSharePanel from './file-share-panel'
 import { supabase } from '../lib/supabase-browser'
 
 const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false })
 const DEBUG_SAVE_FLOW = process.env.NODE_ENV !== 'production'
-const ENABLE_AGI = process.env.NEXT_PUBLIC_ENABLE_AGI === 'true'
 const PAGE_REVALIDATE_INTERVAL_MS = 30_000
 
 function debugSaveFlow(message: string, data?: Record<string, unknown>) {
@@ -138,6 +137,18 @@ export default function NotionLiteApp() {
     Authorization: `Bearer ${accessToken}`,
     'Content-Type': 'application/json',
   }), [accessToken])
+
+  // AGI Client 자동 실행 (코워크 최초 로드 시 1회, 이미 실행 중이면 skip)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const _launched = sessionStorage.getItem('agi_launched')
+    if (_launched) return
+    sessionStorage.setItem('agi_launched', '1')
+    fetch('/api/agi', { method: 'POST' })
+      .then(r => r.json())
+      .then(d => { if (d.ok && d.agi_url) { window.location.href = d.agi_url } })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     activePageIdRef.current = activePageId
@@ -1280,7 +1291,7 @@ export default function NotionLiteApp() {
         )}
         </section>
       </div>
-      {ENABLE_AGI && <FloatingAiButton />}
+      <FileSharePanel />
     </main>
   )
 }
