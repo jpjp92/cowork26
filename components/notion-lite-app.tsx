@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AuthPanel from './auth-panel'
 import FloatingAiButton from './floating-ai-button'
 import { supabase } from '../lib/supabase-browser'
+import { tiptapToMarkdown } from '../lib/tiptap-to-markdown'
 
 const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false })
 const DEBUG_SAVE_FLOW = process.env.NODE_ENV !== 'production'
@@ -823,8 +824,8 @@ export default function NotionLiteApp() {
             </button>
 
             {/* 액션 버튼 — hover 시 표시 */}
-            {canEdit && (
-              <div className="flex shrink-0 gap-1 pl-1 opacity-0 transition-opacity group-hover/page-row:opacity-100 group-focus-within/page-row:opacity-100">
+            <div className="flex shrink-0 gap-1 pl-1 opacity-0 transition-opacity group-hover/page-row:opacity-100 group-focus-within/page-row:opacity-100">
+              {canEdit && (
                 <button
                   onClick={() => createPage(page.id)}
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:bg-[#50504d] hover:text-white"
@@ -832,6 +833,8 @@ export default function NotionLiteApp() {
                 >
                   +
                 </button>
+              )}
+              {canEdit && (
                 <button
                   onClick={() => deletePage(page.id)}
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:text-red-300"
@@ -839,8 +842,25 @@ export default function NotionLiteApp() {
                 >
                   ×
                 </button>
-              </div>
-            )}
+              )}
+              <button
+                onClick={() => {
+                  const content = pendingContent.current.get(page.id) ?? page.content
+                  const md = tiptapToMarkdown(page.title, content)
+                  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `${page.title || 'untitled'}.md`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:bg-[#50504d] hover:text-white"
+                title="마크다운으로 다운로드"
+              >
+                ↓
+              </button>
+            </div>
           </div>
 
           {dragOver?.id === page.id && dragOver.position === 'below' && (

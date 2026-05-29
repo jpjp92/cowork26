@@ -7,3 +7,4 @@ ref/
 .vercel
 AGI-client.exe
 agi-client.log
+*.tsbuildinfo
