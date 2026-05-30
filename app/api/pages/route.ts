@@ -150,7 +150,7 @@ export async function PATCH(request: Request) {
       .from('pages')
       .update(patch)
       .eq('id', body.id)
-      .select('id, workspace_id, parent_id, title, order_index, content, created_by, updated_by, created_at, updated_at')
+      .select('id, workspace_id, parent_id, title, order_index, content, files, created_by, updated_by, created_at, updated_at')
       .single())
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
