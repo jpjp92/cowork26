@@ -4,12 +4,10 @@ import { FormEvent, useState } from 'react'
 import { supabase } from '../lib/supabase-browser'
 
 function getAuthRedirectUrl() {
-  if (typeof window !== 'undefined') {
-    return window.location.origin
-  }
-
-  return process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cowork26.vercel.app'
+  return process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cowork26dev.vercel.app'
 }
+
+const EMAIL_NOT_CONFIRMED = 'Email not confirmed'
 
 export default function AuthPanel() {
   const [mode, setMode] = useState<'login' | 'signup'>('login')
@@ -19,11 +17,38 @@ export default function AuthPanel() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [showResend, setShowResend] = useState(false)
+
+  const handleResend = async () => {
+    setResendLoading(true)
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: getAuthRedirectUrl() },
+    })
+    setResendLoading(false)
+    if (resendError) {
+      setError(resendError.message)
+    } else {
+      setShowResend(false)
+      setError('')
+      setMessage('인증 메일을 다시 보냈습니다. 받은 편지함을 확인해주세요.')
+    }
+  }
+
+  const switchMode = (next: 'login' | 'signup') => {
+    setMode(next)
+    setMessage('')
+    setError('')
+    setShowResend(false)
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setMessage('')
     setError('')
+    setShowResend(false)
     setLoading(true)
 
     try {
@@ -32,11 +57,18 @@ export default function AuthPanel() {
           email,
           password,
         })
-        if (signInError) setError(signInError.message)
+        if (signInError) {
+          if (signInError.message === EMAIL_NOT_CONFIRMED) {
+            setError('이메일 인증이 완료되지 않았습니다. 받은 편지함을 확인해주세요.')
+            setShowResend(true)
+          } else {
+            setError(signInError.message)
+          }
+        }
         return
       }
 
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -50,13 +82,9 @@ export default function AuthPanel() {
         return
       }
 
-      if (data.session) {
-        setMessage('회원가입이 완료되었습니다.')
-      } else {
-        setMode('login')
-        setPassword('')
-        setMessage('가입 확인 메일을 보냈습니다. 이메일 인증 후 로그인해주세요.')
-      }
+      setPassword('')
+      switchMode('login')
+      setMessage('가입 확인 메일을 보냈습니다. 이메일 인증 후 로그인해주세요.')
     } finally {
       setLoading(false)
     }
@@ -109,9 +137,19 @@ export default function AuthPanel() {
           </p>
         )}
         {error && (
-          <p className="mt-4 rounded-[8px] border-2 border-black bg-red-300 px-3 py-2 text-sm font-bold text-black">
-            {error}
-          </p>
+          <div className="mt-4 rounded-[8px] border-2 border-black bg-red-300 px-3 py-2 text-sm font-bold text-black">
+            <p>{error}</p>
+            {showResend && (
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendLoading}
+                className="mt-2 h-8 w-full rounded-[8px] border border-black bg-white px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 disabled:opacity-50"
+              >
+                {resendLoading ? '발송 중...' : '인증 메일 재발송'}
+              </button>
+            )}
+          </div>
         )}
 
         <button
@@ -127,11 +165,7 @@ export default function AuthPanel() {
           <button
             type="button"
             className="font-black text-[#baf7c8] underline decoration-2 underline-offset-4"
-            onClick={() => {
-              setMode(mode === 'login' ? 'signup' : 'login')
-              setMessage('')
-              setError('')
-            }}
+            onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}
           >
             {mode === 'login' ? '회원가입' : '로그인'}
           </button>

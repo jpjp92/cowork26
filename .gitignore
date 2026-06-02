@@ -5,4 +5,6 @@ dist
 ref/
 .env.local
 .vercel
-
+AGI-client.exe
+agi-client.log
+*.tsbuildinfo
