@@ -4,7 +4,14 @@ import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const AGI_PRIMARY_URL = process.env.NEXT_PUBLIC_JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777'
-const AGI_FALLBACK_URL = 'http://49.142.52.133:1777'
+
+function getMessageTargetOrigin(url: string) {
+  try {
+    return new URL(url).origin
+  } catch {
+    return 'http://49.142.52.133:1777'
+  }
+}
 
 /** SVG 엘리먼트 → canvas → base64 PNG (Mermaid 다이어그램 캡처용) */
 async function svgToBase64Png(svgEl: SVGElement): Promise<string | null> {
@@ -92,6 +99,7 @@ export default function FloatingAiButton() {
   const [launched, setLaunched] = useState(false)
   const [launching, setLaunching] = useState(false)
   const [agiBaseUrl] = useState(AGI_PRIMARY_URL)
+  const [messageTargetOrigin] = useState(() => getMessageTargetOrigin(AGI_PRIMARY_URL))
   // ── exe 설치 관련 상태 ──────────────────────────────────────────────
   const [needsInstall, setNeedsInstall] = useState(false)
   const [installing, setInstalling] = useState(false)
@@ -112,9 +120,9 @@ export default function FloatingAiButton() {
     const { context, images } = await collectPageContext()
     iframeRef.current?.contentWindow?.postMessage(
       { type: 'page_context', context, images },
-      '*',
+      messageTargetOrigin,
     )
-  }, [])
+  }, [messageTargetOrigin])
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -152,7 +160,7 @@ export default function FloatingAiButton() {
       if (!launched) {
         setLaunching(true)
         fetch('/api/agi', { method: 'POST' })
-          .then(() => setLaunched(true))
+          .then(res => { if (res.ok) setLaunched(true) })
           .catch(() => {})
           .finally(() => setLaunching(false))
       }

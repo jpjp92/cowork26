@@ -7,6 +7,7 @@ import os from 'os'
 
 // 짭비스 AGI 서버 주소 (환경변수 없으면 기본 서버)
 const SERVER_URL = process.env.JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777'
+const ENABLE_AGI = process.env.NEXT_PUBLIC_ENABLE_AGI === 'true'
 
 // PID 파일 경로: Next.js 서버 재시작 후에도 직전 EXE 프로세스를 kill할 수 있도록 OS 임시폴더에 저장
 const PID_FILE = path.join(os.tmpdir(), 'cowork26-agi.pid')
@@ -40,6 +41,10 @@ function isProcessAlive(pid: number): boolean {
 // 모듈 레벨 PID 캐시: API 요청마다 파일 읽기 생략 (핫패스용)
 let agiPid: number | null = readPidFile()
 
+function disabledResponse() {
+  return NextResponse.json({ error: 'disabled' }, { status: 404 })
+}
+
 /**
  * POST /api/agi
  * - 일반 호출: AGI-client.exe 백그라운드 실행 (이미 실행 중이면 재사용)
@@ -47,6 +52,8 @@ let agiPid: number | null = readPidFile()
  * - Windows 아닌 환경(Vercel/Linux): spawn 불가 → ok만 반환 (유저가 직접 EXE 실행)
  */
 export async function POST(request: Request) {
+  if (!ENABLE_AGI) return disabledResponse()
+
   // sendBeacon은 DELETE 메서드를 지원 안 해서 body로 구분
   try {
     const body = await request.json().catch(() => ({})) as Record<string, unknown>
@@ -101,6 +108,8 @@ export async function POST(request: Request) {
  * 페이지 언로드 시 fetch keepalive로 호출 → AGI-client.exe 프로세스 kill
  */
 export async function DELETE() {
+  if (!ENABLE_AGI) return disabledResponse()
+
   const pid = agiPid ?? readPidFile()
   if (pid !== null) {
     try { kill(pid) } catch { /* 이미 종료됐거나 없는 PID */ }
@@ -117,6 +126,8 @@ export async function DELETE() {
  * Vercel(Linux)에서는 쓰기 불가이므로 not_supported 반환.
  */
 export async function GET() {
+  if (!ENABLE_AGI) return disabledResponse()
+
   if (process.platform !== 'win32') {
     return NextResponse.json({ error: 'not_supported' }, { status: 400 })
   }

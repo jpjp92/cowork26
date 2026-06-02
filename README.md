@@ -42,8 +42,8 @@ JJAPVIS_SERVER_URL=...
 NEXT_PUBLIC_JJAPVIS_SERVER_URL=...
 ```
 
-배포 환경에서는 `NEXT_PUBLIC_SITE_URL`을 실제 도메인으로 변경합니다.  
-Supabase Authentication → Redirect URLs에도 해당 도메인을 등록해야 합니다.  
+배포 환경에서는 `NEXT_PUBLIC_SITE_URL`을 실제 도메인으로 변경합니다.
+Supabase Authentication → Redirect URLs에도 해당 도메인을 등록해야 합니다.
 현재 dev 환경 기본값: `https://cowork26dev.vercel.app`
 
 `NEXT_PUBLIC_ENABLE_AGI`가 `true`일 때만 플로팅 AGI 버튼을 렌더링합니다. Vercel 배포 환경에서는 Windows EXE 실행이 불가능하고 HTTP iframe이 차단될 수 있으므로 기본값은 `false`로 둡니다.
