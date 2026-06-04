@@ -102,7 +102,8 @@ export default function NotionLiteApp() {
   const [dragOver, setDragOver] = useState<{ id: string; position: 'above' | 'below' } | null>(null)
   const [workspaceDragOver, setWorkspaceDragOver] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
   const [collapsedPages, setCollapsedPages] = useState<Set<string>>(new Set())
-
+  const [showAgiPrompt, setShowAgiPrompt] = useState(false)
+  const [agiDownloadUrl, setAgiDownloadUrl] = useState('')
   const accessToken = session?.access_token
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
   const activePage = pages.find(page => page.id === activePageId) ?? null
@@ -137,15 +138,39 @@ export default function NotionLiteApp() {
     'Content-Type': 'application/json',
   }), [accessToken])
 
-  // AGI Client 자동 실행 (코워크 최초 로드 시 1회, 이미 실행 중이면 skip)
+  // AGI Client 연결 시도 및 프롬프트 노출
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const _launched = sessionStorage.getItem('agi_launched')
-    if (_launched) return
-    sessionStorage.setItem('agi_launched', '1')
-    fetch('/api/agi', { method: 'POST' })
+    if (process.env.NEXT_PUBLIC_ENABLE_AGI === 'false') return
+
+    let token = localStorage.getItem('agi_hud_token')
+    if (!token) {
+      token = crypto.randomUUID()
+      localStorage.setItem('agi_hud_token', token)
+    }
+
+    fetch('/api/agi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hud_token: token })
+    })
       .then(r => r.json())
-      .then(d => { if (d.ok && d.agi_url) { window.location.href = d.agi_url } })
+      .then(d => {
+        if (d.ok && d.agi_url) {
+          fetch('/api/agi').then(r => r.json()).then(gd => {
+            if (gd.ok) setAgiDownloadUrl(gd.download_url)
+          })
+
+          const _launched = sessionStorage.getItem('agi_launched')
+          if (!_launched) {
+            sessionStorage.setItem('agi_launched', '1')
+            window.location.href = d.agi_url
+          }
+
+          // 앱 미설치 사용자 안내 모달
+          setTimeout(() => setShowAgiPrompt(true), 3000)
+        }
+      })
       .catch(() => {})
   }, [])
 
@@ -1290,6 +1315,25 @@ export default function NotionLiteApp() {
         )}
         </section>
       </div>
+      {showAgiPrompt && (
+        <div className="fixed bottom-6 right-6 z-50 flex w-80 flex-col gap-3 rounded-[8px] border-[2px] border-black bg-white p-5 shadow-[6px_6px_0_#000]">
+          <div className="flex items-center justify-between">
+            <h3 className="font-black text-black">AGI 짭비스 대기중</h3>
+            <button onClick={() => setShowAgiPrompt(false)} className="text-black hover:opacity-70 transition-opacity">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <p className="text-sm font-medium text-gray-700">
+            앱이 실행되지 않았나요? 앱이 없다면 아래에서 다운로드하여 설치해주세요.
+          </p>
+          <div className="mt-1 flex gap-2">
+            <a href={`agi://start?hud_token=${typeof window !== 'undefined' ? localStorage.getItem('agi_hud_token') || '' : ''}`} className="flex-1 rounded-[4px] border-[2px] border-black bg-[#fde68a] px-3 py-2 text-center text-xs font-black text-black hover:bg-[#fcd34d] transition-colors shadow-[2px_2px_0_#000] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000] active:translate-y-[2px] active:shadow-none">앱 수동 실행</a>
+            {agiDownloadUrl && (
+              <a href={agiDownloadUrl} className="flex-1 rounded-[4px] border-[2px] border-black bg-[#baf7c8] px-3 py-2 text-center text-xs font-black text-black hover:bg-[#86efac] transition-colors shadow-[2px_2px_0_#000] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000] active:translate-y-[2px] active:shadow-none">MSI 다운로드</a>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   )
 }

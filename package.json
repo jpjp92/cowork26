@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/start-jjapvis.mjs && next dev",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "review:workspace-dropdown": "node scripts/workspace-dropdown-review.mjs",
