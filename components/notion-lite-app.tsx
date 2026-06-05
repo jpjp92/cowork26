@@ -156,18 +156,31 @@ export default function NotionLiteApp() {
     })
       .then(r => r.json())
       .then(d => {
-        if (d.ok && d.agi_url) {
-          fetch('/api/agi').then(r => r.json()).then(gd => {
-            if (gd.ok) setAgiDownloadUrl(gd.download_url)
-          })
-
-          const _launched = sessionStorage.getItem('agi_launched')
-          if (!_launched) {
-            sessionStorage.setItem('agi_launched', '1')
-            window.location.href = d.agi_url
+        if (d.ok) {
+          if (d.status === 'already_running') {
+            console.log('[AGI Client] 이미 앱이 실행 중입니다.')
+          } else if (d.status === 'needs_launch') {
+            console.log('[AGI Client] 설치된 앱을 실행합니다.')
+            const _launched = sessionStorage.getItem('agi_launched')
+            if (!_launched && d.agi_url) {
+              sessionStorage.setItem('agi_launched', '1')
+              window.location.href = d.agi_url
+            }
           }
-
-          // 앱 미설치 사용자 안내 모달
+        } else {
+          // 서버에서 exe를 못 찾았거나 Vercel 배포 상태인 경우
+          if (d.download_url) setAgiDownloadUrl(d.download_url)
+          
+          if (d.agi_url) {
+            const _launched = sessionStorage.getItem('agi_launched')
+            if (!_launched) {
+              sessionStorage.setItem('agi_launched', '1')
+              // 커스텀 프로토콜로 실행 시도
+              window.location.href = d.agi_url
+            }
+          }
+          
+          // 앱 미설치 안내 모달 띄우기
           setTimeout(() => setShowAgiPrompt(true), 3000)
         }
       })
