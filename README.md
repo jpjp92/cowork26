@@ -60,10 +60,12 @@ supabase/migrations/002_notion_lite.sql
 supabase/migrations/003_workspace_member_order.sql
 ```
 
-핵심 테이블: `workspaces` · `workspace_members` · `pages`  
+핵심 테이블: `workspaces` · `workspace_members` · `pages` · `page_assets`  
 권한 검증은 API route에서 service role 클라이언트로 처리합니다.
 
 `003_workspace_member_order.sql`은 `workspace_members.order_index`를 추가합니다. 이 값은 사용자별 워크스페이스 목록 정렬 순서를 저장합니다.
+
+이미지 붙여넣기 기능을 사용하려면 Supabase Storage에 public bucket `page_assets`를 만들고, 이미지 메타데이터용 `page_assets` 테이블을 생성합니다. 실행 SQL과 세부 정책은 `docs/history/DEV_260615.md`에 기록되어 있습니다.
 
 ---
 
@@ -73,9 +75,9 @@ supabase/migrations/003_workspace_member_order.sql
 |------|--------|
 | 프레임워크 | Next.js 16, React 19, TypeScript |
 | 스타일 | Tailwind CSS |
-| 에디터 | Tiptap, @tiptap/extension-table, @tiptap/extension-code-block-lowlight |
+| 에디터 | Tiptap, @tiptap/extension-table, @tiptap/extension-code-block-lowlight, @tiptap/extension-image |
 | 하이라이팅 | lowlight (common — 36개 언어, VS Code Dark+ 테마) |
-| 백엔드 | Supabase Auth, Supabase Postgres |
+| 백엔드 | Supabase Auth, Supabase Postgres, Supabase Storage |
 | 미래 협업 | Yjs, Hocuspocus (설치만, 미연결) |
 
 ---
@@ -89,6 +91,8 @@ app/
   globals.css                     # 전역 스타일 (ProseMirror, hljs 토큰 등)
   api/
     _utils/auth.ts                # JWT 검증 · 워크스페이스 권한 헬퍼
+    assets/route.ts               # 이미지 업로드
+    assets/clone/route.ts         # 이미지 asset 복제
     pages/route.ts                # GET(목록·단건) / POST / PATCH / DELETE
     workspaces/route.ts           # GET / POST / PATCH
     workspaces/[id]/members/      # GET / POST
@@ -115,6 +119,10 @@ docs/
   history/
     DEV_260526.md                 # 2026-05-26 개발 변경 기록
     DEV_260527.md                 # 2026-05-27 이메일 인증 개선 · 코드 리뷰 이슈
+    DEV_260528.md                 # 2026-05-28 페이지 전환 성능 개선
+    DEV_260529.md                 # 2026-05-29 Markdown 다운로드
+    DEV_260602.md                 # 2026-06-02 AGI 비활성 가드 및 검증
+    DEV_260615.md                 # 2026-06-15 이미지 붙여넣기 · 페이지 이동 · 사이드바 리사이즈
 ```
 
 ---
@@ -135,12 +143,15 @@ docs/
 **페이지**
 - `parent_id` 기반 중첩 페이지 트리
 - 페이지 생성, 삭제
-- 사이드바 드래그로 페이지 순서 변경 (같은 레벨 내 형제끼리)
+- 사이드바 드래그로 페이지 순서 및 계층 변경
+  - 대상 행 위/아래 영역: 같은 부모 아래 순서 변경
+  - 대상 행 가운데 영역: 해당 페이지의 하위 페이지로 이동
 - 사이드바(워크스페이스 + 페이지 목록) 스크롤 시 고정 — 에디터 영역만 스크롤됨
+- 사이드바 폭 좌우 드래그 조절 (`240px~520px`, localStorage 저장)
 - 페이지 전환 시 서버에서 최신 content 자동 fetch → "불러옴" 배지 표시 (노란색)
 - 서버 데이터 로드는 저장 트리거 없음 — 사용자 편집 시에만 저장 (Tiptap `emitUpdate: false`)
-- 페이지별 에디터 인스턴스 분리 (`key={page.id}`)로 페이지 전환 중 이전 문서 상태가 섞이지 않도록 방지
-- 페이지 로딩 중에는 에디터 저장 트리거를 무시하고, 서버 최신본 반영 시 stale pending content를 정리
+- 페이지 전환 시 에디터 인스턴스를 재마운트하지 않고 content만 교체해 전환 비용 완화
+- 페이지 fresh fetch는 30초 TTL과 background revalidate를 사용하며, 미저장 local content가 있으면 서버 응답으로 덮어쓰지 않음
 
 **에디터**
 - 문서 제목 수정 (blur 저장)
@@ -150,12 +161,20 @@ docs/
 - 개발 환경에서는 `[save-flow]` 콘솔 로그로 page load, editor update, autosave schedule, PATCH start/success 흐름을 확인 가능
 - Tiptap 표: 열 너비 조절, 행 높이 드래그 조절
 - 목록 `Tab` / `Shift+Tab` 들여쓰기 조절
+- 클립보드 이미지 붙여넣기
+  - 이미지는 `pages.content`에 base64로 저장하지 않고 Supabase Storage `page_assets` bucket에 업로드
+  - TipTap 문서에는 이미지 URL과 `assetId`, `storagePath` 메타데이터만 저장
+  - 이미지 hover 시 `Copy` 버튼 표시
+  - 앱 내부 이미지 복사 후 다른 페이지/워크스페이스에 붙여넣으면 `/api/assets/clone`으로 대상 페이지 전용 asset을 복제
+- Markdown 다운로드 시 image node는 `![alt](url)` 형식으로 export
 
 **붙여넣기 변환**
 - 마크다운 파이프 표 → 편집 가능한 표 (divider 행 유무 무관)
   - 셀 인라인 파싱: `**bold**` `__bold__` `*italic*` `_italic_` `~~strike~~` `` `code` `` 링크
 - 펜스 코드 블록(` ```lang ``` `) → 코드 블록 노드 (syntax highlighting 적용)
 - ` ```mermaid ``` ` → Mermaid 다이어그램 노드 (바로 렌더링)
+- 클립보드 `image/*` → 이미지 업로드 후 image node 삽입
+- 앱 내부 이미지 HTML → 대상 페이지로 asset 복제 후 image node 삽입
 
 **코드 블록**
 - lowlight 기반 syntax highlighting (36개 언어, VS Code Dark+ 테마)
@@ -173,15 +192,15 @@ docs/
 
 - 실시간 동시 편집 미연결 (페이지 전환 시 fetch, 헤더 새로고침 버튼으로 수동 동기화)
 - 본문 저장은 문서 JSON 전체 덮어쓰기 방식이므로, 여러 사용자가 같은 페이지를 동시에 편집하면 마지막 저장이 이전 저장을 덮을 수 있음
-- 페이지를 다른 부모로 이동 (트리 구조 변경) 불가
 - 멤버 제거 / 역할 변경 UI 없음
 - 초대 메일 발송 없음
-- 파일 업로드 없음
+- Markdown 다운로드는 이미지 파일을 묶지 않고 public URL 참조로 내보냄
 
 ## 추가 개발 예정
 
 - **충돌 감지 / 버전 관리**: `updated_at` 또는 별도 revision 값을 이용해 오래된 클라이언트의 전체 덮어쓰기 저장을 차단
 - **되돌리기(Undo) 히스토리**: 동시 작업 중 내용이 꼬일 경우 이전 상태로 복원 — 페이지별 버전 스냅샷 또는 Tiptap History 기반 서버 측 undo 스택 고려
+- **ZIP export**: Markdown과 이미지 파일을 함께 묶어 오프라인 백업용으로 다운로드
 
 10. 표 열 너비는 기본 Tiptap 리사이즈로 조절합니다.
 11. 표 행 높이는 행 하단 경계 드래그로 조절합니다.
@@ -219,6 +238,9 @@ POST   /api/pages
 PATCH  /api/pages
 DELETE /api/pages?id=...
 
+POST   /api/assets
+POST   /api/assets/clone
+
 GET    /api/workspaces/:id/members
 POST   /api/workspaces/:id/members
 ```
@@ -240,7 +262,9 @@ POST   /api/workspaces/:id/members
 - 워크스페이스 선택은 네이티브 select가 아니라 커스텀 드롭다운입니다.
 - 워크스페이스 역할 상태는 `owner` = `●`, `editor` = `◆`, `viewer` = `○`로 표시합니다.
 - 워크스페이스 드롭다운에서 항목을 드래그하면 사용자별 표시 순서가 저장됩니다.
+- 좌측 사이드바 오른쪽 경계를 드래그해 폭을 조절할 수 있습니다.
 - 페이지 목록의 긴 제목은 버튼 안에서 `...`으로 말줄임 처리됩니다.
+- 페이지 목록에서 항목을 드래그하면 순서 또는 부모 페이지를 변경할 수 있습니다.
 - 페이지 목록의 하위 페이지 추가 / 삭제 버튼은 해당 행 hover 또는 focus 때만 보입니다.
 - 페이지 헤더는 `워크스페이스 / 상위 페이지 / 현재 페이지` 형태의 경로형 제목입니다.
 - 문서 저장 상태는 페이지 헤더 우측에 고정 폭 배지로 표시합니다.
@@ -253,9 +277,9 @@ POST   /api/workspaces/:id/members
 - Yjs + Hocuspocus 실시간 협업 연결
 - 브라우저 포커스 복귀 시 자동 동기화
 - 멤버 제거 / 역할 변경
-- 페이지 이동
 - 페이지 snapshot / history
 - 초대 메일 또는 공유 링크
+- 이미지 포함 ZIP export
 
 ## 문서
 
