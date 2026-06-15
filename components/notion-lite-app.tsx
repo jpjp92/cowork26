@@ -84,9 +84,56 @@ function getRoleBadgeClass(role: string) {
   return 'bg-[#c4b5fd] text-black'
 }
 
+function PageTreeSkeleton() {
+  return (
+    <div className="grid gap-2">
+      {[0, 1, 2, 3, 4].map(index => (
+        <div
+          key={index}
+          className="h-8 animate-pulse rounded-[4px] border border-black bg-[#50504d]"
+          style={{ marginLeft: index > 1 ? 20 : 0, width: `${92 - index * 7}%` }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function DocumentSkeleton() {
+  return (
+    <article className="mx-auto my-8 w-full max-w-4xl flex-1 rounded-[8px] border border-black bg-[#fef9ef] px-10 py-12 shadow-[6px_6px_0_#000] max-sm:mx-4 max-sm:px-5 max-sm:py-8">
+      <div className="mb-4 border-b border-black pb-3">
+        <div className="h-8 w-2/3 animate-pulse rounded-[4px] bg-[#d8d0c0]" />
+      </div>
+      <div className="space-y-4">
+        <div className="h-5 w-full animate-pulse rounded-[4px] bg-[#ded7c9]" />
+        <div className="h-5 w-11/12 animate-pulse rounded-[4px] bg-[#ded7c9]" />
+        <div className="h-5 w-4/5 animate-pulse rounded-[4px] bg-[#ded7c9]" />
+        <div className="mt-8 h-40 w-full animate-pulse rounded-[8px] border border-black bg-[#ece4d5]" />
+        <div className="h-5 w-5/6 animate-pulse rounded-[4px] bg-[#ded7c9]" />
+        <div className="h-5 w-2/3 animate-pulse rounded-[4px] bg-[#ded7c9]" />
+      </div>
+    </article>
+  )
+}
+
+function MembersSkeleton() {
+  return (
+    <div className="space-y-2">
+      {[0, 1].map(index => (
+        <div key={index} className="rounded-[8px] border border-black bg-[#62625f] px-2 py-2">
+          <div className="h-3 w-4/5 animate-pulse rounded bg-[#777773]" />
+          <div className="mt-2 h-4 w-16 animate-pulse rounded bg-[#baf7c8]/60" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function NotionLiteApp() {
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [workspacesLoading, setWorkspacesLoading] = useState(false)
+  const [pagesLoading, setPagesLoading] = useState(false)
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [pages, setPages] = useState<PageRecord[]>([])
   const [activeWorkspaceId, setActiveWorkspaceId] = useState('')
@@ -302,6 +349,8 @@ export default function NotionLiteApp() {
 
   const resetClientState = useCallback(() => {
     setSession(null)
+    setWorkspacesLoading(false)
+    setPagesLoading(false)
     setWorkspaces([])
     setPages([])
     setMembers([])
@@ -313,34 +362,44 @@ export default function NotionLiteApp() {
   const loadWorkspaces = useCallback(async () => {
     if (!accessToken) return
     setError('')
-    const response = await fetch('/api/workspaces', { headers: authHeaders() })
-    if (!response.ok) throw await readError(response, '워크스페이스를 불러오지 못했습니다.')
+    setWorkspacesLoading(true)
+    try {
+      const response = await fetch('/api/workspaces', { headers: authHeaders() })
+      if (!response.ok) throw await readError(response, '워크스페이스를 불러오지 못했습니다.')
 
-    const data = await response.json() as Workspace[]
-    setWorkspaces(data)
-    setActiveWorkspaceId(current => data.some(workspace => workspace.id === current) ? current : data[0]?.id || '')
-    return data
+      const data = await response.json() as Workspace[]
+      setWorkspaces(data)
+      setActiveWorkspaceId(current => data.some(workspace => workspace.id === current) ? current : data[0]?.id || '')
+      return data
+    } finally {
+      setWorkspacesLoading(false)
+    }
   }, [accessToken, authHeaders])
 
   const loadPages = useCallback(async (workspaceId: string) => {
     if (!accessToken || !workspaceId) return
     setError('')
-    const response = await fetch(`/api/pages?workspaceId=${workspaceId}`, {
-      headers: authHeaders(),
-    })
-    if (!response.ok) throw await readError(response, '페이지를 불러오지 못했습니다.')
+    setPagesLoading(true)
+    try {
+      const response = await fetch(`/api/pages?workspaceId=${workspaceId}`, {
+        headers: authHeaders(),
+      })
+      if (!response.ok) throw await readError(response, '페이지를 불러오지 못했습니다.')
 
-    const data = await response.json() as PageRecord[]
-    const fetchedAt = Date.now()
-    for (const page of data) {
-      pageFetchedAtRef.current.set(page.id, fetchedAt)
+      const data = await response.json() as PageRecord[]
+      const fetchedAt = Date.now()
+      for (const page of data) {
+        pageFetchedAtRef.current.set(page.id, fetchedAt)
+      }
+      setPages(data)
+      setActivePageId(current => {
+        const nextPageId = data.some(page => page.id === current) ? current : data[0]?.id || ''
+        activePageIdRef.current = nextPageId
+        return nextPageId
+      })
+    } finally {
+      setPagesLoading(false)
     }
-    setPages(data)
-    setActivePageId(current => {
-      const nextPageId = data.some(page => page.id === current) ? current : data[0]?.id || ''
-      activePageIdRef.current = nextPageId
-      return nextPageId
-    })
   }, [accessToken, authHeaders])
 
   const loadMembers = useCallback(async (workspaceId: string) => {
@@ -1130,7 +1189,7 @@ export default function NotionLiteApp() {
                     <div className="mb-2 flex items-center justify-between">
                       <p className="text-[11px] font-black uppercase text-neutral-100">Members</p>
                       {membersLoading ? (
-                        <span className="text-[11px] font-bold text-neutral-200">불러오는 중</span>
+                        <span className="loading-dots text-[11px] font-bold tracking-widest text-neutral-200"><span>·</span><span>·</span><span>·</span></span>
                       ) : (
                         <span className="border border-black bg-[#baf7c8] px-1.5 text-[11px] font-black text-black">
                           {members.length}
@@ -1138,16 +1197,18 @@ export default function NotionLiteApp() {
                       )}
                     </div>
                     <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                      {members.map(member => (
-                        <div key={member.user_id} className="rounded-[8px] border border-black bg-[#62625f] px-2 py-2">
-                          <p className="truncate text-xs font-bold text-white">
-                            {member.email ?? member.user_id}
-                          </p>
-                          <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${getRoleBadgeClass(member.role)}`}>
-                            {member.role}
-                          </span>
-                        </div>
-                      ))}
+                      {membersLoading && members.length === 0 ? (
+                        <MembersSkeleton />
+                      ) : members.map(member => (
+                          <div key={member.user_id} className="rounded-[8px] border border-black bg-[#62625f] px-2 py-2">
+                            <p className="truncate text-xs font-bold text-white">
+                              {member.email ?? member.user_id}
+                            </p>
+                            <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${getRoleBadgeClass(member.role)}`}>
+                              {member.role}
+                            </span>
+                          </div>
+                        ))}
                       {!membersLoading && members.length === 0 && (
                         <p className="text-xs font-bold text-neutral-200">멤버가 없습니다.</p>
                       )}
@@ -1406,12 +1467,18 @@ export default function NotionLiteApp() {
             </button>
           </div>
           <div className="page-tree-scroll min-h-0 flex-1 overflow-y-auto max-md:max-h-56">
-            {activeWorkspaceId ? (
+            {workspacesLoading && workspaces.length === 0 ? (
+              <PageTreeSkeleton />
+            ) : activeWorkspaceId ? (
               pages.length > 0 ? renderPageList(null) : (
-                <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
-                  <p className="text-sm font-black text-white">첫 페이지를 만들어보세요.</p>
-                  <p className="mt-1 text-xs font-bold text-neutral-100">회의록, 체크리스트, 자료 정리부터 시작할 수 있습니다.</p>
-                </div>
+                pagesLoading ? (
+                  <PageTreeSkeleton />
+                ) : (
+                  <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
+                    <p className="text-sm font-black text-white">첫 페이지를 만들어보세요.</p>
+                    <p className="mt-1 text-xs font-bold text-neutral-100">회의록, 체크리스트, 자료 정리부터 시작할 수 있습니다.</p>
+                  </div>
+                )
               )
             ) : (
               <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
@@ -1438,7 +1505,9 @@ export default function NotionLiteApp() {
           </div>
         )}
 
-        {activePage ? (
+        {(workspacesLoading && workspaces.length === 0) || (pagesLoading && pages.length === 0) ? (
+          <DocumentSkeleton />
+        ) : activePage ? (
           <article className="mx-auto my-8 w-full max-w-4xl flex-1 rounded-[8px] border border-black bg-[#fef9ef] px-10 py-12 text-[#1d1c16] shadow-[6px_6px_0_#000] max-sm:mx-4 max-sm:px-5 max-sm:py-8">
             <div className="mb-4 border-b border-black pb-3">
               <div className="flex min-w-0 items-center gap-3 text-[#1d1c16]">
