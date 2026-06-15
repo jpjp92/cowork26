@@ -14,6 +14,7 @@ import { Table } from '@tiptap/extension-table'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableRow } from '@tiptap/extension-table-row'
+import ImageExtension from '@tiptap/extension-image'
 import { createLowlight, common } from 'lowlight'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -201,12 +202,145 @@ interface DocumentEditorProps {
   content: Record<string, unknown> | null
   editable: boolean
   onChange: (content: Record<string, unknown>) => void
+  onUploadImage?: (file: File) => Promise<{
+    id: string
+    url: string
+    storagePath?: string
+    alt?: string
+  }>
+  onCloneImage?: (source: {
+    assetId?: string
+    storagePath?: string
+    src: string
+    alt?: string
+  }) => Promise<{
+    id: string
+    url: string
+    storagePath?: string
+    alt?: string
+  }>
 }
 
 const EMPTY_DOC_CONTENT: Record<string, unknown> = {
   type: 'doc',
   content: [{ type: 'paragraph' }],
 }
+
+function escapeHtmlAttribute(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+function DocumentImageView({ node, selected }: NodeViewProps) {
+  const [copied, setCopied] = useState(false)
+  const attrs = node.attrs as {
+    src?: string | null
+    alt?: string | null
+    title?: string | null
+    assetId?: string | null
+    storagePath?: string | null
+    uploadState?: string | null
+  }
+  const src = attrs.src ?? ''
+  const alt = attrs.alt ?? ''
+  const title = attrs.title ?? ''
+  const assetId = attrs.assetId ?? ''
+  const storagePath = attrs.storagePath ?? ''
+  const isUploading = attrs.uploadState === 'uploading' || attrs.uploadState === 'cloning'
+
+  const copyImage = async () => {
+    if (!src || isUploading) return
+
+    const html = [
+      '<img',
+      ' data-cowork26-image="true"',
+      assetId ? ` data-asset-id="${escapeHtmlAttribute(assetId)}"` : '',
+      storagePath ? ` data-storage-path="${escapeHtmlAttribute(storagePath)}"` : '',
+      ` src="${escapeHtmlAttribute(src)}"`,
+      ` alt="${escapeHtmlAttribute(alt)}"`,
+      title ? ` title="${escapeHtmlAttribute(title)}"` : '',
+      '>',
+    ].join('')
+    const markdown = `![${alt}](${src}${title ? ` "${title}"` : ''})`
+
+    try {
+      if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([markdown], { type: 'text/plain' }),
+          }),
+        ])
+      } else {
+        await navigator.clipboard.writeText(markdown)
+      }
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1000)
+    } catch (error) {
+      console.error('Image copy failed', error)
+    }
+  }
+
+  return (
+    <NodeViewWrapper
+      className={`group relative my-4 inline-block max-w-full rounded-[8px] ${
+        selected ? 'outline outline-2 outline-[#baf7c8]' : ''
+      }`}
+      contentEditable={false}
+    >
+      <img
+        src={src}
+        alt={alt}
+        title={title}
+        className="max-w-full rounded-[8px] border border-black shadow-[3px_3px_0_#000]"
+        data-asset-id={assetId || undefined}
+        data-storage-path={storagePath || undefined}
+        data-upload-state={attrs.uploadState ?? undefined}
+      />
+      <button
+        type="button"
+        className="absolute right-2 top-2 rounded-[8px] border border-black bg-[#baf7c8] px-2 py-1 text-[11px] font-black text-black opacity-0 shadow-[2px_2px_0_#000] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-[#d7d2c8] disabled:opacity-80 group-hover:opacity-100"
+        onMouseDown={event => event.preventDefault()}
+        onClick={copyImage}
+        disabled={!src || isUploading}
+      >
+        {isUploading ? 'Uploading' : copied ? 'Copied' : 'Copy'}
+      </button>
+    </NodeViewWrapper>
+  )
+}
+
+const DocumentImage = ImageExtension.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      assetId: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-asset-id'),
+        renderHTML: attributes => attributes.assetId ? { 'data-asset-id': attributes.assetId } : {},
+      },
+      storagePath: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-storage-path'),
+        renderHTML: attributes => attributes.storagePath ? { 'data-storage-path': attributes.storagePath } : {},
+      },
+      uploadState: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-upload-state'),
+        renderHTML: attributes => attributes.uploadState ? { 'data-upload-state': attributes.uploadState } : {},
+      },
+    }
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(DocumentImageView)
+  },
+}).configure({
+  allowBase64: false,
+})
+
 const DEBUG_SAVE_FLOW = process.env.NODE_ENV !== 'production'
 
 function debugSaveFlow(message: string, data?: Record<string, unknown>) {
@@ -430,9 +564,81 @@ function parseMarkdownTable(text: string) {
   return `<table><tbody><tr>${headerHtml}</tr>${rowsHtml}</tbody></table>`
 }
 
-export default function DocumentEditor({ content, editable, onChange }: DocumentEditorProps) {
+function findImagePositionBySrc(view: EditorView, src: string) {
+  let foundPos: number | null = null
+  view.state.doc.descendants((node, pos) => {
+    if (node.type.name === 'image' && node.attrs.src === src) {
+      foundPos = pos
+      return false
+    }
+    return true
+  })
+  return foundPos
+}
+
+function replaceImageAttributesBySrc(view: EditorView, src: string, attrs: Record<string, unknown>) {
+  const pos = findImagePositionBySrc(view, src)
+  if (pos === null) return false
+
+  const node = view.state.doc.nodeAt(pos)
+  if (!node || node.type.name !== 'image') return false
+
+  view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, {
+    ...node.attrs,
+    ...attrs,
+  }))
+  return true
+}
+
+function removeImageBySrc(view: EditorView, src: string) {
+  const pos = findImagePositionBySrc(view, src)
+  if (pos === null) return false
+
+  const node = view.state.doc.nodeAt(pos)
+  if (!node || node.type.name !== 'image') return false
+
+  view.dispatch(view.state.tr.delete(pos, pos + node.nodeSize))
+  return true
+}
+
+function getCoworkImageFromHtml(html: string) {
+  if (!html) return null
+
+  const wrapper = document.createElement('div')
+  wrapper.innerHTML = html
+  const image = wrapper.querySelector<HTMLImageElement>('img[data-cowork26-image="true"], img[data-storage-path]')
+  if (!image?.src) return null
+
+  return {
+    assetId: image.getAttribute('data-asset-id') || undefined,
+    storagePath: image.getAttribute('data-storage-path') || undefined,
+    src: image.src,
+    alt: image.alt || undefined,
+  }
+}
+
+function documentHasPendingImageUpload(content: Record<string, unknown>) {
+  const visit = (node: unknown): boolean => {
+    if (!node || typeof node !== 'object') return false
+    const current = node as { type?: unknown; attrs?: Record<string, unknown>; content?: unknown }
+    if (
+      current.type === 'image' &&
+      (current.attrs?.uploadState === 'uploading' || current.attrs?.uploadState === 'cloning')
+    ) {
+      return true
+    }
+
+    return Array.isArray(current.content) && current.content.some(visit)
+  }
+
+  return visit(content)
+}
+
+export default function DocumentEditor({ content, editable, onChange, onUploadImage, onCloneImage }: DocumentEditorProps) {
   const resolvedContent = content ?? EMPTY_DOC_CONTENT
   const onChangeRef = useRef(onChange)
+  const onUploadImageRef = useRef(onUploadImage)
+  const onCloneImageRef = useRef(onCloneImage)
   const baselineContentRef = useRef(resolvedContent)
   const applyingContentRef = useRef(false)
   baselineContentRef.current = resolvedContent
@@ -441,6 +647,14 @@ export default function DocumentEditor({ content, editable, onChange }: Document
     onChangeRef.current = onChange
   }, [onChange])
 
+  useEffect(() => {
+    onUploadImageRef.current = onUploadImage
+  }, [onUploadImage])
+
+  useEffect(() => {
+    onCloneImageRef.current = onCloneImage
+  }, [onCloneImage])
+
   const editor = useEditor({
     immediatelyRender: false,
     editable,
@@ -448,6 +662,7 @@ export default function DocumentEditor({ content, editable, onChange }: Document
       StarterKit.configure({ codeBlock: false }),
       CodeBlockWithLang,
       MermaidBlock,
+      DocumentImage,
       ListTabKeymap,
       FontSize,
       Table.configure({
@@ -467,6 +682,93 @@ export default function DocumentEditor({ content, editable, onChange }: Document
         class: 'prose prose-neutral max-w-none',
       },
       handlePaste(view, event) {
+        const imageFile = Array
+          .from(event.clipboardData?.items ?? [])
+          .find(item => item.type.startsWith('image/'))
+          ?.getAsFile()
+
+        if (imageFile && onUploadImageRef.current) {
+          event.preventDefault()
+          const previewUrl = URL.createObjectURL(imageFile)
+          const imageNode = view.state.schema.nodes.image?.create({
+            src: previewUrl,
+            alt: imageFile.name || 'pasted image',
+            title: '',
+            uploadState: 'uploading',
+          })
+
+          if (!imageNode) {
+            URL.revokeObjectURL(previewUrl)
+            return true
+          }
+
+          applyingContentRef.current = true
+          view.dispatch(view.state.tr.replaceSelectionWith(imageNode).scrollIntoView())
+          window.requestAnimationFrame(() => {
+            applyingContentRef.current = false
+          })
+
+          onUploadImageRef.current(imageFile)
+            .then(uploaded => {
+              applyingContentRef.current = false
+              replaceImageAttributesBySrc(view, previewUrl, {
+                src: uploaded.url,
+                alt: uploaded.alt ?? imageFile.name ?? '',
+                assetId: uploaded.id,
+                storagePath: uploaded.storagePath ?? null,
+                uploadState: null,
+              })
+            })
+            .catch(error => {
+              console.error('Image upload failed', error)
+              applyingContentRef.current = false
+              removeImageBySrc(view, previewUrl)
+            })
+            .finally(() => {
+              URL.revokeObjectURL(previewUrl)
+            })
+
+          return true
+        }
+
+        const coworkImage = getCoworkImageFromHtml(event.clipboardData?.getData('text/html') ?? '')
+        if (coworkImage && onCloneImageRef.current) {
+          event.preventDefault()
+          const imageNode = view.state.schema.nodes.image?.create({
+            src: coworkImage.src,
+            alt: coworkImage.alt ?? 'copied image',
+            title: '',
+            uploadState: 'cloning',
+          })
+
+          if (!imageNode) return true
+
+          applyingContentRef.current = true
+          view.dispatch(view.state.tr.replaceSelectionWith(imageNode).scrollIntoView())
+          window.requestAnimationFrame(() => {
+            applyingContentRef.current = false
+          })
+
+          onCloneImageRef.current(coworkImage)
+            .then(cloned => {
+              applyingContentRef.current = false
+              replaceImageAttributesBySrc(view, coworkImage.src, {
+                src: cloned.url,
+                alt: cloned.alt ?? coworkImage.alt ?? '',
+                assetId: cloned.id,
+                storagePath: cloned.storagePath ?? null,
+                uploadState: null,
+              })
+            })
+            .catch(error => {
+              console.error('Image clone failed', error)
+              applyingContentRef.current = false
+              removeImageBySrc(view, coworkImage.src)
+            })
+
+          return true
+        }
+
         const text = event.clipboardData?.getData('text/plain')
         if (!text) return false
 
@@ -567,6 +869,11 @@ export default function DocumentEditor({ content, editable, onChange }: Document
       }
 
       const nextContent = activeEditor.getJSON() as Record<string, unknown>
+      if (documentHasPendingImageUpload(nextContent)) {
+        debugSaveFlow('update ignored while image upload is pending')
+        return
+      }
+
       const matchesLoadedContent = JSON.stringify(nextContent) === JSON.stringify(baselineContentRef.current)
       if (matchesLoadedContent) {
         debugSaveFlow('update ignored because content matches baseline', {

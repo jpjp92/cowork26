@@ -2,6 +2,7 @@
 
 import { Session } from '@supabase/supabase-js'
 import dynamic from 'next/dynamic'
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AuthPanel from './auth-panel'
 import FloatingAiButton from './floating-ai-button'
@@ -12,10 +13,18 @@ const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false }
 const DEBUG_SAVE_FLOW = process.env.NODE_ENV !== 'production'
 const ENABLE_AGI = process.env.NEXT_PUBLIC_ENABLE_AGI === 'true'
 const PAGE_REVALIDATE_INTERVAL_MS = 30_000
+const DEFAULT_SIDEBAR_WIDTH = 312
+const MIN_SIDEBAR_WIDTH = 240
+const MAX_SIDEBAR_WIDTH = 520
+const SIDEBAR_WIDTH_STORAGE_KEY = 'cowork26:sidebar-width'
 
 function debugSaveFlow(message: string, data?: Record<string, unknown>) {
   if (!DEBUG_SAVE_FLOW) return
   console.log(`[save-flow] ${message}`, data ?? {})
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
 }
 
 interface Workspace {
@@ -43,6 +52,15 @@ interface WorkspaceMember {
   created_at: string
   email: string | null
 }
+
+interface UploadedImageAsset {
+  id: string
+  url: string
+  storagePath?: string
+  alt?: string
+}
+
+type PageDropPosition = 'above' | 'below' | 'inside'
 
 async function readError(response: Response, fallback: string) {
   try {
@@ -102,9 +120,10 @@ export default function NotionLiteApp() {
   const pageFetchedAtRef = useRef(new Map<string, number>())
   const savingResetTimerRef = useRef<number | null>(null)
   const titleFocusValueRef = useRef(new Map<string, string>())
-  const [dragOver, setDragOver] = useState<{ id: string; position: 'above' | 'below' } | null>(null)
+  const [dragOver, setDragOver] = useState<{ id: string; position: PageDropPosition } | null>(null)
   const [workspaceDragOver, setWorkspaceDragOver] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
   const [collapsedPages, setCollapsedPages] = useState<Set<string>>(new Set())
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
 
   const accessToken = session?.access_token
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
@@ -139,6 +158,16 @@ export default function NotionLiteApp() {
     Authorization: `Bearer ${accessToken}`,
     'Content-Type': 'application/json',
   }), [accessToken])
+
+  const authUploadHeaders = useCallback(() => ({
+    Authorization: `Bearer ${accessToken}`,
+  }), [accessToken])
+
+  useEffect(() => {
+    const savedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY))
+    if (!Number.isFinite(savedWidth)) return
+    setSidebarWidth(clampNumber(savedWidth, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH))
+  }, [])
 
   useEffect(() => {
     activePageIdRef.current = activePageId
@@ -175,6 +204,101 @@ export default function NotionLiteApp() {
     setSaving('idle')
     setActivePageId(pageId)
   }, [])
+
+  const startSidebarResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (window.innerWidth < 768) return
+
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = sidebarWidth
+    let nextWidth = startWidth
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      nextWidth = clampNumber(
+        startWidth + moveEvent.clientX - startX,
+        MIN_SIDEBAR_WIDTH,
+        MAX_SIDEBAR_WIDTH,
+      )
+      setSidebarWidth(nextWidth)
+    }
+
+    const handlePointerUp = () => {
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(nextWidth)))
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
+  }, [sidebarWidth])
+
+  const uploadImageAsset = useCallback(async (file: File): Promise<UploadedImageAsset> => {
+    if (!activeWorkspaceId || !activePageIdRef.current) {
+      throw new Error('이미지를 업로드할 페이지를 찾을 수 없습니다.')
+    }
+
+    const formData = new FormData()
+    formData.append('workspaceId', activeWorkspaceId)
+    formData.append('pageId', activePageIdRef.current)
+    formData.append('file', file)
+
+    const response = await fetch('/api/assets', {
+      method: 'POST',
+      headers: authUploadHeaders(),
+      body: formData,
+    })
+
+    if (!response.ok) {
+      throw await readError(response, '이미지를 업로드하지 못했습니다.')
+    }
+
+    const data = await response.json() as UploadedImageAsset
+    return {
+      ...data,
+      alt: file.name || data.alt || 'pasted image',
+    }
+  }, [activeWorkspaceId, authUploadHeaders])
+
+  const cloneImageAsset = useCallback(async (source: {
+    assetId?: string
+    storagePath?: string
+    src: string
+    alt?: string
+  }): Promise<UploadedImageAsset> => {
+    if (!activeWorkspaceId || !activePageIdRef.current) {
+      throw new Error('이미지를 복사할 페이지를 찾을 수 없습니다.')
+    }
+
+    const response = await fetch('/api/assets/clone', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        workspaceId: activeWorkspaceId,
+        pageId: activePageIdRef.current,
+        sourceAssetId: source.assetId,
+        sourceStoragePath: source.storagePath,
+      }),
+    })
+
+    if (!response.ok) {
+      throw await readError(response, '이미지를 복사하지 못했습니다.')
+    }
+
+    const data = await response.json() as UploadedImageAsset
+    return {
+      ...data,
+      alt: source.alt || data.alt || 'copied image',
+    }
+  }, [activeWorkspaceId, authHeaders])
 
   const resetClientState = useCallback(() => {
     setSession(null)
@@ -715,37 +839,105 @@ export default function NotionLiteApp() {
     }
   }
 
-  const reorderPage = useCallback(async (draggedId: string, targetId: string, position: 'above' | 'below') => {
+  const movePage = useCallback(async (draggedId: string, targetId: string, position: PageDropPosition) => {
     if (draggedId === targetId || !accessToken) return
     const draggedPage = pages.find(p => p.id === draggedId)
     const targetPage = pages.find(p => p.id === targetId)
     if (!draggedPage || !targetPage) return
-    if (draggedPage.parent_id !== targetPage.parent_id) return
 
-    const siblings = [...(pageTree.get(targetPage.parent_id ?? 'root') ?? [])]
-    const withoutDragged = siblings.filter(p => p.id !== draggedId)
-    const targetIdx = withoutDragged.findIndex(p => p.id === targetId)
-    const insertIdx = position === 'above' ? targetIdx : targetIdx + 1
-    withoutDragged.splice(insertIdx, 0, draggedPage)
+    const pagesById = new Map(pages.map(page => [page.id, page]))
+    const isDescendantOf = (pageId: string, possibleAncestorId: string) => {
+      let current = pagesById.get(pageId)
+      const visited = new Set<string>()
+      while (current?.parent_id && !visited.has(current.id)) {
+        if (current.parent_id === possibleAncestorId) return true
+        visited.add(current.id)
+        current = pagesById.get(current.parent_id)
+      }
+      return false
+    }
 
-    const reordered = withoutDragged.map((p, i) => ({ ...p, order_index: i }))
+    const nextParentId = position === 'inside' ? targetPage.id : targetPage.parent_id
+    if (nextParentId === draggedId || (nextParentId && isDescendantOf(nextParentId, draggedId))) return
 
-    // optimistic update
-    setPages(prev => prev.map(p => reordered.find(r => r.id === p.id) ?? p))
+    const byParent = new Map<string, PageRecord[]>()
+    for (const page of pages) {
+      if (page.id === draggedId) continue
+      const key = page.parent_id ?? 'root'
+      byParent.set(key, [...(byParent.get(key) ?? []), page])
+    }
 
-    // persist only changed order_index values
-    const changed = reordered.filter(r => {
-      const original = siblings.find(s => s.id === r.id)
-      return original?.order_index !== r.order_index
-    })
-    await Promise.all(changed.map(p =>
-      fetch('/api/pages', {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ id: p.id, orderIndex: p.order_index }),
+    for (const list of byParent.values()) {
+      list.sort((a, b) => a.order_index - b.order_index || a.created_at.localeCompare(b.created_at))
+    }
+
+    const nextParentKey = nextParentId ?? 'root'
+    const targetSiblings = [...(byParent.get(nextParentKey) ?? [])]
+    const movedPage = { ...draggedPage, parent_id: nextParentId }
+
+    if (position === 'inside') {
+      targetSiblings.push(movedPage)
+    } else {
+      const targetIdx = targetSiblings.findIndex(p => p.id === targetId)
+      if (targetIdx < 0) return
+      const insertIdx = position === 'above' ? targetIdx : targetIdx + 1
+      targetSiblings.splice(insertIdx, 0, movedPage)
+    }
+    byParent.set(nextParentKey, targetSiblings)
+
+    const touchedParentKeys = new Set([draggedPage.parent_id ?? 'root', nextParentKey])
+    const updates = new Map<string, PageRecord>()
+    for (const parentKey of touchedParentKeys) {
+      const list = byParent.get(parentKey) ?? []
+      list.forEach((page, index) => {
+        updates.set(page.id, {
+          ...page,
+          parent_id: parentKey === 'root' ? null : parentKey,
+          order_index: index,
+        })
       })
-    ))
-  }, [accessToken, authHeaders, pages, pageTree])
+    }
+
+    const nextPages = pages.map(page => updates.get(page.id) ?? page)
+    const changed = nextPages.filter(page => {
+      const original = pagesById.get(page.id)
+      return original && (
+        original.parent_id !== page.parent_id ||
+        original.order_index !== page.order_index
+      )
+    })
+
+    if (changed.length === 0) return
+
+    setPages(nextPages)
+    setCollapsedPages(previous => {
+      if (position !== 'inside') return previous
+      const next = new Set(previous)
+      next.delete(targetId)
+      return next
+    })
+    setError('')
+
+    try {
+      const responses = await Promise.all(changed.map(page =>
+        fetch('/api/pages', {
+          method: 'PATCH',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            id: page.id,
+            parentId: page.parent_id,
+            orderIndex: page.order_index,
+          }),
+        })
+      ))
+
+      const failed = responses.find(response => !response.ok)
+      if (failed) throw await readError(failed, '페이지 위치를 저장하지 못했습니다.')
+    } catch (err) {
+      setPages(pages)
+      setError(err instanceof Error ? err.message : '페이지 위치를 저장하지 못했습니다.')
+    }
+  }, [accessToken, authHeaders, pages])
 
   const renderPageList = (parentId: string | null, depth = 0): React.ReactNode => {
     const items = pageTree.get(parentId ?? 'root') ?? []
@@ -760,14 +952,25 @@ export default function NotionLiteApp() {
             <div className="h-0.5 rounded bg-[#baf7c8]" style={{ marginLeft: depth > 0 ? 12 + 20 : 0 }} />
           )}
           <div
-            className={`group/page-row relative flex items-center gap-1 ${depth > 0 ? 'pl-3' : ''}`}
+            className={`group/page-row relative flex items-center gap-1 rounded-[4px] ${
+              depth > 0 ? 'pl-3' : ''
+            } ${
+              dragOver?.id === page.id && dragOver.position === 'inside' ? 'bg-[#50504d] ring-2 ring-[#baf7c8]' : ''
+            }`}
             draggable={canEdit}
             onDragStart={() => { draggedIdRef.current = page.id }}
             onDragEnd={() => { draggedIdRef.current = null; setDragOver(null) }}
             onDragOver={e => {
               e.preventDefault()
               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-              const position = e.clientY < rect.top + rect.height / 2 ? 'above' : 'below'
+              const relativeY = e.clientY - rect.top
+              const position: PageDropPosition = (
+                relativeY < rect.height * 0.25
+                  ? 'above'
+                  : relativeY > rect.height * 0.75
+                    ? 'below'
+                    : 'inside'
+              )
               setDragOver(prev =>
                 prev?.id === page.id && prev.position === position ? prev : { id: page.id, position }
               )
@@ -780,7 +983,7 @@ export default function NotionLiteApp() {
             onDrop={e => {
               e.preventDefault()
               const dragged = draggedIdRef.current
-              if (dragged) reorderPage(dragged, page.id, dragOver?.position ?? 'below')
+              if (dragged) movePage(dragged, page.id, dragOver?.position ?? 'below')
               draggedIdRef.current = null
               setDragOver(null)
             }}
@@ -1006,7 +1209,10 @@ export default function NotionLiteApp() {
       </header>
 
       <div className="flex min-h-0 flex-1 max-md:flex-col">
-        <aside className="flex w-[312px] shrink-0 flex-col border-r border-black bg-[#62625f] max-lg:w-64 max-md:w-full max-md:border-r-0 max-md:border-b">
+        <aside
+          className="relative flex w-full shrink-0 flex-col border-r border-black bg-[#62625f] md:w-[var(--sidebar-width)] max-md:border-r-0 max-md:border-b"
+          style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
+        >
         <div className="border-b border-black p-3">
           <p className="mb-2 px-1 text-[11px] font-black uppercase tracking-normal text-white">
             Workspace
@@ -1215,6 +1421,12 @@ export default function NotionLiteApp() {
             )}
           </div>
         </div>
+          <button
+            type="button"
+            aria-label="사이드바 크기 조절"
+            className="absolute -right-1.5 top-0 z-20 hidden h-full w-3 cursor-col-resize touch-none border-x border-transparent bg-transparent transition-colors hover:border-black hover:bg-[#baf7c8]/60 active:bg-[#baf7c8] md:block"
+            onPointerDown={startSidebarResize}
+          />
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col overflow-y-auto max-md:min-h-[60vh]">
@@ -1275,6 +1487,8 @@ export default function NotionLiteApp() {
               content={activePageContent}
               editable={Boolean(canEdit)}
               onChange={content => scheduleContentSave(activePage.id, content)}
+              onUploadImage={canEdit ? uploadImageAsset : undefined}
+              onCloneImage={canEdit ? cloneImageAsset : undefined}
             />
           </article>
         ) : (
