@@ -83,6 +83,14 @@ function convertNode(node: TiptapNode, listDepth = 0): string {
       return `\`\`\`mermaid\n${code}\n\`\`\``
     }
 
+    case 'image': {
+      const src = typeof node.attrs?.src === 'string' ? node.attrs.src : ''
+      if (!src) return ''
+      const alt = typeof node.attrs?.alt === 'string' ? node.attrs.alt : ''
+      const title = typeof node.attrs?.title === 'string' ? node.attrs.title : ''
+      return title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`
+    }
+
     case 'table': {
       const rows = node.content ?? []
       if (rows.length === 0) return ''
