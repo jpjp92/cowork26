@@ -5,11 +5,29 @@ import type { ApiTiming } from './timing'
 
 const AUTH_USER_CACHE_TTL_MS = 10_000
 const AUTH_USER_CACHE_MAX_SIZE = 100
+const ROLE_CACHE_TTL_MS = 5_000
+const ROLE_CACHE_MAX_SIZE = 200
 
 type AuthUserResponse = Awaited<ReturnType<typeof supabaseAdmin.auth.getUser>>
+type WorkspaceRole = 'owner' | 'editor' | 'viewer'
 
 const authUserCache = new Map<string, { user: User; expiresAt: number }>()
 const authUserRequests = new Map<string, Promise<AuthUserResponse>>()
+const roleCache = new Map<string, { role: WorkspaceRole; expiresAt: number }>()
+
+function pruneRoleCache(now: number) {
+  if (roleCache.size <= ROLE_CACHE_MAX_SIZE) return
+
+  for (const [key, entry] of roleCache.entries()) {
+    if (entry.expiresAt <= now) roleCache.delete(key)
+  }
+
+  while (roleCache.size > ROLE_CACHE_MAX_SIZE) {
+    const oldestKey = roleCache.keys().next().value
+    if (!oldestKey) break
+    roleCache.delete(oldestKey)
+  }
+}
 
 function pruneAuthUserCache(now: number) {
   if (authUserCache.size <= AUTH_USER_CACHE_MAX_SIZE) return
@@ -87,10 +105,22 @@ export async function getUserFromRequest(request: Request, timing?: ApiTiming) {
 export async function requireWorkspaceRole(
   workspaceId: string,
   userId: string,
-  roles: Array<'owner' | 'editor' | 'viewer'>,
+  roles: Array<WorkspaceRole>,
   timing?: ApiTiming,
   label = 'role.select',
 ) {
+  const cacheKey = `${userId}:${workspaceId}`
+  const now = Date.now()
+  const cached = roleCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) {
+    timing?.mark('role.cacheHit', performance.now())
+    // role 문자열을 캐싱하고 호출마다 roles와 대조한다.
+    // (불리언 캐싱 시 owner-only vs owner+editor 체크가 섞임)
+    return roles.includes(cached.role)
+  }
+
+  roleCache.delete(cacheKey)
+
   const { data, error } = await (timing
     ? timing.measure(label, () => supabaseAdmin
         .from('workspace_members')
@@ -105,6 +135,11 @@ export async function requireWorkspaceRole(
         .eq('user_id', userId)
         .single())
 
-  if (error || !data || !roles.includes(data.role)) return false
-  return true
+  if (error || !data) return false
+
+  // 멤버인 경우에만 캐싱(비멤버 negative는 드물고 Forbidden 처리됨)
+  roleCache.set(cacheKey, { role: data.role, expiresAt: Date.now() + ROLE_CACHE_TTL_MS })
+  pruneRoleCache(Date.now())
+
+  return roles.includes(data.role)
 }

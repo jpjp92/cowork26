@@ -164,6 +164,9 @@ export default function NotionLiteApp() {
   const workspaceDragClickBlockedRef = useRef(false)
   const draggedIdRef = useRef<string | null>(null)
   const activePageIdRef = useRef(activePageId)
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId)
+  const pagesRef = useRef<PageRecord[]>([])
+  const pagesCache = useRef(new Map<string, PageRecord[]>())
   const pageFetchedAtRef = useRef(new Map<string, number>())
   const savingResetTimerRef = useRef<number | null>(null)
   const titleFocusValueRef = useRef(new Map<string, string>())
@@ -219,6 +222,22 @@ export default function NotionLiteApp() {
   useEffect(() => {
     activePageIdRef.current = activePageId
   }, [activePageId])
+
+  useEffect(() => {
+    activeWorkspaceIdRef.current = activeWorkspaceId
+  }, [activeWorkspaceId])
+
+  // pages 변경을 워크스페이스별 캐시에 동기화한다.
+  // 모든 setPages(생성/삭제/이동/이름변경/저장)가 여기서 자동 반영되어 mutation 호출부 수정 불필요.
+  useEffect(() => {
+    pagesRef.current = pages
+    if (!activeWorkspaceId) return
+    // workspace_id 가드: 전환 직후 이전 워크스페이스 pages가 새 id로 저장되는 레이스 차단.
+    // 빈 배열은 여기서 캐싱하지 않음(loadPages가 책임) → '미로드' vs '로드 후 빈' 혼동 방지.
+    if (pages.length > 0 && pages[0].workspace_id === activeWorkspaceId) {
+      pagesCache.current.set(activeWorkspaceId, pages)
+    }
+  }, [pages, activeWorkspaceId])
 
   const showSavingStatus = useCallback((status: 'saved' | 'loaded') => {
     if (savingResetTimerRef.current) {
@@ -354,6 +373,8 @@ export default function NotionLiteApp() {
     setWorkspaces([])
     setPages([])
     setMembers([])
+    pagesCache.current.clear()
+    pagesRef.current = []
     setActiveWorkspaceId('')
     selectActivePage('')
     setSettingsOpen(false)
@@ -376,10 +397,14 @@ export default function NotionLiteApp() {
     }
   }, [accessToken, authHeaders])
 
-  const loadPages = useCallback(async (workspaceId: string) => {
+  const loadPages = useCallback(async (
+    workspaceId: string,
+    options?: { background?: boolean },
+  ) => {
     if (!accessToken || !workspaceId) return
+    const background = options?.background ?? false
     setError('')
-    setPagesLoading(true)
+    if (!background) setPagesLoading(true)
     try {
       const response = await fetch(`/api/pages?workspaceId=${workspaceId}`, {
         headers: authHeaders(),
@@ -391,14 +416,39 @@ export default function NotionLiteApp() {
       for (const page of data) {
         pageFetchedAtRef.current.set(page.id, fetchedAt)
       }
-      setPages(data)
-      setActivePageId(current => {
-        const nextPageId = data.some(page => page.id === current) ? current : data[0]?.id || ''
-        activePageIdRef.current = nextPageId
-        return nextPageId
+
+      // reconcile: 미저장/저장 중 content는 로컬 우선으로 보존(저장 손실 방지).
+      // 구조 변경(parent/order/title)은 서버 값을 수용.
+      const currentById = new Map(pagesRef.current.map(page => [page.id, page]))
+      const reconciled = data.map(serverPage => {
+        const hasUnsaved = (
+          saveTimers.current.has(serverPage.id) ||
+          contentSaveInFlight.current.has(serverPage.id) ||
+          pendingContent.current.has(serverPage.id)
+        )
+        if (!hasUnsaved) return serverPage
+        const localContent = (
+          pendingContent.current.get(serverPage.id) ??
+          currentById.get(serverPage.id)?.content ??
+          serverPage.content
+        )
+        return { ...serverPage, content: localContent }
       })
+
+      // 캐시는 항상 갱신(빈 배열 포함). 키가 workspaceId라 응답 순서와 무관하게 정확.
+      pagesCache.current.set(workspaceId, reconciled)
+
+      // 화면 반영은 아직 같은 워크스페이스를 보고 있을 때만(전환 중 늦게 온 응답 무시).
+      if (workspaceId === activeWorkspaceIdRef.current) {
+        setPages(reconciled)
+        setActivePageId(current => {
+          const nextPageId = reconciled.some(page => page.id === current) ? current : reconciled[0]?.id || ''
+          activePageIdRef.current = nextPageId
+          return nextPageId
+        })
+      }
     } finally {
-      setPagesLoading(false)
+      if (!background) setPagesLoading(false)
     }
   }, [accessToken, authHeaders])
 
@@ -462,7 +512,21 @@ export default function NotionLiteApp() {
       selectActivePage('')
       return
     }
-    loadPages(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
+
+    const cached = pagesCache.current.get(activeWorkspaceId)
+    if (cached) {
+      // 캐시 히트: 스켈레톤 없이 즉시 표시 + 백그라운드 재검증
+      setPages(cached)
+      setActivePageId(current => {
+        const nextPageId = cached.some(page => page.id === current) ? current : cached[0]?.id || ''
+        activePageIdRef.current = nextPageId
+        return nextPageId
+      })
+      loadPages(activeWorkspaceId, { background: true })
+        .catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
+    } else {
+      loadPages(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
+    }
   }, [activeWorkspaceId, loadPages, selectActivePage])
 
   useEffect(() => {
