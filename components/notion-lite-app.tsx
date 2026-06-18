@@ -167,6 +167,7 @@ export default function NotionLiteApp() {
   const activeWorkspaceIdRef = useRef(activeWorkspaceId)
   const pagesRef = useRef<PageRecord[]>([])
   const pagesCache = useRef(new Map<string, PageRecord[]>())
+  const pendingCreateIds = useRef(new Set<string>())
   const pageFetchedAtRef = useRef(new Map<string, number>())
   const savingResetTimerRef = useRef<number | null>(null)
   const titleFocusValueRef = useRef(new Map<string, string>())
@@ -174,6 +175,7 @@ export default function NotionLiteApp() {
   const [workspaceDragOver, setWorkspaceDragOver] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
   const [collapsedPages, setCollapsedPages] = useState<Set<string>>(new Set())
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
 
   const accessToken = session?.access_token
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
@@ -181,6 +183,10 @@ export default function NotionLiteApp() {
   const activePageContent = activePage ? pendingContent.current.get(activePage.id) ?? activePage.content : null
   const canEdit = activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'editor'
   const canManageMembers = activeWorkspace?.role === 'owner'
+  const deleteTarget = deleteTargetId ? pages.find(page => page.id === deleteTargetId) ?? null : null
+  const deleteTargetHasChildren = deleteTargetId
+    ? pages.some(page => page.parent_id === deleteTargetId)
+    : false
 
   const activePageTrail = useMemo(() => {
     if (!activePage) return []
@@ -226,6 +232,16 @@ export default function NotionLiteApp() {
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId
   }, [activeWorkspaceId])
+
+  // 삭제 확인 모달: Esc로 닫기
+  useEffect(() => {
+    if (!deleteTargetId) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDeleteTargetId(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [deleteTargetId])
 
   // pages 변경을 워크스페이스별 캐시에 동기화한다.
   // 모든 setPages(생성/삭제/이동/이름변경/저장)가 여기서 자동 반영되어 mutation 호출부 수정 불필요.
@@ -435,14 +451,21 @@ export default function NotionLiteApp() {
         return { ...serverPage, content: localContent }
       })
 
+      // 아직 서버에 없는 '생성 중' 낙관적 페이지는 유지(재검증이 생성 중 페이지를 지우지 않도록).
+      const serverIds = new Set(data.map(page => page.id))
+      const pendingCreates = pagesRef.current.filter(page => (
+        pendingCreateIds.current.has(page.id) && !serverIds.has(page.id)
+      ))
+      const merged = pendingCreates.length > 0 ? [...reconciled, ...pendingCreates] : reconciled
+
       // 캐시는 항상 갱신(빈 배열 포함). 키가 workspaceId라 응답 순서와 무관하게 정확.
-      pagesCache.current.set(workspaceId, reconciled)
+      pagesCache.current.set(workspaceId, merged)
 
       // 화면 반영은 아직 같은 워크스페이스를 보고 있을 때만(전환 중 늦게 온 응답 무시).
       if (workspaceId === activeWorkspaceIdRef.current) {
-        setPages(reconciled)
+        setPages(merged)
         setActivePageId(current => {
-          const nextPageId = reconciled.some(page => page.id === current) ? current : reconciled[0]?.id || ''
+          const nextPageId = merged.some(page => page.id === current) ? current : merged[0]?.id || ''
           activePageIdRef.current = nextPageId
           return nextPageId
         })
@@ -716,29 +739,74 @@ export default function NotionLiteApp() {
   const createPage = async (parentId: string | null = null) => {
     if (!activeWorkspaceId || !accessToken || !canEdit || creatingPage) return
     setError('')
+
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const title = newPageTitle.trim() || 'Untitled'
+    const siblingCount = pages.filter(page => (page.parent_id ?? null) === (parentId ?? null)).length
+    const optimisticPage: PageRecord = {
+      id,
+      workspace_id: activeWorkspaceId,
+      parent_id: parentId,
+      title,
+      order_index: siblingCount,
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      created_at: now,
+      updated_at: now,
+    }
+
+    const previousPages = pages
+    const previousActiveId = activePageIdRef.current
+
+    // 낙관적 반영: 즉시 사이드바에 추가 + 활성화
+    pendingCreateIds.current.add(id)
+    pageFetchedAtRef.current.set(id, Date.now())
+    setPages(previous => [...previous, optimisticPage])
+    selectActivePage(id)
+    setNewPageTitle('')
     setCreatingPage(true)
+
     try {
       const response = await fetch('/api/pages', {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({
-          workspaceId: activeWorkspaceId,
-          parentId,
-          title: newPageTitle.trim() || 'Untitled',
-        }),
+        // 클라이언트가 정한 id로 insert → temp↔real 교체 불필요
+        body: JSON.stringify({ id, workspaceId: activeWorkspaceId, parentId, title }),
       })
-      if (!response.ok) {
-        setError((await readError(response, '페이지를 만들지 못했습니다.')).message)
-        return
-      }
+      if (!response.ok) throw await readError(response, '페이지를 만들지 못했습니다.')
 
       const page = await response.json() as PageRecord
       pageFetchedAtRef.current.set(page.id, Date.now())
-      setPages(previous => [...previous, page])
-      selectActivePage(page.id)
-      setNewPageTitle('')
+      // 서버 레코드로 교체하되, 생성 중 사용자가 입력한 content는 보존
+      setPages(previous => previous.map(item => (
+        item.id === id
+          ? { ...page, content: pendingContent.current.get(id) ?? item.content }
+          : item
+      )))
+    } catch (err) {
+      // 롤백: 낙관적 페이지 제거 + 이전 선택 복원
+      pendingContent.current.delete(id)
+      pageFetchedAtRef.current.delete(id)
+      const timer = saveTimers.current.get(id)
+      if (timer) { window.clearTimeout(timer); saveTimers.current.delete(id) }
+      setPages(previousPages)
+      setActivePageId(() => {
+        activePageIdRef.current = previousActiveId
+        return previousActiveId
+      })
+      setError(err instanceof Error ? err.message : '페이지를 만들지 못했습니다.')
     } finally {
+      pendingCreateIds.current.delete(id)
       setCreatingPage(false)
+      // 생성 진행 중 미뤄둔 content 저장을 지금 실행(가드로 지연됐던 입력 반영)
+      if (pendingContent.current.has(id)) {
+        const content = pendingContent.current.get(id)!
+        const existing = saveTimers.current.get(id)
+        if (existing) { window.clearTimeout(existing); saveTimers.current.delete(id) }
+        updatePage(id, { content }).catch(saveErr => {
+          setError(saveErr instanceof Error ? saveErr.message : '페이지를 저장하지 못했습니다.')
+        })
+      }
     }
   }
 
@@ -839,6 +907,10 @@ export default function NotionLiteApp() {
     })
     pendingContent.current.set(pageId, content)
 
+    // 생성 진행 중인 페이지는 서버에 아직 없으므로 저장(PATCH)을 예약하지 않는다.
+    // content는 pendingContent에 버퍼되고, createPage 완료 후 flush된다(404 레이스 차단).
+    if (pendingCreateIds.current.has(pageId)) return
+
     const existingTimer = saveTimers.current.get(pageId)
     if (existingTimer) window.clearTimeout(existingTimer)
 
@@ -871,17 +943,8 @@ export default function NotionLiteApp() {
 
   const deletePage = async (pageId: string) => {
     if (!accessToken || !canEdit) return
-    if (!window.confirm('이 페이지와 하위 페이지를 삭제할까요?')) return
 
-    const response = await fetch(`/api/pages?id=${pageId}`, {
-      method: 'DELETE',
-      headers: authHeaders(),
-    })
-    if (!response.ok) {
-      setError((await readError(response, '페이지를 삭제하지 못했습니다.')).message)
-      return
-    }
-
+    // 삭제 대상(하위 페이지 포함) 계산
     const deletedIds = new Set([pageId])
     let changed = true
     while (changed) {
@@ -894,6 +957,10 @@ export default function NotionLiteApp() {
       }
     }
 
+    const previousPages = pages
+    const previousActiveId = activePageIdRef.current
+
+    // 타이머/펜딩 정리
     for (const deletedId of deletedIds) {
       pendingContent.current.delete(deletedId)
       pageFetchedAtRef.current.delete(deletedId)
@@ -904,6 +971,7 @@ export default function NotionLiteApp() {
       }
     }
 
+    // 낙관적 제거: 즉시 사이드바에서 제거 + 선택 이동
     const remaining = pages.filter(page => !deletedIds.has(page.id))
     setPages(remaining)
     setActivePageId(current => {
@@ -911,6 +979,22 @@ export default function NotionLiteApp() {
       activePageIdRef.current = nextPageId
       return nextPageId
     })
+
+    try {
+      const response = await fetch(`/api/pages?id=${pageId}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      })
+      if (!response.ok) throw await readError(response, '페이지를 삭제하지 못했습니다.')
+    } catch (err) {
+      // 롤백: 삭제 전 상태로 복원
+      setPages(previousPages)
+      setActivePageId(() => {
+        activePageIdRef.current = previousActiveId
+        return previousActiveId
+      })
+      setError(err instanceof Error ? err.message : '페이지를 삭제하지 못했습니다.')
+    }
   }
 
   const inviteMember = async () => {
@@ -1162,7 +1246,7 @@ export default function NotionLiteApp() {
               )}
               {canEdit && (
                 <button
-                  onClick={() => deletePage(page.id)}
+                  onClick={() => setDeleteTargetId(page.id)}
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:text-red-300"
                   title="페이지 삭제"
                 >
@@ -1647,6 +1731,52 @@ export default function NotionLiteApp() {
         )}
         </section>
       </div>
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onPointerDown={() => setDeleteTargetId(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="w-full max-w-sm rounded-[8px] border border-black bg-[#62625f] p-5 text-white shadow-[6px_6px_0_#000]"
+            onPointerDown={event => event.stopPropagation()}
+          >
+            <p className="text-sm font-black uppercase tracking-normal text-white">페이지 삭제</p>
+            <p className="mt-3 text-sm font-medium leading-relaxed text-neutral-100">
+              <span className="font-black text-white">{deleteTarget.title || 'Untitled'}</span>
+              {deleteTargetHasChildren
+                ? ' 페이지와 모든 하위 페이지를 삭제합니다.'
+                : ' 페이지를 삭제합니다.'}
+              {' 되돌릴 수 없습니다.'}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTargetId(null)}
+                className="h-9 rounded-[8px] border border-black bg-[#50504d] px-4 text-xs font-black uppercase text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#f7f4ec] hover:text-black hover:shadow-[3px_3px_0_#000]"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetId = deleteTargetId
+                  setDeleteTargetId(null)
+                  if (targetId) {
+                    deletePage(targetId).catch(err =>
+                      setError(err instanceof Error ? err.message : '페이지를 삭제하지 못했습니다.')
+                    )
+                  }
+                }}
+                className="h-9 rounded-[8px] border border-black bg-[#fca5a5] px-4 text-xs font-black uppercase text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#f87171] hover:shadow-[3px_3px_0_#000]"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {ENABLE_AGI && <FloatingAiButton />}
     </main>
   )
