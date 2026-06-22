@@ -1,6 +1,6 @@
 'use client'
 
-import { Extension, Mark, Node, mergeAttributes } from '@tiptap/core'
+import { Extension, InputRule, Mark, Node, mergeAttributes } from '@tiptap/core'
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
 import type { NodeViewProps } from '@tiptap/react'
 import { DOMParser as ProseMirrorDOMParser } from '@tiptap/pm/model'
@@ -9,6 +9,7 @@ import { Plugin } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import { Link } from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Table } from '@tiptap/extension-table'
 import { TableCell } from '@tiptap/extension-table-cell'
@@ -407,6 +408,37 @@ const FontSize = Mark.create({
   },
 })
 
+const ChipLink = Link.extend({
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /(?:^|\s)(\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\))$/,
+        handler: ({ state, range, match }) => {
+          const fullMatch = match[0]
+          const markdownLink = match[1]
+          const label = match[2]
+          const href = match[3]
+          if (!markdownLink || !label || !href) return null
+
+          const leadingOffset = fullMatch.indexOf(markdownLink)
+          const from = range.from + leadingOffset
+          const to = from + markdownLink.length
+          const mark = state.schema.marks.link.create({
+            href,
+            target: '_blank',
+            rel: 'noopener noreferrer',
+            class: 'url-chip',
+          })
+
+          state.tr
+            .replaceWith(from, to, state.schema.text(label, [mark]))
+            .removeStoredMark(state.schema.marks.link)
+        },
+      }),
+    ]
+  },
+})
+
 const ListTabKeymap = Extension.create({
   name: 'listTabKeymap',
 
@@ -425,6 +457,46 @@ function parseMarkdownCodeBlock(text: string): { language: string | null; code: 
     language: match[1].trim() || null,
     code: match[2] ?? '',
   }
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function parseMarkdownLinksToHtml(text: string) {
+  const markdownLinkPattern = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g
+  if (!markdownLinkPattern.test(text)) return null
+
+  const renderLine = (line: string) => {
+    markdownLinkPattern.lastIndex = 0
+    let html = ''
+    let cursor = 0
+    let match: RegExpExecArray | null
+
+    while ((match = markdownLinkPattern.exec(line))) {
+      const [raw, label, href] = match
+      html += escapeHtml(line.slice(cursor, match.index))
+      html += `<a href="${escapeHtml(href)}" class="url-chip" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`
+      cursor = match.index + raw.length
+    }
+
+    html += escapeHtml(line.slice(cursor))
+    return html
+  }
+
+  const paragraphs = text.split(/\n{2,}/).map(paragraph => {
+    const lines = paragraph.split(/\n/)
+    const htmlLines = lines.map(renderLine)
+
+    return `<p>${htmlLines.join('<br>')}</p>`
+  })
+
+  return paragraphs.join('')
 }
 
 function findTableRowPos(view: EditorView, row: HTMLTableRowElement) {
@@ -659,8 +731,18 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
     immediatelyRender: false,
     editable,
     extensions: [
-      StarterKit.configure({ codeBlock: false }),
+      StarterKit.configure({ codeBlock: false, link: false }),
       CodeBlockWithLang,
+      ChipLink.configure({
+        autolink: false,
+        linkOnPaste: false,
+        openOnClick: true,
+        HTMLAttributes: {
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          class: null,
+        },
+      }),
       MermaidBlock,
       DocumentImage,
       ListTabKeymap,
@@ -798,6 +880,16 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
           const content = codeBlock.code ? [schema.text(codeBlock.code)] : []
           const node = codeBlockType.create({ language: codeBlock.language }, content)
           view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView())
+          return true
+        }
+
+        const markdownLinkHtml = parseMarkdownLinksToHtml(text)
+        if (markdownLinkHtml) {
+          event.preventDefault()
+          const wrapper = document.createElement('div')
+          wrapper.innerHTML = markdownLinkHtml
+          const slice = ProseMirrorDOMParser.fromSchema(view.state.schema).parseSlice(wrapper)
+          view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView())
           return true
         }
 

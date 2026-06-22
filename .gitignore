@@ -8,3 +8,5 @@ ref/
 AGI-client.exe
 agi-client.log
 *.tsbuildinfo
+public/url-chip-review.html
+scripts/url-chip-review.mjs
