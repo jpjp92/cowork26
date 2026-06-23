@@ -544,6 +544,8 @@ function getRowResizeTarget(view: EditorView, event: MouseEvent) {
 }
 
 function parseMarkdownTable(text: string) {
+  if (text.trimStart().startsWith('```')) return null
+
   const lines = text
     .trim()
     .split(/\r?\n/)
@@ -563,33 +565,15 @@ function parseMarkdownTable(text: string) {
     .split('|')
     .map(cell => cell.trim())
 
-  let headers: string[]
-  let rows: string[][]
+  if (dividerIndex === -1) return null
 
-  if (dividerIndex !== -1) {
-    const tableLines = [lines[dividerIndex - 1], lines[dividerIndex]]
-    for (const line of lines.slice(dividerIndex + 1)) {
-      if (!line.includes('|')) break
-      tableLines.push(line)
-    }
-    headers = toCells(tableLines[0])
-    rows = tableLines.slice(2).map(toCells)
-  } else {
-    // No markdown divider row (---|---): accept plain pipe-separated table
-    const firstPipeIdx = lines.findIndex(line => line.includes('|'))
-    if (firstPipeIdx === -1) return null
-
-    const pipeLines: string[] = []
-    for (const line of lines.slice(firstPipeIdx)) {
-      if (!line.includes('|')) break
-      pipeLines.push(line)
-    }
-
-    if (pipeLines.length < 2) return null
-
-    headers = toCells(pipeLines[0])
-    rows = pipeLines.slice(1).map(toCells)
+  const tableLines = [lines[dividerIndex - 1], lines[dividerIndex]]
+  for (const line of lines.slice(dividerIndex + 1)) {
+    if (!line.includes('|')) break
+    tableLines.push(line)
   }
+  const headers = toCells(tableLines[0])
+  const rows = tableLines.slice(2).map(toCells)
 
   if (!headers.length || rows.some(row => row.length !== headers.length)) return null
 
