@@ -3,7 +3,8 @@
 import { Extension, InputRule, Mark, Node, mergeAttributes } from '@tiptap/core'
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
 import type { NodeViewProps } from '@tiptap/react'
-import { DOMParser as ProseMirrorDOMParser } from '@tiptap/pm/model'
+import { DOMParser as ProseMirrorDOMParser, Fragment, Slice } from '@tiptap/pm/model'
+import type { Node as ProseMirrorNode, Schema } from '@tiptap/pm/model'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { Plugin } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
@@ -450,15 +451,6 @@ const ListTabKeymap = Extension.create({
   },
 })
 
-function parseMarkdownCodeBlock(text: string): { language: string | null; code: string } | null {
-  const match = text.trim().match(/^```(\w*)\r?\n([\s\S]*?)\n?```\s*$/)
-  if (!match) return null
-  return {
-    language: match[1].trim() || null,
-    code: match[2] ?? '',
-  }
-}
-
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, '&amp;')
@@ -468,35 +460,70 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#039;')
 }
 
-function parseMarkdownLinksToHtml(text: string) {
-  const markdownLinkPattern = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g
-  if (!markdownLinkPattern.test(text)) return null
+const MARKDOWN_LINK_PATTERN = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g
+const INLINE_MARKDOWN_PATTERN = /(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|~~[^~\n]+~~|(^|[\s(])\*(?!\*)([^*\n]+?)\*(?!\*)|(^|[\s(])_(?!_)([^_\n]+?)_(?!_))/
 
-  const renderLine = (line: string) => {
-    markdownLinkPattern.lastIndex = 0
-    let html = ''
-    let cursor = 0
-    let match: RegExpExecArray | null
+function hasMarkdownLink(text: string) {
+  MARKDOWN_LINK_PATTERN.lastIndex = 0
+  return MARKDOWN_LINK_PATTERN.test(text)
+}
 
-    while ((match = markdownLinkPattern.exec(line))) {
-      const [raw, label, href] = match
-      html += escapeHtml(line.slice(cursor, match.index))
-      html += `<a href="${escapeHtml(href)}" class="url-chip" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`
-      cursor = match.index + raw.length
-    }
+function hasInlineMarkdown(text: string) {
+  return hasMarkdownLink(text) || INLINE_MARKDOWN_PATTERN.test(text)
+}
 
-    html += escapeHtml(line.slice(cursor))
-    return html
+function renderInlineMarkdown(value: string) {
+  const htmlTokens: string[] = []
+  const stash = (html: string) => {
+    const tokenIndex = htmlTokens.push(html) - 1
+    return `@@INLINE_TOKEN_${tokenIndex}@@`
   }
 
-  const paragraphs = text.split(/\n{2,}/).map(paragraph => {
-    const lines = paragraph.split(/\n/)
-    const htmlLines = lines.map(renderLine)
+  let escaped = escapeHtml(value)
 
-    return `<p>${htmlLines.join('<br>')}</p>`
-  })
+  escaped = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_match, label, href) => (
+    stash(`<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`)
+  ))
 
-  return paragraphs.join('')
+  escaped = escaped.replace(/`([^`]+)`/g, (_match, code) => stash(`<code>${code}</code>`))
+  escaped = escaped.replace(/__(.+?)__/g, (_match, strong) => stash(`<strong>${strong}</strong>`))
+  escaped = escaped.replace(/\*\*(.+?)\*\*/g, (_match, strong) => stash(`<strong>${strong}</strong>`))
+  escaped = escaped.replace(/~~(.+?)~~/g, (_match, strike) => stash(`<s>${strike}</s>`))
+  escaped = escaped.replace(/(^|[\s(])\*(?!\*)([^*\n]+?)\*(?!\*)/g, (_match, prefix, emphasis) => (
+    `${prefix}${stash(`<em>${emphasis}</em>`)}`
+  ))
+  escaped = escaped.replace(/(^|[\s(])_(?!_)([^_\n]+?)_(?!_)/g, (_match, prefix, emphasis) => (
+    `${prefix}${stash(`<em>${emphasis}</em>`)}`
+  ))
+
+  return escaped.replace(/@@INLINE_TOKEN_(\d+)@@/g, (_match, tokenIndex) => htmlTokens[Number(tokenIndex)] ?? '')
+}
+
+function renderInlineMarkdownLine(line: string) {
+  return renderInlineMarkdown(line)
+}
+
+function renderRichParagraphHtml(text: string) {
+  const htmlLines = text.split(/\n/).map(renderInlineMarkdownLine)
+  return `<p>${htmlLines.join('<br>')}</p>`
+}
+
+function renderHeadingHtml(level: number, text: string) {
+  const safeLevel = clampNumber(level, 1, 6)
+  return `<h${safeLevel}>${renderInlineMarkdown(text)}</h${safeLevel}>`
+}
+
+function renderBlockquoteHtml(lines: string[]) {
+  const text = lines.join('\n').trim()
+  return `<blockquote>${renderRichParagraphHtml(text)}</blockquote>`
+}
+
+function renderListHtml(kind: 'bullet' | 'ordered', items: string[]) {
+  const tag = kind === 'ordered' ? 'ol' : 'ul'
+  const itemHtml = items
+    .map(item => `<li>${renderRichParagraphHtml(item)}</li>`)
+    .join('')
+  return `<${tag}>${itemHtml}</${tag}>`
 }
 
 function findTableRowPos(view: EditorView, row: HTMLTableRowElement) {
@@ -543,21 +570,20 @@ function getRowResizeTarget(view: EditorView, event: MouseEvent) {
   return { row, rowNode, rowPos }
 }
 
-function parseMarkdownTable(text: string) {
-  if (text.trimStart().startsWith('```')) return null
+const TABLE_DIVIDER_PATTERN = /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/
 
-  const lines = text
-    .trim()
-    .split(/\r?\n/)
+function isMarkdownTableDivider(line: string) {
+  return line.includes('|') && TABLE_DIVIDER_PATTERN.test(line.trim())
+}
+
+function renderMarkdownTableHtml(tableLines: string[]) {
+  const lines = tableLines
     .map(line => line.trim())
-    .filter(line => line && !line.startsWith('```'))
+    .filter(Boolean)
 
-  if (lines.length < 2) return null
-
-  const dividerPattern = /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/
-  const dividerIndex = lines.findIndex((line, index) => (
-    index > 0 && line.includes('|') && dividerPattern.test(line) && lines[index - 1]?.includes('|')
-  ))
+  if (lines.length < 2 || !lines[0]?.includes('|') || !isMarkdownTableDivider(lines[1] ?? '')) {
+    return null
+  }
 
   const toCells = (line: string) => line
     .replace(/^\|/, '')
@@ -565,52 +591,10 @@ function parseMarkdownTable(text: string) {
     .split('|')
     .map(cell => cell.trim())
 
-  if (dividerIndex === -1) return null
-
-  const tableLines = [lines[dividerIndex - 1], lines[dividerIndex]]
-  for (const line of lines.slice(dividerIndex + 1)) {
-    if (!line.includes('|')) break
-    tableLines.push(line)
-  }
-  const headers = toCells(tableLines[0])
-  const rows = tableLines.slice(2).map(toCells)
+  const headers = toCells(lines[0])
+  const rows = lines.slice(2).map(toCells)
 
   if (!headers.length || rows.some(row => row.length !== headers.length)) return null
-
-  const escapeHtml = (value: string) => value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
-
-  const renderInlineMarkdown = (value: string) => {
-    const htmlTokens: string[] = []
-    const stash = (html: string) => {
-      const tokenIndex = htmlTokens.push(html) - 1
-      return `__INLINE_TOKEN_${tokenIndex}__`
-    }
-
-    let escaped = escapeHtml(value)
-
-    escaped = escaped.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_match, label, href) => (
-      stash(`<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`)
-    ))
-
-    escaped = escaped.replace(/`([^`]+)`/g, (_match, code) => stash(`<code>${code}</code>`))
-    // __bold__ must run before **bold** to prevent the **bold** stash token (__INLINE_TOKEN_N__) being consumed by __...__
-    escaped = escaped.replace(/__(.+?)__/g, (_match, strong) => stash(`<strong>${strong}</strong>`))
-    escaped = escaped.replace(/\*\*(.+?)\*\*/g, (_match, strong) => stash(`<strong>${strong}</strong>`))
-    escaped = escaped.replace(/~~(.+?)~~/g, (_match, strike) => stash(`<s>${strike}</s>`))
-    escaped = escaped.replace(/(^|[\s(])\*(?!\*)([^*\n]+?)\*(?!\*)/g, (_match, prefix, emphasis) => (
-      `${prefix}${stash(`<em>${emphasis}</em>`)}`
-    ))
-    escaped = escaped.replace(/(^|[\s(])_(?!_)([^_\n]+?)_(?!_)/g, (_match, prefix, emphasis) => (
-      `${prefix}${stash(`<em>${emphasis}</em>`)}`
-    ))
-
-    return escaped.replace(/__INLINE_TOKEN_(\d+)__/g, (_match, tokenIndex) => htmlTokens[Number(tokenIndex)] ?? '')
-  }
 
   const headerHtml = headers.map(cell => `<th><p>${renderInlineMarkdown(cell)}</p></th>`).join('')
   const rowsHtml = rows
@@ -618,6 +602,254 @@ function parseMarkdownTable(text: string) {
     .join('')
 
   return `<table><tbody><tr>${headerHtml}</tr>${rowsHtml}</tbody></table>`
+}
+
+type MarkdownPasteBlock =
+  | { type: 'paragraph'; text: string }
+  | { type: 'heading'; level: number; text: string }
+  | { type: 'horizontalRule' }
+  | { type: 'blockquote'; lines: string[] }
+  | { type: 'list'; kind: 'bullet' | 'ordered'; items: string[] }
+  | { type: 'table'; lines: string[] }
+  | { type: 'code'; language: string | null; code: string }
+
+const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/
+const HORIZONTAL_RULE_PATTERN = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/
+const BLOCKQUOTE_PATTERN = /^>\s?(.*)$/
+const BULLET_LIST_PATTERN = /^[-*+]\s+(.+)$/
+const ORDERED_LIST_PATTERN = /^\d+[.)]\s+(.+)$/
+const FENCED_CODE_START_PATTERN = /^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)?.*$/
+
+function getFencedCodeStart(line: string) {
+  const match = line.match(FENCED_CODE_START_PATTERN)
+  if (!match) return null
+
+  const marker = match[1]
+  const markerChar = marker[0]
+  if (!markerChar) return null
+
+  return {
+    markerChar,
+    markerLength: marker.length,
+    language: match[2]?.trim() || null,
+  }
+}
+
+function isFencedCodeEnd(line: string, markerChar: string, markerLength: number) {
+  const trimmed = line.trim()
+  if (!trimmed.startsWith(markerChar.repeat(markerLength))) return false
+  return [...trimmed].every(char => char === markerChar)
+}
+
+function parseMarkdownPasteBlocks(text: string) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+  const blocks: MarkdownPasteBlock[] = []
+  let paragraphLines: string[] = []
+  let handledMarkdown = false
+
+  const flushParagraph = () => {
+    const paragraphText = paragraphLines.join('\n').trim()
+    if (paragraphText) {
+      blocks.push({ type: 'paragraph', text: paragraphText })
+      if (hasInlineMarkdown(paragraphText)) handledMarkdown = true
+    }
+    paragraphLines = []
+  }
+
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index] ?? ''
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      flushParagraph()
+      index += 1
+      continue
+    }
+
+    const headingMatch = trimmed.match(HEADING_PATTERN)
+    if (headingMatch) {
+      flushParagraph()
+      blocks.push({
+        type: 'heading',
+        level: headingMatch[1].length,
+        text: headingMatch[2],
+      })
+      handledMarkdown = true
+      index += 1
+      continue
+    }
+
+    if (HORIZONTAL_RULE_PATTERN.test(line)) {
+      flushParagraph()
+      blocks.push({ type: 'horizontalRule' })
+      handledMarkdown = true
+      index += 1
+      continue
+    }
+
+    const blockquoteMatch = line.match(BLOCKQUOTE_PATTERN)
+    if (blockquoteMatch) {
+      flushParagraph()
+      const quoteLines = [blockquoteMatch[1]]
+      index += 1
+      while (index < lines.length) {
+        const nextQuoteMatch = (lines[index] ?? '').match(BLOCKQUOTE_PATTERN)
+        if (!nextQuoteMatch) break
+        quoteLines.push(nextQuoteMatch[1])
+        index += 1
+      }
+      blocks.push({ type: 'blockquote', lines: quoteLines })
+      handledMarkdown = true
+      continue
+    }
+
+    const bulletListMatch = line.match(BULLET_LIST_PATTERN)
+    const orderedListMatch = line.match(ORDERED_LIST_PATTERN)
+    if (bulletListMatch || orderedListMatch) {
+      flushParagraph()
+      const kind = bulletListMatch ? 'bullet' : 'ordered'
+      const items = [bulletListMatch?.[1] ?? orderedListMatch?.[1] ?? '']
+      index += 1
+      while (index < lines.length) {
+        const nextMatch = kind === 'bullet'
+          ? (lines[index] ?? '').match(BULLET_LIST_PATTERN)
+          : (lines[index] ?? '').match(ORDERED_LIST_PATTERN)
+        if (!nextMatch) break
+        items.push(nextMatch[1])
+        index += 1
+      }
+      blocks.push({ type: 'list', kind, items })
+      handledMarkdown = true
+      continue
+    }
+
+    const fenceStart = getFencedCodeStart(line)
+    if (fenceStart) {
+      flushParagraph()
+      const codeLines: string[] = []
+      index += 1
+      while (
+        index < lines.length &&
+        !isFencedCodeEnd(lines[index] ?? '', fenceStart.markerChar, fenceStart.markerLength)
+      ) {
+        codeLines.push(lines[index] ?? '')
+        index += 1
+      }
+      if (index >= lines.length) {
+        paragraphLines.push(line, ...codeLines)
+        continue
+      }
+
+      index += 1
+      blocks.push({
+        type: 'code',
+        language: fenceStart.language,
+        code: codeLines.join('\n'),
+      })
+      handledMarkdown = true
+      continue
+    }
+
+    const nextLine = lines[index + 1] ?? ''
+    if (line.includes('|') && isMarkdownTableDivider(nextLine)) {
+      flushParagraph()
+      const tableLines = [line, nextLine]
+      index += 2
+      while (index < lines.length && (lines[index] ?? '').trim() && (lines[index] ?? '').includes('|')) {
+        tableLines.push(lines[index] ?? '')
+        index += 1
+      }
+      blocks.push({ type: 'table', lines: tableLines })
+      handledMarkdown = true
+      continue
+    }
+
+    paragraphLines.push(line)
+    index += 1
+  }
+
+  flushParagraph()
+
+  return handledMarkdown ? blocks : null
+}
+
+function htmlToNodes(schema: Schema, html: string) {
+  const wrapper = document.createElement('div')
+  wrapper.innerHTML = html
+  const slice = ProseMirrorDOMParser.fromSchema(schema).parseSlice(wrapper)
+  const nodes: ProseMirrorNode[] = []
+  slice.content.forEach(node => {
+    nodes.push(node)
+  })
+  return nodes
+}
+
+function markdownPasteBlocksToSlice(schema: Schema, blocks: MarkdownPasteBlock[]) {
+  const nodes: ProseMirrorNode[] = []
+
+  for (const block of blocks) {
+    if (block.type === 'paragraph') {
+      nodes.push(...htmlToNodes(schema, renderRichParagraphHtml(block.text)))
+      continue
+    }
+
+    if (block.type === 'heading') {
+      nodes.push(...htmlToNodes(schema, renderHeadingHtml(block.level, block.text)))
+      continue
+    }
+
+    if (block.type === 'horizontalRule') {
+      const horizontalRuleType = schema.nodes.horizontalRule
+      if (horizontalRuleType) nodes.push(horizontalRuleType.create())
+      continue
+    }
+
+    if (block.type === 'blockquote') {
+      nodes.push(...htmlToNodes(schema, renderBlockquoteHtml(block.lines)))
+      continue
+    }
+
+    if (block.type === 'list') {
+      nodes.push(...htmlToNodes(schema, renderListHtml(block.kind, block.items)))
+      continue
+    }
+
+    if (block.type === 'table') {
+      const tableHtml = renderMarkdownTableHtml(block.lines)
+      if (!tableHtml) {
+        nodes.push(...htmlToNodes(schema, renderRichParagraphHtml(block.lines.join('\n'))))
+        continue
+      }
+      nodes.push(...htmlToNodes(schema, tableHtml))
+      continue
+    }
+
+    if (block.type === 'code') {
+      if (block.language === 'mermaid') {
+        const mermaidBlockType = schema.nodes.mermaidBlock
+        if (mermaidBlockType) {
+          nodes.push(mermaidBlockType.create({ code: block.code }))
+        }
+        continue
+      }
+
+      const codeBlockType = schema.nodes.codeBlock
+      if (!codeBlockType) continue
+      nodes.push(
+        block.code
+          ? codeBlockType.create({ language: block.language }, schema.text(block.code))
+          : codeBlockType.create({ language: block.language })
+      )
+    }
+  }
+
+  return nodes.length ? new Slice(Fragment.fromArray(nodes), 0, 0) : null
+}
+
+function parseMarkdownPasteToSlice(schema: Schema, text: string) {
+  const blocks = parseMarkdownPasteBlocks(text)
+  if (!blocks) return null
+  return markdownPasteBlocksToSlice(schema, blocks)
 }
 
 function findImagePositionBySrc(view: EditorView, src: string) {
@@ -838,42 +1070,10 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
         const text = event.clipboardData?.getData('text/plain')
         if (!text) return false
 
-        const tableHtml = parseMarkdownTable(text)
-        if (tableHtml) {
+        const markdownPasteSlice = parseMarkdownPasteToSlice(view.state.schema, text)
+        if (markdownPasteSlice) {
           event.preventDefault()
-          const wrapper = document.createElement('div')
-          wrapper.innerHTML = tableHtml
-          const slice = ProseMirrorDOMParser.fromSchema(view.state.schema).parseSlice(wrapper)
-          view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView())
-          return true
-        }
-
-        const codeBlock = parseMarkdownCodeBlock(text)
-        if (codeBlock) {
-          event.preventDefault()
-          const { schema } = view.state
-          if (codeBlock.language === 'mermaid') {
-            const mermaidBlockType = schema.nodes.mermaidBlock
-            if (!mermaidBlockType) return false
-            const node = mermaidBlockType.create({ code: codeBlock.code })
-            view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView())
-            return true
-          }
-          const codeBlockType = schema.nodes.codeBlock
-          if (!codeBlockType) return false
-          const content = codeBlock.code ? [schema.text(codeBlock.code)] : []
-          const node = codeBlockType.create({ language: codeBlock.language }, content)
-          view.dispatch(view.state.tr.replaceSelectionWith(node).scrollIntoView())
-          return true
-        }
-
-        const markdownLinkHtml = parseMarkdownLinksToHtml(text)
-        if (markdownLinkHtml) {
-          event.preventDefault()
-          const wrapper = document.createElement('div')
-          wrapper.innerHTML = markdownLinkHtml
-          const slice = ProseMirrorDOMParser.fromSchema(view.state.schema).parseSlice(wrapper)
-          view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView())
+          view.dispatch(view.state.tr.replaceSelection(markdownPasteSlice).scrollIntoView())
           return true
         }
 

@@ -10,3 +10,4 @@ agi-client.log
 *.tsbuildinfo
 public/url-chip-review.html
 scripts/url-chip-review.mjs
+scripts/editor-syntax-test.cjs
