@@ -6,6 +6,43 @@ type TiptapNode = {
   marks?: { type: string; attrs?: Record<string, unknown> }[]
 }
 
+function longestRun(value: string, char: string): number {
+  let longest = 0
+  let current = 0
+
+  for (const currentChar of value) {
+    if (currentChar === char) {
+      current += 1
+      longest = Math.max(longest, current)
+    } else {
+      current = 0
+    }
+  }
+
+  return longest
+}
+
+function codeFenceFor(code: string) {
+  return '`'.repeat(Math.max(3, longestRun(code, '`') + 1))
+}
+
+function codeSpanFor(code: string) {
+  const delimiter = '`'.repeat(Math.max(1, longestRun(code, '`') + 1))
+  const needsPadding = /^\s|\s$|`/.test(code)
+  return needsPadding
+    ? `${delimiter} ${code} ${delimiter}`
+    : `${delimiter}${code}${delimiter}`
+}
+
+function fencedCodeBlock(language: string, code: string) {
+  const fence = codeFenceFor(code)
+  return `${fence}${language}\n${code}\n${fence}`
+}
+
+function escapeTableCell(value: string) {
+  return value.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')
+}
+
 function inlineText(node: TiptapNode): string {
   if (node.type === 'text') {
     let text = node.text ?? ''
@@ -13,7 +50,7 @@ function inlineText(node: TiptapNode): string {
 
     // apply marks inside-out: code → bold → italic → strike → link
     const hasCode = marks.some(m => m.type === 'code')
-    if (hasCode) return `\`${text}\``
+    if (hasCode) return codeSpanFor(text)
 
     const link = marks.find(m => m.type === 'link')
     const hasBold = marks.some(m => m.type === 'bold')
@@ -75,12 +112,12 @@ function convertNode(node: TiptapNode, listDepth = 0): string {
     case 'codeBlock': {
       const lang = (node.attrs?.language as string) ?? ''
       const code = (node.content ?? []).map(n => n.text ?? '').join('')
-      return `\`\`\`${lang}\n${code}\n\`\`\``
+      return fencedCodeBlock(lang, code)
     }
 
     case 'mermaidBlock': {
       const code = (node.attrs?.code as string) ?? ''
-      return `\`\`\`mermaid\n${code}\n\`\`\``
+      return fencedCodeBlock('mermaid', code)
     }
 
     case 'image': {
@@ -98,7 +135,7 @@ function convertNode(node: TiptapNode, listDepth = 0): string {
       rows.forEach((row, rowIndex) => {
         const cells = (row.content ?? []).map(cell => {
           const text = (cell.content ?? []).map(n => convertNode(n)).join(' ').replace(/\n/g, ' ')
-          return text.trim()
+          return escapeTableCell(text.trim())
         })
         lines.push(`| ${cells.join(' | ')} |`)
         if (rowIndex === 0) {
