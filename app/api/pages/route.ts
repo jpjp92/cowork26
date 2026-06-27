@@ -74,6 +74,9 @@ export async function POST(request: Request) {
       ? body.title.trim()
       : 'Untitled'
     const parentId = typeof body.parentId === 'string' && body.parentId ? body.parentId : null
+    // 클라이언트 낙관적 생성용: 유효한 UUID면 그 id로 insert(없으면 DB 기본값 사용)
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const requestedId = typeof body.id === 'string' && UUID_RE.test(body.id) ? body.id : undefined
 
     const pageCountQuery = supabaseAdmin
       .from('pages')
@@ -89,6 +92,7 @@ export async function POST(request: Request) {
     const { data, error } = await timing.measure('page.insert', () => supabaseAdmin
       .from('pages')
       .insert({
+        ...(requestedId ? { id: requestedId } : {}),
         workspace_id: workspaceId,
         parent_id: parentId,
         title,

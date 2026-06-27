@@ -2,17 +2,27 @@
 
 import { Session } from '@supabase/supabase-js'
 import dynamic from 'next/dynamic'
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AuthPanel from './auth-panel'
 import { supabase } from '../lib/supabase-browser'
+import { tiptapToMarkdown } from '../lib/tiptap-to-markdown'
 
 const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false })
 const DEBUG_SAVE_FLOW = process.env.NODE_ENV !== 'production'
 const PAGE_REVALIDATE_INTERVAL_MS = 30_000
+const DEFAULT_SIDEBAR_WIDTH = 312
+const MIN_SIDEBAR_WIDTH = 240
+const MAX_SIDEBAR_WIDTH = 520
+const SIDEBAR_WIDTH_STORAGE_KEY = 'cowork26:sidebar-width'
 
 function debugSaveFlow(message: string, data?: Record<string, unknown>) {
   if (!DEBUG_SAVE_FLOW) return
   console.log(`[save-flow] ${message}`, data ?? {})
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
 }
 
 interface Workspace {
@@ -41,6 +51,15 @@ interface WorkspaceMember {
   email: string | null
 }
 
+interface UploadedImageAsset {
+  id: string
+  url: string
+  storagePath?: string
+  alt?: string
+}
+
+type PageDropPosition = 'above' | 'below' | 'inside'
+
 async function readError(response: Response, fallback: string) {
   try {
     const data = await response.json()
@@ -63,9 +82,56 @@ function getRoleBadgeClass(role: string) {
   return 'bg-[#c4b5fd] text-black'
 }
 
+function PageTreeSkeleton() {
+  return (
+    <div className="grid gap-2">
+      {[0, 1, 2, 3, 4].map(index => (
+        <div
+          key={index}
+          className="h-8 animate-pulse rounded-[4px] border border-black bg-[#50504d]"
+          style={{ marginLeft: index > 1 ? 20 : 0, width: `${92 - index * 7}%` }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function DocumentSkeleton() {
+  return (
+    <article className="mx-auto my-8 w-full max-w-4xl flex-1 rounded-[8px] border border-black bg-[#fef9ef] px-10 py-12 shadow-[6px_6px_0_#000] max-sm:mx-4 max-sm:px-5 max-sm:py-8">
+      <div className="mb-4 border-b border-black pb-3">
+        <div className="h-8 w-2/3 animate-pulse rounded-[4px] bg-[#d8d0c0]" />
+      </div>
+      <div className="space-y-4">
+        <div className="h-5 w-full animate-pulse rounded-[4px] bg-[#ded7c9]" />
+        <div className="h-5 w-11/12 animate-pulse rounded-[4px] bg-[#ded7c9]" />
+        <div className="h-5 w-4/5 animate-pulse rounded-[4px] bg-[#ded7c9]" />
+        <div className="mt-8 h-40 w-full animate-pulse rounded-[8px] border border-black bg-[#ece4d5]" />
+        <div className="h-5 w-5/6 animate-pulse rounded-[4px] bg-[#ded7c9]" />
+        <div className="h-5 w-2/3 animate-pulse rounded-[4px] bg-[#ded7c9]" />
+      </div>
+    </article>
+  )
+}
+
+function MembersSkeleton() {
+  return (
+    <div className="space-y-2">
+      {[0, 1].map(index => (
+        <div key={index} className="rounded-[8px] border border-black bg-[#62625f] px-2 py-2">
+          <div className="h-3 w-4/5 animate-pulse rounded bg-[#777773]" />
+          <div className="mt-2 h-4 w-16 animate-pulse rounded bg-[#baf7c8]/60" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function NotionLiteApp() {
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [workspacesLoading, setWorkspacesLoading] = useState(false)
+  const [pagesLoading, setPagesLoading] = useState(false)
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [pages, setPages] = useState<PageRecord[]>([])
   const [activeWorkspaceId, setActiveWorkspaceId] = useState('')
@@ -96,20 +162,31 @@ export default function NotionLiteApp() {
   const workspaceDragClickBlockedRef = useRef(false)
   const draggedIdRef = useRef<string | null>(null)
   const activePageIdRef = useRef(activePageId)
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId)
+  const pagesRef = useRef<PageRecord[]>([])
+  const pagesCache = useRef(new Map<string, PageRecord[]>())
+  const pendingCreateIds = useRef(new Set<string>())
   const pageFetchedAtRef = useRef(new Map<string, number>())
   const savingResetTimerRef = useRef<number | null>(null)
   const titleFocusValueRef = useRef(new Map<string, string>())
-  const [dragOver, setDragOver] = useState<{ id: string; position: 'above' | 'below' } | null>(null)
+  const [dragOver, setDragOver] = useState<{ id: string; position: PageDropPosition } | null>(null)
   const [workspaceDragOver, setWorkspaceDragOver] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
   const [collapsedPages, setCollapsedPages] = useState<Set<string>>(new Set())
   const [showAgiPrompt, setShowAgiPrompt] = useState(false)
   const [agiDownloadUrl, setAgiDownloadUrl] = useState('')
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
+
   const accessToken = session?.access_token
   const activeWorkspace = workspaces.find(workspace => workspace.id === activeWorkspaceId)
   const activePage = pages.find(page => page.id === activePageId) ?? null
   const activePageContent = activePage ? pendingContent.current.get(activePage.id) ?? activePage.content : null
   const canEdit = activeWorkspace?.role === 'owner' || activeWorkspace?.role === 'editor'
   const canManageMembers = activeWorkspace?.role === 'owner'
+  const deleteTarget = deleteTargetId ? pages.find(page => page.id === deleteTargetId) ?? null : null
+  const deleteTargetHasChildren = deleteTargetId
+    ? pages.some(page => page.parent_id === deleteTargetId)
+    : false
 
   const activePageTrail = useMemo(() => {
     if (!activePage) return []
@@ -185,11 +262,45 @@ export default function NotionLiteApp() {
         }
       })
       .catch(() => {})
+  const authUploadHeaders = useCallback(() => ({
+    Authorization: `Bearer ${accessToken}`,
+  }), [accessToken])
+
+  useEffect(() => {
+    const savedWidth = Number(window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY))
+    if (!Number.isFinite(savedWidth)) return
+    setSidebarWidth(clampNumber(savedWidth, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH))
   }, [])
 
   useEffect(() => {
     activePageIdRef.current = activePageId
   }, [activePageId])
+
+  useEffect(() => {
+    activeWorkspaceIdRef.current = activeWorkspaceId
+  }, [activeWorkspaceId])
+
+  // 삭제 확인 모달: Esc로 닫기
+  useEffect(() => {
+    if (!deleteTargetId) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDeleteTargetId(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [deleteTargetId])
+
+  // pages 변경을 워크스페이스별 캐시에 동기화한다.
+  // 모든 setPages(생성/삭제/이동/이름변경/저장)가 여기서 자동 반영되어 mutation 호출부 수정 불필요.
+  useEffect(() => {
+    pagesRef.current = pages
+    if (!activeWorkspaceId) return
+    // workspace_id 가드: 전환 직후 이전 워크스페이스 pages가 새 id로 저장되는 레이스 차단.
+    // 빈 배열은 여기서 캐싱하지 않음(loadPages가 책임) → '미로드' vs '로드 후 빈' 혼동 방지.
+    if (pages.length > 0 && pages[0].workspace_id === activeWorkspaceId) {
+      pagesCache.current.set(activeWorkspaceId, pages)
+    }
+  }, [pages, activeWorkspaceId])
 
   const showSavingStatus = useCallback((status: 'saved' | 'loaded') => {
     if (savingResetTimerRef.current) {
@@ -223,11 +334,110 @@ export default function NotionLiteApp() {
     setActivePageId(pageId)
   }, [])
 
+  const startSidebarResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (window.innerWidth < 768) return
+
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = sidebarWidth
+    let nextWidth = startWidth
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      nextWidth = clampNumber(
+        startWidth + moveEvent.clientX - startX,
+        MIN_SIDEBAR_WIDTH,
+        MAX_SIDEBAR_WIDTH,
+      )
+      setSidebarWidth(nextWidth)
+    }
+
+    const handlePointerUp = () => {
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+      window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(nextWidth)))
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+      window.removeEventListener('pointercancel', handlePointerUp)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerUp)
+  }, [sidebarWidth])
+
+  const uploadImageAsset = useCallback(async (file: File): Promise<UploadedImageAsset> => {
+    if (!activeWorkspaceId || !activePageIdRef.current) {
+      throw new Error('이미지를 업로드할 페이지를 찾을 수 없습니다.')
+    }
+
+    const formData = new FormData()
+    formData.append('workspaceId', activeWorkspaceId)
+    formData.append('pageId', activePageIdRef.current)
+    formData.append('file', file)
+
+    const response = await fetch('/api/assets', {
+      method: 'POST',
+      headers: authUploadHeaders(),
+      body: formData,
+    })
+
+    if (!response.ok) {
+      throw await readError(response, '이미지를 업로드하지 못했습니다.')
+    }
+
+    const data = await response.json() as UploadedImageAsset
+    return {
+      ...data,
+      alt: file.name || data.alt || 'pasted image',
+    }
+  }, [activeWorkspaceId, authUploadHeaders])
+
+  const cloneImageAsset = useCallback(async (source: {
+    assetId?: string
+    storagePath?: string
+    src: string
+    alt?: string
+  }): Promise<UploadedImageAsset> => {
+    if (!activeWorkspaceId || !activePageIdRef.current) {
+      throw new Error('이미지를 복사할 페이지를 찾을 수 없습니다.')
+    }
+
+    const response = await fetch('/api/assets/clone', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        workspaceId: activeWorkspaceId,
+        pageId: activePageIdRef.current,
+        sourceAssetId: source.assetId,
+        sourceStoragePath: source.storagePath,
+      }),
+    })
+
+    if (!response.ok) {
+      throw await readError(response, '이미지를 복사하지 못했습니다.')
+    }
+
+    const data = await response.json() as UploadedImageAsset
+    return {
+      ...data,
+      alt: source.alt || data.alt || 'copied image',
+    }
+  }, [activeWorkspaceId, authHeaders])
+
   const resetClientState = useCallback(() => {
     setSession(null)
+    setWorkspacesLoading(false)
+    setPagesLoading(false)
     setWorkspaces([])
     setPages([])
     setMembers([])
+    pagesCache.current.clear()
+    pagesRef.current = []
     setActiveWorkspaceId('')
     selectActivePage('')
     setSettingsOpen(false)
@@ -236,34 +446,80 @@ export default function NotionLiteApp() {
   const loadWorkspaces = useCallback(async () => {
     if (!accessToken) return
     setError('')
-    const response = await fetch('/api/workspaces', { headers: authHeaders() })
-    if (!response.ok) throw await readError(response, '워크스페이스를 불러오지 못했습니다.')
+    setWorkspacesLoading(true)
+    try {
+      const response = await fetch('/api/workspaces', { headers: authHeaders() })
+      if (!response.ok) throw await readError(response, '워크스페이스를 불러오지 못했습니다.')
 
-    const data = await response.json() as Workspace[]
-    setWorkspaces(data)
-    setActiveWorkspaceId(current => data.some(workspace => workspace.id === current) ? current : data[0]?.id || '')
-    return data
+      const data = await response.json() as Workspace[]
+      setWorkspaces(data)
+      setActiveWorkspaceId(current => data.some(workspace => workspace.id === current) ? current : data[0]?.id || '')
+      return data
+    } finally {
+      setWorkspacesLoading(false)
+    }
   }, [accessToken, authHeaders])
 
-  const loadPages = useCallback(async (workspaceId: string) => {
+  const loadPages = useCallback(async (
+    workspaceId: string,
+    options?: { background?: boolean },
+  ) => {
     if (!accessToken || !workspaceId) return
+    const background = options?.background ?? false
     setError('')
-    const response = await fetch(`/api/pages?workspaceId=${workspaceId}`, {
-      headers: authHeaders(),
-    })
-    if (!response.ok) throw await readError(response, '페이지를 불러오지 못했습니다.')
+    if (!background) setPagesLoading(true)
+    try {
+      const response = await fetch(`/api/pages?workspaceId=${workspaceId}`, {
+        headers: authHeaders(),
+      })
+      if (!response.ok) throw await readError(response, '페이지를 불러오지 못했습니다.')
 
-    const data = await response.json() as PageRecord[]
-    const fetchedAt = Date.now()
-    for (const page of data) {
-      pageFetchedAtRef.current.set(page.id, fetchedAt)
+      const data = await response.json() as PageRecord[]
+      const fetchedAt = Date.now()
+      for (const page of data) {
+        pageFetchedAtRef.current.set(page.id, fetchedAt)
+      }
+
+      // reconcile: 미저장/저장 중 content는 로컬 우선으로 보존(저장 손실 방지).
+      // 구조 변경(parent/order/title)은 서버 값을 수용.
+      const currentById = new Map(pagesRef.current.map(page => [page.id, page]))
+      const reconciled = data.map(serverPage => {
+        const hasUnsaved = (
+          saveTimers.current.has(serverPage.id) ||
+          contentSaveInFlight.current.has(serverPage.id) ||
+          pendingContent.current.has(serverPage.id)
+        )
+        if (!hasUnsaved) return serverPage
+        const localContent = (
+          pendingContent.current.get(serverPage.id) ??
+          currentById.get(serverPage.id)?.content ??
+          serverPage.content
+        )
+        return { ...serverPage, content: localContent }
+      })
+
+      // 아직 서버에 없는 '생성 중' 낙관적 페이지는 유지(재검증이 생성 중 페이지를 지우지 않도록).
+      const serverIds = new Set(data.map(page => page.id))
+      const pendingCreates = pagesRef.current.filter(page => (
+        pendingCreateIds.current.has(page.id) && !serverIds.has(page.id)
+      ))
+      const merged = pendingCreates.length > 0 ? [...reconciled, ...pendingCreates] : reconciled
+
+      // 캐시는 항상 갱신(빈 배열 포함). 키가 workspaceId라 응답 순서와 무관하게 정확.
+      pagesCache.current.set(workspaceId, merged)
+
+      // 화면 반영은 아직 같은 워크스페이스를 보고 있을 때만(전환 중 늦게 온 응답 무시).
+      if (workspaceId === activeWorkspaceIdRef.current) {
+        setPages(merged)
+        setActivePageId(current => {
+          const nextPageId = merged.some(page => page.id === current) ? current : merged[0]?.id || ''
+          activePageIdRef.current = nextPageId
+          return nextPageId
+        })
+      }
+    } finally {
+      if (!background) setPagesLoading(false)
     }
-    setPages(data)
-    setActivePageId(current => {
-      const nextPageId = data.some(page => page.id === current) ? current : data[0]?.id || ''
-      activePageIdRef.current = nextPageId
-      return nextPageId
-    })
   }, [accessToken, authHeaders])
 
   const loadMembers = useCallback(async (workspaceId: string) => {
@@ -326,7 +582,21 @@ export default function NotionLiteApp() {
       selectActivePage('')
       return
     }
-    loadPages(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
+
+    const cached = pagesCache.current.get(activeWorkspaceId)
+    if (cached) {
+      // 캐시 히트: 스켈레톤 없이 즉시 표시 + 백그라운드 재검증
+      setPages(cached)
+      setActivePageId(current => {
+        const nextPageId = cached.some(page => page.id === current) ? current : cached[0]?.id || ''
+        activePageIdRef.current = nextPageId
+        return nextPageId
+      })
+      loadPages(activeWorkspaceId, { background: true })
+        .catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
+    } else {
+      loadPages(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
+    }
   }, [activeWorkspaceId, loadPages, selectActivePage])
 
   useEffect(() => {
@@ -516,29 +786,74 @@ export default function NotionLiteApp() {
   const createPage = async (parentId: string | null = null) => {
     if (!activeWorkspaceId || !accessToken || !canEdit || creatingPage) return
     setError('')
+
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const title = newPageTitle.trim() || 'Untitled'
+    const siblingCount = pages.filter(page => (page.parent_id ?? null) === (parentId ?? null)).length
+    const optimisticPage: PageRecord = {
+      id,
+      workspace_id: activeWorkspaceId,
+      parent_id: parentId,
+      title,
+      order_index: siblingCount,
+      content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      created_at: now,
+      updated_at: now,
+    }
+
+    const previousPages = pages
+    const previousActiveId = activePageIdRef.current
+
+    // 낙관적 반영: 즉시 사이드바에 추가 + 활성화
+    pendingCreateIds.current.add(id)
+    pageFetchedAtRef.current.set(id, Date.now())
+    setPages(previous => [...previous, optimisticPage])
+    selectActivePage(id)
+    setNewPageTitle('')
     setCreatingPage(true)
+
     try {
       const response = await fetch('/api/pages', {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({
-          workspaceId: activeWorkspaceId,
-          parentId,
-          title: newPageTitle.trim() || 'Untitled',
-        }),
+        // 클라이언트가 정한 id로 insert → temp↔real 교체 불필요
+        body: JSON.stringify({ id, workspaceId: activeWorkspaceId, parentId, title }),
       })
-      if (!response.ok) {
-        setError((await readError(response, '페이지를 만들지 못했습니다.')).message)
-        return
-      }
+      if (!response.ok) throw await readError(response, '페이지를 만들지 못했습니다.')
 
       const page = await response.json() as PageRecord
       pageFetchedAtRef.current.set(page.id, Date.now())
-      setPages(previous => [...previous, page])
-      selectActivePage(page.id)
-      setNewPageTitle('')
+      // 서버 레코드로 교체하되, 생성 중 사용자가 입력한 content는 보존
+      setPages(previous => previous.map(item => (
+        item.id === id
+          ? { ...page, content: pendingContent.current.get(id) ?? item.content }
+          : item
+      )))
+    } catch (err) {
+      // 롤백: 낙관적 페이지 제거 + 이전 선택 복원
+      pendingContent.current.delete(id)
+      pageFetchedAtRef.current.delete(id)
+      const timer = saveTimers.current.get(id)
+      if (timer) { window.clearTimeout(timer); saveTimers.current.delete(id) }
+      setPages(previousPages)
+      setActivePageId(() => {
+        activePageIdRef.current = previousActiveId
+        return previousActiveId
+      })
+      setError(err instanceof Error ? err.message : '페이지를 만들지 못했습니다.')
     } finally {
+      pendingCreateIds.current.delete(id)
       setCreatingPage(false)
+      // 생성 진행 중 미뤄둔 content 저장을 지금 실행(가드로 지연됐던 입력 반영)
+      if (pendingContent.current.has(id)) {
+        const content = pendingContent.current.get(id)!
+        const existing = saveTimers.current.get(id)
+        if (existing) { window.clearTimeout(existing); saveTimers.current.delete(id) }
+        updatePage(id, { content }).catch(saveErr => {
+          setError(saveErr instanceof Error ? saveErr.message : '페이지를 저장하지 못했습니다.')
+        })
+      }
     }
   }
 
@@ -639,6 +954,10 @@ export default function NotionLiteApp() {
     })
     pendingContent.current.set(pageId, content)
 
+    // 생성 진행 중인 페이지는 서버에 아직 없으므로 저장(PATCH)을 예약하지 않는다.
+    // content는 pendingContent에 버퍼되고, createPage 완료 후 flush된다(404 레이스 차단).
+    if (pendingCreateIds.current.has(pageId)) return
+
     const existingTimer = saveTimers.current.get(pageId)
     if (existingTimer) window.clearTimeout(existingTimer)
 
@@ -671,17 +990,8 @@ export default function NotionLiteApp() {
 
   const deletePage = async (pageId: string) => {
     if (!accessToken || !canEdit) return
-    if (!window.confirm('이 페이지와 하위 페이지를 삭제할까요?')) return
 
-    const response = await fetch(`/api/pages?id=${pageId}`, {
-      method: 'DELETE',
-      headers: authHeaders(),
-    })
-    if (!response.ok) {
-      setError((await readError(response, '페이지를 삭제하지 못했습니다.')).message)
-      return
-    }
-
+    // 삭제 대상(하위 페이지 포함) 계산
     const deletedIds = new Set([pageId])
     let changed = true
     while (changed) {
@@ -694,6 +1004,10 @@ export default function NotionLiteApp() {
       }
     }
 
+    const previousPages = pages
+    const previousActiveId = activePageIdRef.current
+
+    // 타이머/펜딩 정리
     for (const deletedId of deletedIds) {
       pendingContent.current.delete(deletedId)
       pageFetchedAtRef.current.delete(deletedId)
@@ -704,6 +1018,7 @@ export default function NotionLiteApp() {
       }
     }
 
+    // 낙관적 제거: 즉시 사이드바에서 제거 + 선택 이동
     const remaining = pages.filter(page => !deletedIds.has(page.id))
     setPages(remaining)
     setActivePageId(current => {
@@ -711,6 +1026,22 @@ export default function NotionLiteApp() {
       activePageIdRef.current = nextPageId
       return nextPageId
     })
+
+    try {
+      const response = await fetch(`/api/pages?id=${pageId}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      })
+      if (!response.ok) throw await readError(response, '페이지를 삭제하지 못했습니다.')
+    } catch (err) {
+      // 롤백: 삭제 전 상태로 복원
+      setPages(previousPages)
+      setActivePageId(() => {
+        activePageIdRef.current = previousActiveId
+        return previousActiveId
+      })
+      setError(err instanceof Error ? err.message : '페이지를 삭제하지 못했습니다.')
+    }
   }
 
   const inviteMember = async () => {
@@ -762,37 +1093,105 @@ export default function NotionLiteApp() {
     }
   }
 
-  const reorderPage = useCallback(async (draggedId: string, targetId: string, position: 'above' | 'below') => {
+  const movePage = useCallback(async (draggedId: string, targetId: string, position: PageDropPosition) => {
     if (draggedId === targetId || !accessToken) return
     const draggedPage = pages.find(p => p.id === draggedId)
     const targetPage = pages.find(p => p.id === targetId)
     if (!draggedPage || !targetPage) return
-    if (draggedPage.parent_id !== targetPage.parent_id) return
 
-    const siblings = [...(pageTree.get(targetPage.parent_id ?? 'root') ?? [])]
-    const withoutDragged = siblings.filter(p => p.id !== draggedId)
-    const targetIdx = withoutDragged.findIndex(p => p.id === targetId)
-    const insertIdx = position === 'above' ? targetIdx : targetIdx + 1
-    withoutDragged.splice(insertIdx, 0, draggedPage)
+    const pagesById = new Map(pages.map(page => [page.id, page]))
+    const isDescendantOf = (pageId: string, possibleAncestorId: string) => {
+      let current = pagesById.get(pageId)
+      const visited = new Set<string>()
+      while (current?.parent_id && !visited.has(current.id)) {
+        if (current.parent_id === possibleAncestorId) return true
+        visited.add(current.id)
+        current = pagesById.get(current.parent_id)
+      }
+      return false
+    }
 
-    const reordered = withoutDragged.map((p, i) => ({ ...p, order_index: i }))
+    const nextParentId = position === 'inside' ? targetPage.id : targetPage.parent_id
+    if (nextParentId === draggedId || (nextParentId && isDescendantOf(nextParentId, draggedId))) return
 
-    // optimistic update
-    setPages(prev => prev.map(p => reordered.find(r => r.id === p.id) ?? p))
+    const byParent = new Map<string, PageRecord[]>()
+    for (const page of pages) {
+      if (page.id === draggedId) continue
+      const key = page.parent_id ?? 'root'
+      byParent.set(key, [...(byParent.get(key) ?? []), page])
+    }
 
-    // persist only changed order_index values
-    const changed = reordered.filter(r => {
-      const original = siblings.find(s => s.id === r.id)
-      return original?.order_index !== r.order_index
-    })
-    await Promise.all(changed.map(p =>
-      fetch('/api/pages', {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ id: p.id, orderIndex: p.order_index }),
+    for (const list of byParent.values()) {
+      list.sort((a, b) => a.order_index - b.order_index || a.created_at.localeCompare(b.created_at))
+    }
+
+    const nextParentKey = nextParentId ?? 'root'
+    const targetSiblings = [...(byParent.get(nextParentKey) ?? [])]
+    const movedPage = { ...draggedPage, parent_id: nextParentId }
+
+    if (position === 'inside') {
+      targetSiblings.push(movedPage)
+    } else {
+      const targetIdx = targetSiblings.findIndex(p => p.id === targetId)
+      if (targetIdx < 0) return
+      const insertIdx = position === 'above' ? targetIdx : targetIdx + 1
+      targetSiblings.splice(insertIdx, 0, movedPage)
+    }
+    byParent.set(nextParentKey, targetSiblings)
+
+    const touchedParentKeys = new Set([draggedPage.parent_id ?? 'root', nextParentKey])
+    const updates = new Map<string, PageRecord>()
+    for (const parentKey of touchedParentKeys) {
+      const list = byParent.get(parentKey) ?? []
+      list.forEach((page, index) => {
+        updates.set(page.id, {
+          ...page,
+          parent_id: parentKey === 'root' ? null : parentKey,
+          order_index: index,
+        })
       })
-    ))
-  }, [accessToken, authHeaders, pages, pageTree])
+    }
+
+    const nextPages = pages.map(page => updates.get(page.id) ?? page)
+    const changed = nextPages.filter(page => {
+      const original = pagesById.get(page.id)
+      return original && (
+        original.parent_id !== page.parent_id ||
+        original.order_index !== page.order_index
+      )
+    })
+
+    if (changed.length === 0) return
+
+    setPages(nextPages)
+    setCollapsedPages(previous => {
+      if (position !== 'inside') return previous
+      const next = new Set(previous)
+      next.delete(targetId)
+      return next
+    })
+    setError('')
+
+    try {
+      const responses = await Promise.all(changed.map(page =>
+        fetch('/api/pages', {
+          method: 'PATCH',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            id: page.id,
+            parentId: page.parent_id,
+            orderIndex: page.order_index,
+          }),
+        })
+      ))
+
+      const failed = responses.find(response => !response.ok)
+      if (failed) throw await readError(failed, '페이지 위치를 저장하지 못했습니다.')
+    } catch (err) {
+      setPages(pages)
+      setError(err instanceof Error ? err.message : '페이지 위치를 저장하지 못했습니다.')
+    }
+  }, [accessToken, authHeaders, pages])
 
   const renderPageList = (parentId: string | null, depth = 0): React.ReactNode => {
     const items = pageTree.get(parentId ?? 'root') ?? []
@@ -807,14 +1206,25 @@ export default function NotionLiteApp() {
             <div className="h-0.5 rounded bg-[#baf7c8]" style={{ marginLeft: depth > 0 ? 12 + 20 : 0 }} />
           )}
           <div
-            className={`group/page-row relative flex items-center gap-1 ${depth > 0 ? 'pl-3' : ''}`}
+            className={`group/page-row relative flex items-center gap-1 rounded-[4px] ${
+              depth > 0 ? 'pl-3' : ''
+            } ${
+              dragOver?.id === page.id && dragOver.position === 'inside' ? 'bg-[#50504d] ring-2 ring-[#baf7c8]' : ''
+            }`}
             draggable={canEdit}
             onDragStart={() => { draggedIdRef.current = page.id }}
             onDragEnd={() => { draggedIdRef.current = null; setDragOver(null) }}
             onDragOver={e => {
               e.preventDefault()
               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-              const position = e.clientY < rect.top + rect.height / 2 ? 'above' : 'below'
+              const relativeY = e.clientY - rect.top
+              const position: PageDropPosition = (
+                relativeY < rect.height * 0.25
+                  ? 'above'
+                  : relativeY > rect.height * 0.75
+                    ? 'below'
+                    : 'inside'
+              )
               setDragOver(prev =>
                 prev?.id === page.id && prev.position === position ? prev : { id: page.id, position }
               )
@@ -827,7 +1237,7 @@ export default function NotionLiteApp() {
             onDrop={e => {
               e.preventDefault()
               const dragged = draggedIdRef.current
-              if (dragged) reorderPage(dragged, page.id, dragOver?.position ?? 'below')
+              if (dragged) movePage(dragged, page.id, dragOver?.position ?? 'below')
               draggedIdRef.current = null
               setDragOver(null)
             }}
@@ -871,8 +1281,8 @@ export default function NotionLiteApp() {
             </button>
 
             {/* 액션 버튼 — hover 시 표시 */}
-            {canEdit && (
-              <div className="flex shrink-0 gap-1 pl-1 opacity-0 transition-opacity group-hover/page-row:opacity-100 group-focus-within/page-row:opacity-100">
+            <div className="flex shrink-0 gap-1 pl-1 opacity-0 transition-opacity group-hover/page-row:opacity-100 group-focus-within/page-row:opacity-100">
+              {canEdit && (
                 <button
                   onClick={() => createPage(page.id)}
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:bg-[#50504d] hover:text-white"
@@ -880,15 +1290,34 @@ export default function NotionLiteApp() {
                 >
                   +
                 </button>
+              )}
+              {canEdit && (
                 <button
-                  onClick={() => deletePage(page.id)}
+                  onClick={() => setDeleteTargetId(page.id)}
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:text-red-300"
                   title="페이지 삭제"
                 >
                   ×
                 </button>
-              </div>
-            )}
+              )}
+              <button
+                onClick={() => {
+                  const content = pendingContent.current.get(page.id) ?? page.content
+                  const md = tiptapToMarkdown(page.title, content)
+                  const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `${page.title || 'untitled'}.md`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:bg-[#50504d] hover:text-white"
+                title="마크다운으로 다운로드"
+              >
+                ↓
+              </button>
+            </div>
           </div>
 
           {dragOver?.id === page.id && dragOver.position === 'below' && (
@@ -955,7 +1384,7 @@ export default function NotionLiteApp() {
                     <div className="mb-2 flex items-center justify-between">
                       <p className="text-[11px] font-black uppercase text-neutral-100">Members</p>
                       {membersLoading ? (
-                        <span className="text-[11px] font-bold text-neutral-200">불러오는 중</span>
+                        <span className="loading-dots text-[11px] font-bold tracking-widest text-neutral-200"><span>·</span><span>·</span><span>·</span></span>
                       ) : (
                         <span className="border border-black bg-[#baf7c8] px-1.5 text-[11px] font-black text-black">
                           {members.length}
@@ -963,16 +1392,18 @@ export default function NotionLiteApp() {
                       )}
                     </div>
                     <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                      {members.map(member => (
-                        <div key={member.user_id} className="rounded-[8px] border border-black bg-[#62625f] px-2 py-2">
-                          <p className="truncate text-xs font-bold text-white">
-                            {member.email ?? member.user_id}
-                          </p>
-                          <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${getRoleBadgeClass(member.role)}`}>
-                            {member.role}
-                          </span>
-                        </div>
-                      ))}
+                      {membersLoading && members.length === 0 ? (
+                        <MembersSkeleton />
+                      ) : members.map(member => (
+                          <div key={member.user_id} className="rounded-[8px] border border-black bg-[#62625f] px-2 py-2">
+                            <p className="truncate text-xs font-bold text-white">
+                              {member.email ?? member.user_id}
+                            </p>
+                            <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${getRoleBadgeClass(member.role)}`}>
+                              {member.role}
+                            </span>
+                          </div>
+                        ))}
                       {!membersLoading && members.length === 0 && (
                         <p className="text-xs font-bold text-neutral-200">멤버가 없습니다.</p>
                       )}
@@ -1034,7 +1465,10 @@ export default function NotionLiteApp() {
       </header>
 
       <div className="flex min-h-0 flex-1 max-md:flex-col">
-        <aside className="flex w-[312px] shrink-0 flex-col border-r border-black bg-[#62625f] max-lg:w-64 max-md:w-full max-md:border-r-0 max-md:border-b">
+        <aside
+          className="relative flex w-full shrink-0 flex-col border-r border-black bg-[#62625f] md:w-[var(--sidebar-width)] max-md:border-r-0 max-md:border-b"
+          style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
+        >
         <div className="border-b border-black p-3">
           <p className="mb-2 px-1 text-[11px] font-black uppercase tracking-normal text-white">
             Workspace
@@ -1228,12 +1662,18 @@ export default function NotionLiteApp() {
             </button>
           </div>
           <div className="page-tree-scroll min-h-0 flex-1 overflow-y-auto max-md:max-h-56">
-            {activeWorkspaceId ? (
+            {workspacesLoading && workspaces.length === 0 ? (
+              <PageTreeSkeleton />
+            ) : activeWorkspaceId ? (
               pages.length > 0 ? renderPageList(null) : (
-                <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
-                  <p className="text-sm font-black text-white">첫 페이지를 만들어보세요.</p>
-                  <p className="mt-1 text-xs font-bold text-neutral-100">회의록, 체크리스트, 자료 정리부터 시작할 수 있습니다.</p>
-                </div>
+                pagesLoading ? (
+                  <PageTreeSkeleton />
+                ) : (
+                  <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
+                    <p className="text-sm font-black text-white">첫 페이지를 만들어보세요.</p>
+                    <p className="mt-1 text-xs font-bold text-neutral-100">회의록, 체크리스트, 자료 정리부터 시작할 수 있습니다.</p>
+                  </div>
+                )
               )
             ) : (
               <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
@@ -1243,6 +1683,12 @@ export default function NotionLiteApp() {
             )}
           </div>
         </div>
+          <button
+            type="button"
+            aria-label="사이드바 크기 조절"
+            className="absolute -right-1.5 top-0 z-20 hidden h-full w-3 cursor-col-resize touch-none border-x border-transparent bg-transparent transition-colors hover:border-black hover:bg-[#baf7c8]/60 active:bg-[#baf7c8] md:block"
+            onPointerDown={startSidebarResize}
+          />
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col overflow-y-auto max-md:min-h-[60vh]">
@@ -1254,7 +1700,9 @@ export default function NotionLiteApp() {
           </div>
         )}
 
-        {activePage ? (
+        {(workspacesLoading && workspaces.length === 0) || (pagesLoading && pages.length === 0) ? (
+          <DocumentSkeleton />
+        ) : activePage ? (
           <article className="mx-auto my-8 w-full max-w-4xl flex-1 rounded-[8px] border border-black bg-[#fef9ef] px-10 py-12 text-[#1d1c16] shadow-[6px_6px_0_#000] max-sm:mx-4 max-sm:px-5 max-sm:py-8">
             <div className="mb-4 border-b border-black pb-3">
               <div className="flex min-w-0 items-center gap-3 text-[#1d1c16]">
@@ -1303,6 +1751,8 @@ export default function NotionLiteApp() {
               content={activePageContent}
               editable={Boolean(canEdit)}
               onChange={content => scheduleContentSave(activePage.id, content)}
+              onUploadImage={canEdit ? uploadImageAsset : undefined}
+              onCloneImage={canEdit ? cloneImageAsset : undefined}
             />
           </article>
         ) : (
@@ -1347,6 +1797,53 @@ export default function NotionLiteApp() {
           </div>
         </div>
       )}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onPointerDown={() => setDeleteTargetId(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="w-full max-w-sm rounded-[8px] border border-black bg-[#62625f] p-5 text-white shadow-[6px_6px_0_#000]"
+            onPointerDown={event => event.stopPropagation()}
+          >
+            <p className="text-sm font-black uppercase tracking-normal text-white">페이지 삭제</p>
+            <p className="mt-3 text-sm font-medium leading-relaxed text-neutral-100">
+              <span className="font-black text-white">{deleteTarget.title || 'Untitled'}</span>
+              {deleteTargetHasChildren
+                ? ' 페이지와 모든 하위 페이지를 삭제합니다.'
+                : ' 페이지를 삭제합니다.'}
+              {' 되돌릴 수 없습니다.'}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTargetId(null)}
+                className="h-9 rounded-[8px] border border-black bg-[#50504d] px-4 text-xs font-black uppercase text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#f7f4ec] hover:text-black hover:shadow-[3px_3px_0_#000]"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetId = deleteTargetId
+                  setDeleteTargetId(null)
+                  if (targetId) {
+                    deletePage(targetId).catch(err =>
+                      setError(err instanceof Error ? err.message : '페이지를 삭제하지 못했습니다.')
+                    )
+                  }
+                }}
+                className="h-9 rounded-[8px] border border-black bg-[#fca5a5] px-4 text-xs font-black uppercase text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#f87171] hover:shadow-[3px_3px_0_#000]"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {ENABLE_AGI && <FloatingAiButton />}
     </main>
   )
 }
