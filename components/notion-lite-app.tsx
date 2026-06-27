@@ -262,6 +262,8 @@ export default function NotionLiteApp() {
         }
       })
       .catch(() => {})
+  }, [])
+
   const authUploadHeaders = useCallback(() => ({
     Authorization: `Bearer ${accessToken}`,
   }), [accessToken])
@@ -1843,7 +1845,6 @@ export default function NotionLiteApp() {
           </div>
         </div>
       )}
-      {ENABLE_AGI && <FloatingAiButton />}
     </main>
   )
 }
