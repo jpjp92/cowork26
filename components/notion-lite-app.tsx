@@ -247,7 +247,7 @@ export default function NotionLiteApp() {
         } else {
           // 서버에서 exe를 못 찾았거나 Vercel 배포 상태인 경우
           if (d.download_url) setAgiDownloadUrl(d.download_url)
-          
+
           if (d.agi_url) {
             const _launched = sessionStorage.getItem('agi_launched')
             if (!_launched) {
@@ -256,12 +256,12 @@ export default function NotionLiteApp() {
               window.location.href = d.agi_url
             }
           }
-          
+
           // 앱 미설치 안내 모달 띄우기
           setTimeout(() => setShowAgiPrompt(true), 3000)
         }
       })
-      .catch(() => {})
+      .catch(() => { })
   }, [])
 
   const authUploadHeaders = useCallback(() => ({
@@ -1208,11 +1208,9 @@ export default function NotionLiteApp() {
             <div className="h-0.5 rounded bg-[#baf7c8]" style={{ marginLeft: depth > 0 ? 12 + 20 : 0 }} />
           )}
           <div
-            className={`group/page-row relative flex items-center gap-1 rounded-[4px] ${
-              depth > 0 ? 'pl-3' : ''
-            } ${
-              dragOver?.id === page.id && dragOver.position === 'inside' ? 'bg-[#50504d] ring-2 ring-[#baf7c8]' : ''
-            }`}
+            className={`group/page-row relative flex items-center gap-1 rounded-[4px] ${depth > 0 ? 'pl-3' : ''
+              } ${dragOver?.id === page.id && dragOver.position === 'inside' ? 'bg-[#50504d] ring-2 ring-[#baf7c8]' : ''
+              }`}
             draggable={canEdit}
             onDragStart={() => { draggedIdRef.current = page.id }}
             onDragEnd={() => { draggedIdRef.current = null; setDragOver(null) }}
@@ -1253,9 +1251,8 @@ export default function NotionLiteApp() {
             <button
               type="button"
               onClick={e => { e.stopPropagation(); if (hasChildren) toggleCollapse(page.id) }}
-              className={`flex h-8 w-5 shrink-0 items-center justify-center transition-colors ${
-                hasChildren ? 'cursor-pointer text-neutral-400 hover:text-white' : 'pointer-events-none opacity-0'
-              }`}
+              className={`flex h-8 w-5 shrink-0 items-center justify-center transition-colors ${hasChildren ? 'cursor-pointer text-neutral-400 hover:text-white' : 'pointer-events-none opacity-0'
+                }`}
             >
               <svg
                 className={`h-2.5 w-2.5 transition-transform duration-150 ${hasChildren && !isCollapsed ? 'rotate-90' : ''}`}
@@ -1273,11 +1270,10 @@ export default function NotionLiteApp() {
             {/* 페이지 버튼 */}
             <button
               onClick={() => selectActivePage(page.id)}
-              className={`flex h-8 min-w-0 flex-1 items-center rounded-[4px] px-2 text-left text-sm transition-colors ${
-                isActive
-                  ? 'border border-black bg-[#baf7c8] font-black text-black shadow-[2px_2px_0_#000]'
-                  : 'font-medium text-neutral-300 hover:bg-[#50504d] hover:text-white'
-              }`}
+              className={`flex h-8 min-w-0 flex-1 items-center rounded-[4px] px-2 text-left text-sm transition-colors ${isActive
+                ? 'border border-black bg-[#baf7c8] font-black text-black shadow-[2px_2px_0_#000]'
+                : 'font-medium text-neutral-300 hover:bg-[#50504d] hover:text-white'
+                }`}
             >
               <span className="block min-w-0 truncate">{page.title}</span>
             </button>
@@ -1397,15 +1393,15 @@ export default function NotionLiteApp() {
                       {membersLoading && members.length === 0 ? (
                         <MembersSkeleton />
                       ) : members.map(member => (
-                          <div key={member.user_id} className="rounded-[8px] border border-black bg-[#62625f] px-2 py-2">
-                            <p className="truncate text-xs font-bold text-white">
-                              {member.email ?? member.user_id}
-                            </p>
-                            <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${getRoleBadgeClass(member.role)}`}>
-                              {member.role}
-                            </span>
-                          </div>
-                        ))}
+                        <div key={member.user_id} className="rounded-[8px] border border-black bg-[#62625f] px-2 py-2">
+                          <p className="truncate text-xs font-bold text-white">
+                            {member.email ?? member.user_id}
+                          </p>
+                          <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${getRoleBadgeClass(member.role)}`}>
+                            {member.role}
+                          </span>
+                        </div>
+                      ))}
                       {!membersLoading && members.length === 0 && (
                         <p className="text-xs font-bold text-neutral-200">멤버가 없습니다.</p>
                       )}
@@ -1427,17 +1423,15 @@ export default function NotionLiteApp() {
                           <button
                             type="button"
                             onClick={() => setInviteRole('editor')}
-                            className={`flex-1 py-1.5 text-xs font-black uppercase transition-colors ${
-                              inviteRole === 'editor' ? 'bg-[#fde68a] text-black' : 'bg-[#62625f] text-neutral-300 hover:text-white'
-                            }`}
+                            className={`flex-1 py-1.5 text-xs font-black uppercase transition-colors ${inviteRole === 'editor' ? 'bg-[#fde68a] text-black' : 'bg-[#62625f] text-neutral-300 hover:text-white'
+                              }`}
                           >editor</button>
                           <div className="w-px bg-black" />
                           <button
                             type="button"
                             onClick={() => setInviteRole('viewer')}
-                            className={`flex-1 py-1.5 text-xs font-black uppercase transition-colors ${
-                              inviteRole === 'viewer' ? 'bg-[#c4b5fd] text-black' : 'bg-[#62625f] text-neutral-300 hover:text-white'
-                            }`}
+                            className={`flex-1 py-1.5 text-xs font-black uppercase transition-colors ${inviteRole === 'viewer' ? 'bg-[#c4b5fd] text-black' : 'bg-[#62625f] text-neutral-300 hover:text-white'
+                              }`}
                           >viewer</button>
                         </div>
                         <button
@@ -1471,220 +1465,220 @@ export default function NotionLiteApp() {
           className="relative flex w-full shrink-0 flex-col border-r border-black bg-[#62625f] md:w-[var(--sidebar-width)] max-md:border-r-0 max-md:border-b"
           style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
         >
-        <div className="border-b border-black p-3">
-          <p className="mb-2 px-1 text-[11px] font-black uppercase tracking-normal text-white">
-            Workspace
-          </p>
-          <div className="relative mb-2" ref={workspaceMenuRef}>
-            <button
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded={workspaceMenuOpen}
-              onClick={() => setWorkspaceMenuOpen(open => !open)}
-              className="grid min-h-14 w-full grid-cols-[36px_minmax(0,1fr)_28px] items-center gap-2.5 rounded-[8px] border border-black bg-[#50504d] p-2 text-left text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#f7f4ec] hover:text-black hover:shadow-[3px_3px_0_#000] focus:-translate-y-0.5 focus:bg-[#f7f4ec] focus:text-black focus:shadow-[3px_3px_0_#000] focus:outline-none"
-            >
-              <span
-                className="grid h-9 w-9 place-items-center rounded-[8px] border border-black bg-[#baf7c8] text-[15px] font-black leading-none text-black"
-                title={activeWorkspace ? `권한: ${activeWorkspace.role}` : '워크스페이스 상태'}
-                aria-hidden="true"
+          <div className="border-b border-black p-3">
+            <p className="mb-2 px-1 text-[11px] font-black uppercase tracking-normal text-white">
+              Workspace
+            </p>
+            <div className="relative mb-2" ref={workspaceMenuRef}>
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={workspaceMenuOpen}
+                onClick={() => setWorkspaceMenuOpen(open => !open)}
+                className="grid min-h-14 w-full grid-cols-[36px_minmax(0,1fr)_28px] items-center gap-2.5 rounded-[8px] border border-black bg-[#50504d] p-2 text-left text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#f7f4ec] hover:text-black hover:shadow-[3px_3px_0_#000] focus:-translate-y-0.5 focus:bg-[#f7f4ec] focus:text-black focus:shadow-[3px_3px_0_#000] focus:outline-none"
               >
-                {getWorkspaceRoleSymbol(activeWorkspace?.role)}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-black uppercase">
-                  {activeWorkspace?.name ?? '워크스페이스 선택'}
-                </span>
-                <span className="mt-0.5 block text-[11px] font-black uppercase opacity-80">
-                  {activeWorkspace ? `${activeWorkspace.role} · ${pages.length} pages` : `${workspaces.length} workspaces`}
-                </span>
-              </span>
-              <span className="workspace-chevron grid h-7 w-7 place-items-center rounded-[8px] border border-black bg-[#baf7c8]" />
-            </button>
-
-            {workspaceMenuOpen && (
-              <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-full rounded-[8px] border border-black bg-[#50504d] p-2.5 text-white shadow-[5px_5px_0_#000]" role="menu">
-                <div className="mb-2 flex items-center justify-between border-b border-black px-0.5 pb-2.5">
-                  <div className="min-w-0">
-                    <p className="text-xs font-black uppercase">Switch workspace</p>
-                    <p className="mt-0.5 truncate text-[11px] font-bold text-neutral-100">워크 스페이스 생성 및 위치 변경 </p>
-                  </div>
-                  <span className="shrink-0 border border-black bg-[#baf7c8] px-1.5 text-[11px] font-black text-black">
-                    {workspaces.length}
-                  </span>
-                </div>
-
-                <div className="grid max-h-56 gap-1.5 overflow-y-auto py-1 pr-0.5">
-                  {workspaces.map(workspace => {
-                    const isActive = workspace.id === activeWorkspaceId
-                    const dragPosition = workspaceDragOver?.id === workspace.id ? workspaceDragOver.position : null
-
-                    return (
-                      <button
-                        key={workspace.id}
-                        type="button"
-                        draggable
-                        role="menuitem"
-                        aria-current={isActive}
-                        title="드래그해서 순서 변경"
-                        onClick={event => {
-                          if (workspaceDragClickBlockedRef.current) {
-                            event.preventDefault()
-                            workspaceDragClickBlockedRef.current = false
-                            return
-                          }
-                          selectWorkspace(workspace.id)
-                        }}
-                        onDragStart={event => {
-                          workspaceDraggedIdRef.current = workspace.id
-                          workspaceDragClickBlockedRef.current = true
-                          event.dataTransfer.effectAllowed = 'move'
-                          event.dataTransfer.setData('text/plain', workspace.id)
-                        }}
-                        onDragOver={event => {
-                          const draggedId = workspaceDraggedIdRef.current
-                          if (!draggedId || draggedId === workspace.id) return
-                          event.preventDefault()
-                          event.dataTransfer.dropEffect = 'move'
-                          const rect = event.currentTarget.getBoundingClientRect()
-                          const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
-                          setWorkspaceDragOver({ id: workspace.id, position })
-                        }}
-                        onDragLeave={() => {
-                          setWorkspaceDragOver(current => current?.id === workspace.id ? null : current)
-                        }}
-                        onDrop={event => {
-                          const draggedId = workspaceDraggedIdRef.current
-                          if (!draggedId || draggedId === workspace.id) return
-                          event.preventDefault()
-                          const rect = event.currentTarget.getBoundingClientRect()
-                          const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
-                          setWorkspaceDragOver(null)
-                          reorderWorkspaces(draggedId, workspace.id, position)
-                        }}
-                        onDragEnd={() => {
-                          workspaceDraggedIdRef.current = null
-                          setWorkspaceDragOver(null)
-                          window.setTimeout(() => {
-                            workspaceDragClickBlockedRef.current = false
-                          }, 0)
-                        }}
-                        className={[
-                          'grid w-full cursor-grab grid-cols-[6px_minmax(0,1fr)_auto_14px] items-center gap-1.5 rounded-[8px] border border-black bg-[#62625f] p-1.5 text-left text-white active:cursor-grabbing',
-                          'hover:bg-[#f7f4ec] hover:text-black',
-                          isActive ? 'bg-[#242421] text-white hover:bg-[#242421] hover:text-white' : '',
-                          dragPosition === 'before' ? 'shadow-[inset_0_3px_0_#baf7c8]' : '',
-                          dragPosition === 'after' ? 'shadow-[inset_0_-3px_0_#baf7c8]' : '',
-                        ].filter(Boolean).join(' ')}
-                      >
-                        <span className={`h-[30px] w-1.5 rounded-full border ${isActive ? 'border-white bg-[#baf7c8]' : 'border-black bg-transparent'}`} />
-                        <span className="min-w-0">
-                          <span className="block truncate text-xs font-black uppercase leading-tight">{workspace.name}</span>
-                          <span className="mt-0.5 block text-[9px] font-black uppercase leading-none opacity-75">workspace</span>
-                        </span>
-                        <span className={`min-w-[42px] rounded-full border border-black px-1 py-0.5 text-center text-[9px] font-black uppercase leading-none ${getRoleBadgeClass(workspace.role)}`}>
-                          {workspace.role}
-                        </span>
-                        <span className="min-w-3.5 text-center text-xs font-black leading-none">{isActive ? '✓' : ''}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                <form
-                  className="mt-2 border-t border-black pt-2.5"
-                  onSubmit={event => {
-                    event.preventDefault()
-                    createWorkspace()
-                  }}
+                <span
+                  className="grid h-9 w-9 place-items-center rounded-[8px] border border-black bg-[#baf7c8] text-[15px] font-black leading-none text-black"
+                  title={activeWorkspace ? `권한: ${activeWorkspace.role}` : '워크스페이스 상태'}
+                  aria-hidden="true"
                 >
-                  <div className="grid grid-cols-[minmax(0,1fr)_38px] items-center gap-2">
-                    <input
-                      className="h-[38px] min-w-0 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:shadow-[3px_3px_0_#000]"
-                      placeholder="새 워크스페이스"
-                      value={workspaceName}
-                      onChange={event => setWorkspaceName(event.target.value)}
-                    />
-                    <button
-                      type="submit"
-                      disabled={!workspaceName.trim() || creatingWorkspace}
-                      className={`${creatingWorkspace ? '' : 'workspace-plus'} relative h-[38px] rounded-[8px] border border-black bg-[#baf7c8] text-black shadow-[2px_2px_0_#000] disabled:opacity-40`}
-                      title="워크스페이스 생성"
-                      aria-label="워크스페이스 생성"
-                    >
-                      {creatingWorkspace ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : null}
-                    </button>
+                  {getWorkspaceRoleSymbol(activeWorkspace?.role)}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-black uppercase">
+                    {activeWorkspace?.name ?? '워크스페이스 선택'}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] font-black uppercase opacity-80">
+                    {activeWorkspace ? `${activeWorkspace.role} · ${pages.length} pages` : `${workspaces.length} workspaces`}
+                  </span>
+                </span>
+                <span className="workspace-chevron grid h-7 w-7 place-items-center rounded-[8px] border border-black bg-[#baf7c8]" />
+              </button>
+
+              {workspaceMenuOpen && (
+                <div className="absolute left-0 top-[calc(100%+8px)] z-30 w-full rounded-[8px] border border-black bg-[#50504d] p-2.5 text-white shadow-[5px_5px_0_#000]" role="menu">
+                  <div className="mb-2 flex items-center justify-between border-b border-black px-0.5 pb-2.5">
+                    <div className="min-w-0">
+                      <p className="text-xs font-black uppercase">Switch workspace</p>
+                      <p className="mt-0.5 truncate text-[11px] font-bold text-neutral-100">워크 스페이스 생성 및 위치 변경 </p>
+                    </div>
+                    <span className="shrink-0 border border-black bg-[#baf7c8] px-1.5 text-[11px] font-black text-black">
+                      {workspaces.length}
+                    </span>
                   </div>
-                </form>
+
+                  <div className="grid max-h-56 gap-1.5 overflow-y-auto py-1 pr-0.5">
+                    {workspaces.map(workspace => {
+                      const isActive = workspace.id === activeWorkspaceId
+                      const dragPosition = workspaceDragOver?.id === workspace.id ? workspaceDragOver.position : null
+
+                      return (
+                        <button
+                          key={workspace.id}
+                          type="button"
+                          draggable
+                          role="menuitem"
+                          aria-current={isActive}
+                          title="드래그해서 순서 변경"
+                          onClick={event => {
+                            if (workspaceDragClickBlockedRef.current) {
+                              event.preventDefault()
+                              workspaceDragClickBlockedRef.current = false
+                              return
+                            }
+                            selectWorkspace(workspace.id)
+                          }}
+                          onDragStart={event => {
+                            workspaceDraggedIdRef.current = workspace.id
+                            workspaceDragClickBlockedRef.current = true
+                            event.dataTransfer.effectAllowed = 'move'
+                            event.dataTransfer.setData('text/plain', workspace.id)
+                          }}
+                          onDragOver={event => {
+                            const draggedId = workspaceDraggedIdRef.current
+                            if (!draggedId || draggedId === workspace.id) return
+                            event.preventDefault()
+                            event.dataTransfer.dropEffect = 'move'
+                            const rect = event.currentTarget.getBoundingClientRect()
+                            const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+                            setWorkspaceDragOver({ id: workspace.id, position })
+                          }}
+                          onDragLeave={() => {
+                            setWorkspaceDragOver(current => current?.id === workspace.id ? null : current)
+                          }}
+                          onDrop={event => {
+                            const draggedId = workspaceDraggedIdRef.current
+                            if (!draggedId || draggedId === workspace.id) return
+                            event.preventDefault()
+                            const rect = event.currentTarget.getBoundingClientRect()
+                            const position = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after'
+                            setWorkspaceDragOver(null)
+                            reorderWorkspaces(draggedId, workspace.id, position)
+                          }}
+                          onDragEnd={() => {
+                            workspaceDraggedIdRef.current = null
+                            setWorkspaceDragOver(null)
+                            window.setTimeout(() => {
+                              workspaceDragClickBlockedRef.current = false
+                            }, 0)
+                          }}
+                          className={[
+                            'grid w-full cursor-grab grid-cols-[6px_minmax(0,1fr)_auto_14px] items-center gap-1.5 rounded-[8px] border border-black bg-[#62625f] p-1.5 text-left text-white active:cursor-grabbing',
+                            'hover:bg-[#f7f4ec] hover:text-black',
+                            isActive ? 'bg-[#242421] text-white hover:bg-[#242421] hover:text-white' : '',
+                            dragPosition === 'before' ? 'shadow-[inset_0_3px_0_#baf7c8]' : '',
+                            dragPosition === 'after' ? 'shadow-[inset_0_-3px_0_#baf7c8]' : '',
+                          ].filter(Boolean).join(' ')}
+                        >
+                          <span className={`h-[30px] w-1.5 rounded-full border ${isActive ? 'border-white bg-[#baf7c8]' : 'border-black bg-transparent'}`} />
+                          <span className="min-w-0">
+                            <span className="block truncate text-xs font-black uppercase leading-tight">{workspace.name}</span>
+                            <span className="mt-0.5 block text-[9px] font-black uppercase leading-none opacity-75">workspace</span>
+                          </span>
+                          <span className={`min-w-[42px] rounded-full border border-black px-1 py-0.5 text-center text-[9px] font-black uppercase leading-none ${getRoleBadgeClass(workspace.role)}`}>
+                            {workspace.role}
+                          </span>
+                          <span className="min-w-3.5 text-center text-xs font-black leading-none">{isActive ? '✓' : ''}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <form
+                    className="mt-2 border-t border-black pt-2.5"
+                    onSubmit={event => {
+                      event.preventDefault()
+                      createWorkspace()
+                    }}
+                  >
+                    <div className="grid grid-cols-[minmax(0,1fr)_38px] items-center gap-2">
+                      <input
+                        className="h-[38px] min-w-0 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:shadow-[3px_3px_0_#000]"
+                        placeholder="새 워크스페이스"
+                        value={workspaceName}
+                        onChange={event => setWorkspaceName(event.target.value)}
+                      />
+                      <button
+                        type="submit"
+                        disabled={!workspaceName.trim() || creatingWorkspace}
+                        className={`${creatingWorkspace ? '' : 'workspace-plus'} relative h-[38px] rounded-[8px] border border-black bg-[#baf7c8] text-black shadow-[2px_2px_0_#000] disabled:opacity-40`}
+                        title="워크스페이스 생성"
+                        aria-label="워크스페이스 생성"
+                      >
+                        {creatingWorkspace ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : null}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </div>
+            {canManageMembers && activeWorkspace && (
+              <div className="mb-2 flex gap-2">
+                <input
+                  className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
+                  placeholder="워크스페이스 이름"
+                  value={renameWorkspaceName}
+                  onChange={event => setRenameWorkspaceName(event.target.value)}
+                  onKeyDown={event => event.key === 'Enter' && renameWorkspace()}
+                />
+                <button
+                  onClick={renameWorkspace}
+                  disabled={!renameWorkspaceName.trim() || renamingWorkspace}
+                  className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] disabled:opacity-40"
+                  title="워크스페이스 이름 저장"
+                >
+                  {renamingWorkspace ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : '✓'}
+                </button>
               </div>
             )}
           </div>
-          {canManageMembers && activeWorkspace && (
-            <div className="mb-2 flex gap-2">
+
+          <div className="flex min-h-0 flex-1 flex-col p-3">
+            <div className="mb-3 flex items-center justify-between px-1">
+              <p className="text-[11px] font-black uppercase tracking-normal text-white">
+                Pages
+              </p>
+              <span className="border border-black bg-[#baf7c8] px-1.5 text-xs font-black text-black">{pages.length}</span>
+            </div>
+            <div className="mb-3 flex items-center gap-2">
               <input
                 className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
-                placeholder="워크스페이스 이름"
-                value={renameWorkspaceName}
-                onChange={event => setRenameWorkspaceName(event.target.value)}
-                onKeyDown={event => event.key === 'Enter' && renameWorkspace()}
+                placeholder="새 페이지"
+                value={newPageTitle}
+                onChange={event => setNewPageTitle(event.target.value)}
+                onKeyDown={event => event.key === 'Enter' && createPage()}
+                disabled={!activeWorkspaceId || !canEdit}
               />
               <button
-                onClick={renameWorkspace}
-                disabled={!renameWorkspaceName.trim() || renamingWorkspace}
-                className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] disabled:opacity-40"
-                title="워크스페이스 이름 저장"
+                onClick={() => createPage()}
+                disabled={!activeWorkspaceId || !canEdit || creatingPage}
+                className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-[#50504d] text-sm font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
               >
-                {renamingWorkspace ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : '✓'}
+                {creatingPage ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : '+'}
               </button>
             </div>
-          )}
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col p-3">
-          <div className="mb-3 flex items-center justify-between px-1">
-            <p className="text-[11px] font-black uppercase tracking-normal text-white">
-              Pages
-            </p>
-            <span className="border border-black bg-[#baf7c8] px-1.5 text-xs font-black text-black">{pages.length}</span>
-          </div>
-          <div className="mb-3 flex items-center gap-2">
-            <input
-              className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
-              placeholder="새 페이지"
-              value={newPageTitle}
-              onChange={event => setNewPageTitle(event.target.value)}
-              onKeyDown={event => event.key === 'Enter' && createPage()}
-              disabled={!activeWorkspaceId || !canEdit}
-            />
-            <button
-              onClick={() => createPage()}
-              disabled={!activeWorkspaceId || !canEdit || creatingPage}
-              className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-[#50504d] text-sm font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
-            >
-              {creatingPage ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : '+'}
-            </button>
-          </div>
-          <div className="page-tree-scroll min-h-0 flex-1 overflow-y-auto max-md:max-h-56">
-            {workspacesLoading && workspaces.length === 0 ? (
-              <PageTreeSkeleton />
-            ) : activeWorkspaceId ? (
-              pages.length > 0 ? renderPageList(null) : (
-                pagesLoading ? (
-                  <PageTreeSkeleton />
-                ) : (
-                  <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
-                    <p className="text-sm font-black text-white">첫 페이지를 만들어보세요.</p>
-                    <p className="mt-1 text-xs font-bold text-neutral-100">회의록, 체크리스트, 자료 정리부터 시작할 수 있습니다.</p>
-                  </div>
+            <div className="page-tree-scroll min-h-0 flex-1 overflow-y-auto max-md:max-h-56">
+              {workspacesLoading && workspaces.length === 0 ? (
+                <PageTreeSkeleton />
+              ) : activeWorkspaceId ? (
+                pages.length > 0 ? renderPageList(null) : (
+                  pagesLoading ? (
+                    <PageTreeSkeleton />
+                  ) : (
+                    <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
+                      <p className="text-sm font-black text-white">첫 페이지를 만들어보세요.</p>
+                      <p className="mt-1 text-xs font-bold text-neutral-100">회의록, 체크리스트, 자료 정리부터 시작할 수 있습니다.</p>
+                    </div>
+                  )
                 )
-              )
-            ) : (
-              <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
-                <p className="text-sm font-black text-white">워크스페이스가 필요합니다.</p>
-                <p className="mt-1 text-xs font-bold text-neutral-100">팀 문서를 묶을 공간을 먼저 만드세요.</p>
-              </div>
-            )}
+              ) : (
+                <div className="border border-dashed border-black bg-[#50504d] px-3 py-8 text-center">
+                  <p className="text-sm font-black text-white">워크스페이스가 필요합니다.</p>
+                  <p className="mt-1 text-xs font-bold text-neutral-100">팀 문서를 묶을 공간을 먼저 만드세요.</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
           <button
             type="button"
             aria-label="사이드바 크기 조절"
@@ -1695,106 +1689,104 @@ export default function NotionLiteApp() {
 
         <section className="flex min-w-0 flex-1 flex-col overflow-y-auto max-md:min-h-[60vh]">
 
-        {error && (
-          <div className="border-b border-black bg-red-300 px-6 py-3 text-sm font-bold text-black max-sm:px-4">
-            <span className="font-black">처리 실패</span>
-            <span className="ml-2">{error}</span>
-          </div>
-        )}
+          {error && (
+            <div className="border-b border-black bg-red-300 px-6 py-3 text-sm font-bold text-black max-sm:px-4">
+              <span className="font-black">처리 실패</span>
+              <span className="ml-2">{error}</span>
+            </div>
+          )}
 
-        {(workspacesLoading && workspaces.length === 0) || (pagesLoading && pages.length === 0) ? (
-          <DocumentSkeleton />
-        ) : activePage ? (
-          <article className="mx-auto my-8 w-full max-w-4xl flex-1 rounded-[8px] border border-black bg-[#fef9ef] px-10 py-12 text-[#1d1c16] shadow-[6px_6px_0_#000] max-sm:mx-4 max-sm:px-5 max-sm:py-8">
-            <div className="mb-4 border-b border-black pb-3">
-              <div className="flex min-w-0 items-center gap-3 text-[#1d1c16]">
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                  {activePageBreadcrumbPrefix.map((label, index) => (
-                    <span key={`${label}-${index}`} className="flex min-w-0 items-baseline gap-x-2 text-sm font-black text-[#6c685f]">
-                      <span className="max-w-48 truncate">{label}</span>
-                      <span>/</span>
-                    </span>
-                  ))}
-                  <input
-                    className="min-w-[12rem] flex-1 bg-transparent text-2xl font-black leading-tight tracking-normal text-[#1d1c16] outline-none placeholder:text-[#8a867f] max-sm:text-xl"
-                    value={activePage.title}
-                    disabled={!canEdit}
-                    placeholder="Untitled"
-                    onChange={event => {
-                      const title = event.target.value
-                      setPages(previous => previous.map(page => (
-                        page.id === activePage.id ? { ...page, title } : page
-                      )))
-                    }}
-                    onFocus={event => {
-                      titleFocusValueRef.current.set(activePage.id, event.target.value)
-                    }}
-                    onBlur={event => {
-                      const previousTitle = titleFocusValueRef.current.get(activePage.id) ?? activePage.title
-                      titleFocusValueRef.current.delete(activePage.id)
-                      if (event.target.value.trim() === previousTitle.trim()) return
+          {(workspacesLoading && workspaces.length === 0) || (pagesLoading && pages.length === 0) ? (
+            <DocumentSkeleton />
+          ) : activePage ? (
+            <article className="mx-auto my-8 w-full max-w-4xl flex-1 rounded-[8px] border border-black bg-[#fef9ef] px-10 py-12 text-[#1d1c16] shadow-[6px_6px_0_#000] max-sm:mx-4 max-sm:px-5 max-sm:py-8">
+              <div className="mb-4 border-b border-black pb-3">
+                <div className="flex min-w-0 items-center gap-3 text-[#1d1c16]">
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                    {activePageBreadcrumbPrefix.map((label, index) => (
+                      <span key={`${label}-${index}`} className="flex min-w-0 items-baseline gap-x-2 text-sm font-black text-[#6c685f]">
+                        <span className="max-w-48 truncate">{label}</span>
+                        <span>/</span>
+                      </span>
+                    ))}
+                    <input
+                      className="min-w-[12rem] flex-1 bg-transparent text-2xl font-black leading-tight tracking-normal text-[#1d1c16] outline-none placeholder:text-[#8a867f] max-sm:text-xl"
+                      value={activePage.title}
+                      disabled={!canEdit}
+                      placeholder="Untitled"
+                      onChange={event => {
+                        const title = event.target.value
+                        setPages(previous => previous.map(page => (
+                          page.id === activePage.id ? { ...page, title } : page
+                        )))
+                      }}
+                      onFocus={event => {
+                        titleFocusValueRef.current.set(activePage.id, event.target.value)
+                      }}
+                      onBlur={event => {
+                        const previousTitle = titleFocusValueRef.current.get(activePage.id) ?? activePage.title
+                        titleFocusValueRef.current.delete(activePage.id)
+                        if (event.target.value.trim() === previousTitle.trim()) return
 
-                      updatePage(activePage.id, { title: event.target.value })
-                    }}
-                  />
+                        updatePage(activePage.id, { title: event.target.value })
+                      }}
+                    />
+                  </div>
+                  <span
+                    className={`w-16 shrink-0 rounded-[8px] border border-black px-2 py-1 text-center text-[11px] font-black text-black shadow-[2px_2px_0_#000] transition-opacity ${saving === 'idle' ? 'pointer-events-none opacity-0' : 'opacity-100'
+                      } ${visibleSavingStatus === 'loaded' ? 'bg-[#fde68a]' : 'bg-[#baf7c8]'
+                      }`}
+                  >
+                    {visibleSavingStatus === 'loaded' ? '불러옴' : '저장됨'}
+                  </span>
                 </div>
-                <span
-                  className={`w-16 shrink-0 rounded-[8px] border border-black px-2 py-1 text-center text-[11px] font-black text-black shadow-[2px_2px_0_#000] transition-opacity ${
-                    saving === 'idle' ? 'pointer-events-none opacity-0' : 'opacity-100'
-                  } ${
-                    visibleSavingStatus === 'loaded' ? 'bg-[#fde68a]' : 'bg-[#baf7c8]'
-                  }`}
-                >
-                  {visibleSavingStatus === 'loaded' ? '불러옴' : '저장됨'}
-                </span>
+              </div>
+              <DocumentEditor
+                content={activePageContent}
+                editable={Boolean(canEdit)}
+                onChange={content => scheduleContentSave(activePage.id, content)}
+                onUploadImage={canEdit ? uploadImageAsset : undefined}
+                onCloneImage={canEdit ? cloneImageAsset : undefined}
+              />
+            </article>
+          ) : (
+            <div className="flex flex-1 items-center justify-center px-6 py-10 text-center">
+              <div className="grid w-full max-w-4xl grid-cols-[1.3fr_0.7fr] gap-4 max-lg:grid-cols-1">
+                <div className="rounded-[8px] border border-black bg-[#50504d] p-8 text-left shadow-[6px_6px_0_#000]">
+                  <p className="text-3xl font-black uppercase text-white">
+                    {activeWorkspaceId ? '페이지를 선택하거나 새로 만드세요.' : '워크스페이스를 먼저 만드세요.'}
+                  </p>
+                </div>
+                <div className="grid gap-4">
+                  <div className="rounded-[8px] border border-black bg-[#50504d] p-5 text-left shadow-[4px_4px_0_#000]">
+                    <p className="text-xs font-black uppercase text-[#baf7c8]">Workspaces</p>
+                    <p className="mt-2 text-4xl font-black text-white">{workspaces.length}</p>
+                  </div>
+                  <div className="rounded-[8px] border border-black bg-[#50504d] p-5 text-left shadow-[4px_4px_0_#000]">
+                    <p className="text-xs font-black uppercase text-[#baf7c8]">Pages</p>
+                    <p className="mt-2 text-4xl font-black text-white">{pages.length}</p>
+                  </div>
+                </div>
               </div>
             </div>
-            <DocumentEditor
-              content={activePageContent}
-              editable={Boolean(canEdit)}
-              onChange={content => scheduleContentSave(activePage.id, content)}
-              onUploadImage={canEdit ? uploadImageAsset : undefined}
-              onCloneImage={canEdit ? cloneImageAsset : undefined}
-            />
-          </article>
-        ) : (
-          <div className="flex flex-1 items-center justify-center px-6 py-10 text-center">
-            <div className="grid w-full max-w-4xl grid-cols-[1.3fr_0.7fr] gap-4 max-lg:grid-cols-1">
-              <div className="rounded-[8px] border border-black bg-[#50504d] p-8 text-left shadow-[6px_6px_0_#000]">
-                <p className="text-3xl font-black uppercase text-white">
-                  {activeWorkspaceId ? '페이지를 선택하거나 새로 만드세요.' : '워크스페이스를 먼저 만드세요.'}
-                </p>
-              </div>
-              <div className="grid gap-4">
-                <div className="rounded-[8px] border border-black bg-[#50504d] p-5 text-left shadow-[4px_4px_0_#000]">
-                  <p className="text-xs font-black uppercase text-[#baf7c8]">Workspaces</p>
-                  <p className="mt-2 text-4xl font-black text-white">{workspaces.length}</p>
-                </div>
-                <div className="rounded-[8px] border border-black bg-[#50504d] p-5 text-left shadow-[4px_4px_0_#000]">
-                  <p className="text-xs font-black uppercase text-[#baf7c8]">Pages</p>
-                  <p className="mt-2 text-4xl font-black text-white">{pages.length}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+          )}
         </section>
       </div>
       {showAgiPrompt && (
         <div className="fixed bottom-6 right-6 z-50 flex w-80 flex-col gap-3 rounded-[8px] border-[2px] border-black bg-white p-5 shadow-[6px_6px_0_#000]">
           <div className="flex items-center justify-between">
-            <h3 className="font-black text-black">AGI 짭비스 대기중</h3>
+            <h3 className="font-black text-black">AGI 짭비스 다운로드가 필요합니다.</h3>
             <button onClick={() => setShowAgiPrompt(false)} className="text-black hover:opacity-70 transition-opacity">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12" /></svg>
             </button>
           </div>
           <p className="text-sm font-medium text-gray-700">
-            앱이 실행되지 않았나요? 앱이 없다면 아래에서 다운로드하여 설치해주세요.
+            짭비스가 실행되지 않았나요? 아래에서 다운로드하여 설치후 새로고침 해주세요.
           </p>
           <div className="mt-1 flex gap-2">
-            <a href={`agi://start?hud_token=${typeof window !== 'undefined' ? localStorage.getItem('agi_hud_token') || '' : ''}`} className="flex-1 rounded-[4px] border-[2px] border-black bg-[#fde68a] px-3 py-2 text-center text-xs font-black text-black hover:bg-[#fcd34d] transition-colors shadow-[2px_2px_0_#000] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000] active:translate-y-[2px] active:shadow-none">앱 수동 실행</a>
+
             {agiDownloadUrl && (
-              <a href={agiDownloadUrl} className="flex-1 rounded-[4px] border-[2px] border-black bg-[#baf7c8] px-3 py-2 text-center text-xs font-black text-black hover:bg-[#86efac] transition-colors shadow-[2px_2px_0_#000] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000] active:translate-y-[2px] active:shadow-none">MSI 다운로드</a>
+              <a href={agiDownloadUrl} className="flex-1 rounded-[4px] border-[2px] border-black bg-[#baf7c8] px-3 py-2 text-center text-xs font-black text-black hover:bg-[#86efac] transition-colors shadow-[2px_2px_0_#000] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000] active:translate-y-[2px] active:shadow-none">다운로드</a>
             )}
           </div>
         </div>
