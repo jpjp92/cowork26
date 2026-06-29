@@ -7,12 +7,26 @@ const SERVER_URL = process.env.JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777'
 
 // 환경변수를 활용하여 드라이브(C:, D: 등) 무관하게 경로 추적
 const getPossiblePaths = () => {
-  const paths = [path.join(process.cwd(), 'AGI-client.exe')] // 현재 프로젝트 내 (상대경로)
+  const exeName = 'agi_client.exe'
+  const paths = [path.join(process.cwd(), exeName)] // 현재 프로젝트 내 (상대경로)
   
   if (process.platform === 'win32') {
-    if (process.env.PROGRAMFILES) paths.push(path.join(process.env.PROGRAMFILES, 'JjapVis AGI', 'AGI-client.exe'))
-    if (process.env['PROGRAMFILES(X86)']) paths.push(path.join(process.env['PROGRAMFILES(X86)'], 'JjapVis AGI', 'AGI-client.exe'))
-    if (process.env.LOCALAPPDATA) paths.push(path.join(process.env.LOCALAPPDATA, 'Programs', 'JjapVis AGI', 'AGI-client.exe'))
+    const userProfile = process.env.USERPROFILE
+    if (userProfile) {
+      // 1. 다운로드 폴더
+      paths.push(path.join(userProfile, 'Downloads', exeName))
+      // 2. 바탕화면
+      paths.push(path.join(userProfile, 'Desktop', exeName))
+    }
+    
+    // 3. 주요 드라이브 최상단 (C, D, E)
+    const drives = ['C:\\', 'D:\\', 'E:\\']
+    drives.forEach(drive => paths.push(path.join(drive, exeName)))
+
+    // 기존 경로 백업
+    if (process.env.PROGRAMFILES) paths.push(path.join(process.env.PROGRAMFILES, 'JjapVis AGI', exeName))
+    if (process.env['PROGRAMFILES(X86)']) paths.push(path.join(process.env['PROGRAMFILES(X86)'], 'JjapVis AGI', exeName))
+    if (process.env.LOCALAPPDATA) paths.push(path.join(process.env.LOCALAPPDATA, 'Programs', 'JjapVis AGI', exeName))
   }
   return paths
 }
@@ -31,7 +45,7 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
   const token = body.hud_token || crypto.randomUUID()
   
-  const exeName = 'AGI-client.exe'
+  const exeName = 'agi_client.exe'
   
   const agiUrl = `agi://start?hud_token=${token}`
 
@@ -69,7 +83,7 @@ export async function POST(request: Request) {
   return NextResponse.json({ 
     ok: false, 
     error: 'exe_not_found',
-    download_url: `${SERVER_URL}/download/AGI-client.msi`,
+    download_url: `${SERVER_URL}/download/AGI-client.exe`,
     agi_url: agiUrl
   })
 }
@@ -81,7 +95,7 @@ export async function DELETE() {
 export async function GET() {
   return NextResponse.json({
     ok: true,
-    download_url: `${SERVER_URL}/download/AGI-client.msi`,
+    download_url: `${SERVER_URL}/download/AGI-client.exe`,
   })
 }
 
