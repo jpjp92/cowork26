@@ -28,7 +28,13 @@ let mermaidPromise: Promise<MermaidApi> | null = null
 
 function loadMermaid() {
   mermaidPromise ??= import('mermaid').then(module => {
-    module.default.initialize({ startOnLoad: false, theme: 'dark' })
+    module.default.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'strict',
+      maxTextSize: 50000,
+      secure: ['securityLevel', 'startOnLoad', 'maxTextSize', 'secure'],
+    })
     return module.default
   })
 
@@ -894,7 +900,7 @@ function getCoworkImageFromHtml(html: string) {
 
   const wrapper = document.createElement('div')
   wrapper.innerHTML = html
-  const image = wrapper.querySelector<HTMLImageElement>('img[data-cowork26-image="true"], img[data-storage-path]')
+  const image = wrapper.querySelector<HTMLImageElement>('img[data-cowork26-image="true"]')
   if (!image?.src) return null
 
   return {
@@ -1069,6 +1075,12 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
 
         const text = event.clipboardData?.getData('text/plain')
         if (!text) return false
+
+        // 우리 에디터(ProseMirror) 내부에서 복사한 콘텐츠는 text/html에 서식이 그대로 담겨 있다.
+        // 이 경우 마크다운 재파서를 돌리면 "1. 제목"처럼 보이는 평문이 순서 목록 등으로 오탐되어
+        // 리치 text/html을 통째로 버리고 평문으로 붙여넣게 되므로, 네이티브 붙여넣기에 위임한다.
+        const pasteHtml = event.clipboardData?.getData('text/html') ?? ''
+        if (pasteHtml.includes('data-pm-slice')) return false
 
         const markdownPasteSlice = parseMarkdownPasteToSlice(view.state.schema, text)
         if (markdownPasteSlice) {
