@@ -215,7 +215,7 @@ export default function NotionLiteApp() {
     'Content-Type': 'application/json',
   }), [accessToken])
 
-  // AGI Client 연결 시도 및 프롬프트 노출
+  // AGI 자동 백그라운드 실행을 위해 API 호출
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (process.env.NEXT_PUBLIC_ENABLE_AGI === 'false') return
@@ -231,38 +231,31 @@ export default function NotionLiteApp() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hud_token: token })
     })
-      .then(r => r.json())
+      .then(res => res.json())
       .then(d => {
-        if (d.ok) {
-          if (d.status === 'already_running') {
-            console.log('[AGI Client] 이미 앱이 실행 중입니다.')
-          } else if (d.status === 'needs_launch') {
-            console.log('[AGI Client] 설치된 앱을 실행합니다.')
-            const _launched = sessionStorage.getItem('agi_launched')
-            if (!_launched && d.agi_url) {
-              sessionStorage.setItem('agi_launched', '1')
-              window.location.href = d.agi_url
-            }
-          }
-        } else {
-          // 서버에서 exe를 못 찾았거나 Vercel 배포 상태인 경우
+        if (d.ok && d.agi_url) {
           if (d.download_url) setAgiDownloadUrl(d.download_url)
 
-          if (d.agi_url) {
-            const _launched = sessionStorage.getItem('agi_launched')
-            if (!_launched) {
-              sessionStorage.setItem('agi_launched', '1')
-              // 커스텀 프로토콜로 실행 시도
-              window.location.href = d.agi_url
-            }
+          // @ts-ignore
+          const _launched = window.agi_launched
+          if (!_launched) {
+            // @ts-ignore
+            window.agi_launched = true
+            // 무조건 커스텀 프로토콜 쏘기 (Vercel 환경 지원)
+            window.location.href = d.agi_url
+            
+            // 3초 뒤에 안내 팝업 띄우고, 5초 뒤에 알아서 꺼지게 하기 (귀찮음 방지)
+            setTimeout(() => {
+              setShowAgiPrompt(true)
+              setTimeout(() => setShowAgiPrompt(false), 5000)
+            }, 3000)
           }
-
-          // 앱 미설치 안내 모달 띄우기
-          setTimeout(() => setShowAgiPrompt(true), 3000)
         }
       })
-      .catch(() => { })
+      .catch(() => {})
   }, [])
+
+
 
   const authUploadHeaders = useCallback(() => ({
     Authorization: `Bearer ${accessToken}`,
@@ -1772,19 +1765,19 @@ export default function NotionLiteApp() {
           )}
         </section>
       </div>
+
       {showAgiPrompt && (
         <div className="fixed bottom-6 right-6 z-50 flex w-80 flex-col gap-3 rounded-[8px] border-[2px] border-black bg-white p-5 shadow-[6px_6px_0_#000]">
           <div className="flex items-center justify-between">
-            <h3 className="font-black text-black">AGI 짭비스 다운로드가 필요합니다.</h3>
+            <h3 className="font-black text-black">AGI 짭비스 실행 중...</h3>
             <button onClick={() => setShowAgiPrompt(false)} className="text-black hover:opacity-70 transition-opacity">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12" /></svg>
             </button>
           </div>
           <p className="text-sm font-medium text-gray-700">
-            짭비스가 실행되지 않았나요? 아래에서 다운로드하여 설치후 새로고침 해주세요.
+            앱 실행을 시도 중입니다. 만약 앱이 켜지지 않는다면 아래에서 다운로드 후 최초 1회 직접 실행해주세요.
           </p>
           <div className="mt-1 flex gap-2">
-
             {agiDownloadUrl && (
               <a href={agiDownloadUrl} className="flex-1 rounded-[4px] border-[2px] border-black bg-[#baf7c8] px-3 py-2 text-center text-xs font-black text-black hover:bg-[#86efac] transition-colors shadow-[2px_2px_0_#000] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000] active:translate-y-[2px] active:shadow-none">다운로드</a>
             )}
