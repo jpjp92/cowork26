@@ -244,10 +244,9 @@ export default function NotionLiteApp() {
             // 무조건 커스텀 프로토콜 쏘기 (Vercel 환경 지원)
             window.location.href = d.agi_url
             
-            // 3초 뒤에 안내 팝업 띄우고, 5초 뒤에 알아서 꺼지게 하기 (귀찮음 방지)
+            // 3초 뒤에 안내 팝업 띄우기
             setTimeout(() => {
               setShowAgiPrompt(true)
-              setTimeout(() => setShowAgiPrompt(false), 5000)
             }, 3000)
           }
         }
@@ -1779,7 +1778,7 @@ export default function NotionLiteApp() {
           </p>
           <div className="mt-1 flex gap-2">
             {agiDownloadUrl && (
-              <a href={agiDownloadUrl} className="flex-1 rounded-[4px] border-[2px] border-black bg-[#baf7c8] px-3 py-2 text-center text-xs font-black text-black hover:bg-[#86efac] transition-colors shadow-[2px_2px_0_#000] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000] active:translate-y-[2px] active:shadow-none">다운로드</a>
+              <a href={agiDownloadUrl} onClick={() => setShowAgiPrompt(false)} className="flex-1 rounded-[4px] border-[2px] border-black bg-[#baf7c8] px-3 py-2 text-center text-xs font-black text-black hover:bg-[#86efac] transition-colors shadow-[2px_2px_0_#000] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000] active:translate-y-[2px] active:shadow-none">다운로드</a>
             )}
           </div>
         </div>
