@@ -1088,6 +1088,11 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
         const pasteHtml = event.clipboardData?.getData('text/html') ?? ''
         if (pasteHtml.includes('data-pm-slice')) return false
 
+        // Excel/구글시트 등에서 복사한 표는 text/html에 <table>로 담겨 있다. 이때 text/plain(TSV)을
+        // 마크다운 재파서에 넘기면 셀 내용이 목록/제목 등으로 오탐되어 표가 평문으로 깨지므로,
+        // <table>이 있으면 네이티브 붙여넣기에 위임해 표 구조를 보존한다.
+        if (hasPastedTable) return false
+
         const markdownPasteSlice = parseMarkdownPasteToSlice(view.state.schema, text)
         if (markdownPasteSlice) {
           event.preventDefault()

@@ -15,6 +15,12 @@ const DEFAULT_SIDEBAR_WIDTH = 312
 const MIN_SIDEBAR_WIDTH = 240
 const MAX_SIDEBAR_WIDTH = 520
 const SIDEBAR_WIDTH_STORAGE_KEY = 'cowork26:sidebar-width'
+// 사이드바 페이지 접힘 상태를 워크스페이스별로 저장하는 localStorage 키 프리픽스
+const COLLAPSED_STORAGE_PREFIX = 'cowork26:collapsed:'
+// depth 기반 기본 접힘: 이 depth 이상(자식 있는 노드)은 '첫 방문 시' 접힌 상태로 시작.
+// 0 = 최상위만 노출(전부 접힘), 1 = 최상위+1뎁스 노출, ...
+// 저장된 접힘 상태가 있으면 그 값이 우선하며, 이 기본값은 적용되지 않는다.
+const AUTO_COLLAPSE_FROM_DEPTH = 0
 
 function debugSaveFlow(message: string, data?: Record<string, unknown>) {
   if (!DEBUG_SAVE_FLOW) return
@@ -172,6 +178,9 @@ export default function NotionLiteApp() {
   const [dragOver, setDragOver] = useState<{ id: string; position: PageDropPosition } | null>(null)
   const [workspaceDragOver, setWorkspaceDragOver] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
   const [collapsedPages, setCollapsedPages] = useState<Set<string>>(new Set())
+  // 현재 collapsedPages가 대표하는 워크스페이스 id. 워크스페이스가 바뀌면 해당 워크스페이스의
+  // 접힘 상태를 다시 로드하기 위한 추적 ref(전환 시 재동기화 판단 + 저장 오염 방지).
+  const collapsedWorkspaceRef = useRef<string | null>(null)
   const [showAgiPrompt, setShowAgiPrompt] = useState(false)
   const [agiDownloadUrl, setAgiDownloadUrl] = useState('')
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
@@ -698,6 +707,79 @@ export default function NotionLiteApp() {
 
     return byParent
   }, [pages])
+
+  // 접힘 상태 초기화/재동기화: 활성 워크스페이스가 바뀔 때마다 그 워크스페이스의 접힘 상태를
+  // collapsedPages에 다시 로드한다. 같은 워크스페이스 내에서는(이미 로드됨) 재적용하지 않아
+  // 사용자의 수동 토글을 보존한다.
+  // 1) localStorage에 저장된 접힘 상태가 있으면 복원(삭제된 페이지 id는 제외).
+  // 2) 없으면 AUTO_COLLAPSE_FROM_DEPTH 기준 depth 기반 기본 접힘 적용.
+  useEffect(() => {
+    if (!activeWorkspaceId) return
+    // 이미 이 워크스페이스 상태가 로드되어 있으면 재동기화하지 않음(수동 토글 보존).
+    if (collapsedWorkspaceRef.current === activeWorkspaceId) return
+    // 전환 직후 pages가 아직 이전 워크스페이스 것일 수 있으므로 workspace_id로 가드.
+    if (pages.length === 0 || pages[0].workspace_id !== activeWorkspaceId) return
+
+    const validIds = new Set(pages.map(page => page.id))
+    const storageKey = `${COLLAPSED_STORAGE_PREFIX}${activeWorkspaceId}`
+
+    const computeCollapsed = (): Set<string> => {
+      // 1) 저장된 상태 복원 시도
+      try {
+        const raw = localStorage.getItem(storageKey)
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed)) {
+            return new Set(
+              parsed.filter((id): id is string => typeof id === 'string' && validIds.has(id))
+            )
+          }
+        }
+      } catch {
+        // 손상된 저장값은 무시하고 기본값으로 진행
+      }
+
+      // 2) 저장값 없음: depth 기반 기본 접힘
+      const parentById = new Map(pages.map(page => [page.id, page.parent_id]))
+      const hasChildren = new Set(pages.map(page => page.parent_id).filter((id): id is string => Boolean(id)))
+      const depthOf = (pageId: string) => {
+        let depth = 0
+        let current = parentById.get(pageId) ?? null
+        const visited = new Set<string>()
+        while (current && !visited.has(current)) {
+          visited.add(current)
+          depth += 1
+          current = parentById.get(current) ?? null
+        }
+        return depth
+      }
+      const defaultCollapsed = new Set<string>()
+      for (const page of pages) {
+        if (hasChildren.has(page.id) && depthOf(page.id) >= AUTO_COLLAPSE_FROM_DEPTH) {
+          defaultCollapsed.add(page.id)
+        }
+      }
+      return defaultCollapsed
+    }
+
+    collapsedWorkspaceRef.current = activeWorkspaceId
+    setCollapsedPages(computeCollapsed())
+  }, [activeWorkspaceId, pages])
+
+  // 접힘 상태 영구 저장: collapsedPages가 현재 활성 워크스페이스를 대표할 때만 저장한다.
+  // (전환 직후 재동기화 전에는 이전 워크스페이스 상태가 남아있으므로 저장하지 않아 오염 방지)
+  useEffect(() => {
+    if (!activeWorkspaceId) return
+    if (collapsedWorkspaceRef.current !== activeWorkspaceId) return
+    try {
+      localStorage.setItem(
+        `${COLLAPSED_STORAGE_PREFIX}${activeWorkspaceId}`,
+        JSON.stringify([...collapsedPages])
+      )
+    } catch {
+      // 저장 실패(용량 초과 등)는 무시
+    }
+  }, [collapsedPages, activeWorkspaceId])
 
   const createWorkspace = async () => {
     if (!workspaceName.trim() || !accessToken || creatingWorkspace) return
