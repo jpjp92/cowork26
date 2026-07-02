@@ -986,12 +986,18 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
         class: 'prose prose-neutral max-w-none',
       },
       handlePaste(view, event) {
+        // Excel/구글시트 등에서 셀을 복사하면 표 렌더링 이미지(image/png)가 text/html의
+        // <table>과 함께 클립보드에 담긴다. 이때는 표 붙여넣기를 우선해야 하므로
+        // <table>이 있는 경우에는 이미지 우선 처리를 건너뛴다.
+        const pastedHtmlForImageCheck = event.clipboardData?.getData('text/html') ?? ''
+        const hasPastedTable = /<table[\s>]/i.test(pastedHtmlForImageCheck)
+
         const imageFile = Array
           .from(event.clipboardData?.items ?? [])
           .find(item => item.type.startsWith('image/'))
           ?.getAsFile()
 
-        if (imageFile && onUploadImageRef.current) {
+        if (imageFile && onUploadImageRef.current && !hasPastedTable) {
           event.preventDefault()
           const previewUrl = URL.createObjectURL(imageFile)
           const imageNode = view.state.schema.nodes.image?.create({
