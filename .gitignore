@@ -11,3 +11,6 @@ agi-client.log
 public/url-chip-review.html
 scripts/url-chip-review.mjs
 scripts/editor-syntax-test.cjs
+scripts/tiptap-to-plaintext-test.mjs
+scripts/page-search-test.mjs
+scripts/workspace-search-review.mjs
