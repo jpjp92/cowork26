@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AuthPanel from './auth-panel'
 import { supabase } from '../lib/supabase-browser'
 import { tiptapToMarkdown } from '../lib/tiptap-to-markdown'
+import { SearchModal } from './search-modal'
 
 const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false })
 const DEBUG_SAVE_FLOW = process.env.NODE_ENV !== 'production'
@@ -152,6 +153,7 @@ export default function NotionLiteApp() {
   const [renamingWorkspace, setRenamingWorkspace] = useState(false)
   const [creatingPage, setCreatingPage] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [members, setMembers] = useState<WorkspaceMember[]>([])
@@ -336,6 +338,28 @@ export default function NotionLiteApp() {
     setSaving('idle')
     setActivePageId(pageId)
   }, [])
+
+  // 검색 등으로 페이지를 열 때, 접힌 조상들을 펼쳐 사이드바에서 해당 페이지가 보이게 한다.
+  const revealPage = useCallback((pageId: string) => {
+    const pagesById = new Map(pagesRef.current.map(page => [page.id, page]))
+    const ancestors: string[] = []
+    const visited = new Set<string>()
+    let current = pagesById.get(pageId)?.parent_id ?? null
+    while (current && !visited.has(current)) {
+      visited.add(current)
+      ancestors.push(current)
+      current = pagesById.get(current)?.parent_id ?? null
+    }
+    if (ancestors.length > 0) {
+      setCollapsedPages(prev => {
+        if (!ancestors.some(id => prev.has(id))) return prev
+        const next = new Set(prev)
+        for (const id of ancestors) next.delete(id)
+        return next
+      })
+    }
+    selectActivePage(pageId)
+  }, [selectActivePage])
 
   const startSidebarResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (window.innerWidth < 768) return
@@ -1712,7 +1736,18 @@ export default function NotionLiteApp() {
               <p className="text-[11px] font-black uppercase tracking-normal text-white">
                 Pages
               </p>
-              <span className="border border-black bg-[#baf7c8] px-1.5 text-xs font-black text-black">{pages.length}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="border border-black bg-[#baf7c8] px-1.5 text-xs font-black text-black">{pages.length}</span>
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(true)}
+                  disabled={!activeWorkspaceId}
+                  aria-label="페이지 검색"
+                  className="flex h-6 w-6 items-center justify-center border border-black bg-[#50504d] text-sm font-black leading-none text-white shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] hover:text-black disabled:opacity-40"
+                >
+                  ⌕
+                </button>
+              </div>
             </div>
             <div className="mb-3 flex items-center gap-2">
               <input
@@ -1911,6 +1946,12 @@ export default function NotionLiteApp() {
           </div>
         </div>
       )}
+      <SearchModal
+        open={searchOpen}
+        pages={pages}
+        onClose={() => setSearchOpen(false)}
+        onSelect={revealPage}
+      />
     </main>
   )
 }
