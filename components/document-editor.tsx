@@ -647,6 +647,145 @@ function isFencedCodeEnd(line: string, markerChar: string, markerLength: number)
   return [...trimmed].every(char => char === markerChar)
 }
 
+// VS Code language id(mode) → lowlight 언어명 매핑. lowlight에 없는 언어는 그대로 두어도
+// 하이라이팅만 생략될 뿐 코드블록으로는 정상 렌더링된다. 'plaintext'는 언어 없음으로 처리.
+const VSCODE_LANGUAGE_MAP: Record<string, string | null> = {
+  plaintext: null,
+  javascript: 'javascript',
+  javascriptreact: 'jsx',
+  typescript: 'typescript',
+  typescriptreact: 'tsx',
+  shellscript: 'bash',
+  jsonc: 'json',
+  dockerfile: 'dockerfile',
+  yaml: 'yaml',
+}
+
+function normalizeCodeLanguage(mode: string): string | null {
+  if (mode in VSCODE_LANGUAGE_MAP) return VSCODE_LANGUAGE_MAP[mode]
+  return mode || null
+}
+
+// VS Code 등 코드 에디터의 html은 <pre> 없이 monospace 폰트 + white-space:pre 스타일의
+// <div>/<span>으로만 구성된다. 이 시그니처로 "코드 에디터에서 복사한 코드"를 식별한다.
+function looksLikeCodeEditorHtml(html: string) {
+  if (!html) return false
+  if (!/white-space\s*:\s*pre/i.test(html)) return false
+  return /font-family\s*:[^;"']*(monospace|consolas|courier|menlo|monaco|"?cascadia)/i.test(html)
+}
+
+// VS Code에서 코드를 복사하면 text/plain(펜스 없는 원본 코드)과 함께, 웹/일부 환경에서는
+// 'vscode-editor-data' 전용 포맷(언어 mode 포함)이 담긴다. 데스크톱→브라우저 붙여넣기처럼
+// 해당 포맷이 없는 경우에도 처리할 수 있도록 text/html의 monospace 시그니처를 폴백으로 쓴다.
+// 인라인 조각 붙여넣기를 코드블록으로 오탐하지 않도록 여러 줄일 때만 코드블록으로 처리한다.
+function getCodeEditorPaste(clipboardData: DataTransfer | null | undefined) {
+  if (!clipboardData) return null
+  const code = clipboardData.getData('text/plain')
+  if (!code || !code.includes('\n')) return null
+
+  const meta = clipboardData.getData('vscode-editor-data')
+  const html = clipboardData.getData('text/html') ?? ''
+
+  // 우리 에디터 내부 복사본은 별도 경로에서 처리하므로 여기서는 배제한다.
+  if (html.includes('data-pm-slice')) return null
+  if (!meta && !looksLikeCodeEditorHtml(html)) return null
+
+  let language: string | null = null
+  if (meta) {
+    try {
+      const parsed = JSON.parse(meta) as { mode?: unknown }
+      if (typeof parsed.mode === 'string' && parsed.mode) {
+        language = normalizeCodeLanguage(parsed.mode)
+      }
+    } catch {
+      // 메타 파싱 실패 시 언어 없이 코드블록으로 처리
+    }
+  }
+
+  return { code, language }
+}
+
+// 한 줄이 "코드처럼" 보이는지 판정한다. 키워드/구문기호/태그/들여쓰기 등을 신호로 본다.
+const CODE_LINE_SIGNAL = /[{};]\s*$|=>|[^=!<>]=[^=]|\)\s*[:{]|\b(import|from|export|const|let|var|function|def|class|return|public|private|protected|static|void|package|namespace|async|await|new|typeof|interface|enum|struct|fn|impl|use|package)\b|\bconsole\.|\brequire\s*\(|\bmodule\.exports\b|<\/?[a-zA-Z][\w-]*[\s/>]|<!DOCTYPE|^\s*#\s*(include|define|import|pragma)|^\s*@[a-zA-Z]|^\s{2,}\S|^\t+\S/
+
+// Azure KQL(Kusto)의 파이프 리딩 연산자 라인. '| where', '| project' 등.
+const KQL_OPERATOR_LINE = /^\s*\|\s*(where|project(-away|-rename|-keep|-reorder)?|extend|summarize|order\s+by|sort\s+by|join|parse|take|top|limit|distinct|count|mv-expand|mv-apply|render|make-series|evaluate|union|as|invoke|lookup|serialize|sample|getschema)\b/i
+
+// text/plain만 있는(서식/메타 없는) 붙여넣기에서 "이건 소스 코드다"를 휴리스틱으로 판정한다.
+// 마크다운 문서를 코드로 오탐하지 않도록, 펜스(```)나 마크다운 표가 있으면 코드로 보지 않고
+// 기존 마크다운 파서에 맡긴다. 코드처럼 보이는 줄 비율이 충분히 높을 때만 true.
+function looksLikeSourceCode(text: string) {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const lines = normalized.split('\n')
+  const nonEmpty = lines.filter(line => line.trim())
+  if (nonEmpty.length < 2) return false
+
+  // 펜스/마크다운 표가 있으면 마크다운 파서가 코드블록/표로 더 잘 처리한다.
+  for (let i = 0; i < lines.length; i += 1) {
+    if (getFencedCodeStart(lines[i] ?? '')) return false
+    if ((lines[i] ?? '').includes('|') && isMarkdownTableDivider(lines[i + 1] ?? '')) return false
+  }
+
+  // Azure KQL: '| where', '| project' 같은 파이프 리딩 연산자 라인이 2개 이상이면 코드로 본다.
+  // (일반 코드 신호로는 잘 안 걸리는 쿼리 문법이라 별도로 감지)
+  let kqlLines = 0
+  for (const line of nonEmpty) {
+    if (KQL_OPERATOR_LINE.test(line)) kqlLines += 1
+  }
+  if (kqlLines >= 2) return true
+
+  let codeLines = 0
+  for (const line of nonEmpty) {
+    if (CODE_LINE_SIGNAL.test(line)) codeLines += 1
+  }
+  const ratio = codeLines / nonEmpty.length
+  // 강한 신호가 2줄 이상이고 전체의 30% 이상이 코드처럼 보이면 코드로 간주.
+  return codeLines >= 2 && ratio >= 0.3
+}
+
+// 붙여넣은 소스 코드의 언어를 추정해 코드블록 언어 배지에 쓴다. 명시적 시그니처를 우선하고,
+// 없으면 lowlight 자동 감지를 폴백으로 쓴다(신뢰도 낮으면 null). 반환값은 lowlight common 언어명.
+function detectCodeLanguage(text: string): string | null {
+  const sample = text.slice(0, 4000)
+
+  // KQL은 파이프 리딩 연산자가 여러 줄이면 확정. (일반 언어 감지보다 먼저 판정)
+  const kqlOperatorCount = sample.split('\n').filter(line => KQL_OPERATOR_LINE.test(line)).length
+  if (kqlOperatorCount >= 2) return 'kql'
+
+  if (/^\s*<!DOCTYPE html/i.test(sample) || /<(html|head|body|div|span|script|template)[\s/>]/i.test(sample)) {
+    return 'html'
+  }
+  if (/^\s*[{[]/.test(sample) && /"\s*:\s*/.test(sample) && !/\b(function|=>|def|import)\b/.test(sample)) {
+    return 'json'
+  }
+  if (/\b(def|elif|lambda)\b/.test(sample) || /\bimport\s+\w+/.test(sample) && /:\s*$/m.test(sample) || /\bself\b/.test(sample) || /\bst\.session_state\b/.test(sample)) {
+    return 'python'
+  }
+  if (/\binterface\s+\w+|:\s*(string|number|boolean|void|any)\b|\bimport\s+type\b|\bas\s+const\b/.test(sample)) {
+    return 'typescript'
+  }
+  if (/\b(const|let|var|function)\b|=>|\brequire\s*\(|\bmodule\.exports\b|\bconsole\.(log|error)\b/.test(sample)) {
+    return 'javascript'
+  }
+  if (/^[\s]*[.#]?[\w-]+\s*\{[^}]*:[^}]*;/m.test(sample) || /@media\b|:\s*[\w#(]+\s*;/.test(sample)) {
+    return 'css'
+  }
+  if (/^#!.*\b(sh|bash|zsh)\b/.test(sample) || /^\s*(echo|sudo|apt|cd|npm|yarn|git|export)\s/m.test(sample)) {
+    return 'bash'
+  }
+
+  try {
+    const result = lowlight.highlightAuto(sample) as { data?: { language?: string; relevance?: number } }
+    const language = result.data?.language
+    const relevance = result.data?.relevance ?? 0
+    if (language && relevance >= 5) return language
+  } catch {
+    // 감지 실패 시 언어 없이 코드블록으로
+  }
+
+  return null
+}
+
 function parseMarkdownPasteBlocks(text: string) {
   const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
   const blocks: MarkdownPasteBlock[] = []
@@ -1079,19 +1218,59 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
           return true
         }
 
+        // VS Code 등 코드 에디터에서 복사한 코드는 text/plain에 펜스(```)가 없어 마크다운 파서가
+        // 인식하지 못하고, text/html에는 <pre>도 없이 줄별 <div>로만 담겨 네이티브 붙여넣기 시
+        // 줄마다 평문 문단으로 깨진다. 코드 에디터 클립보드 시그니처를 감지해 코드블록으로 복원한다.
+        // 이미 코드블록 안이면 네이티브 붙여넣기(평문 삽입)에 맡긴다.
+        const inCodeBlock = view.state.selection.$from.parent.type.name === 'codeBlock'
+        const codeEditorPaste = inCodeBlock ? null : getCodeEditorPaste(event.clipboardData)
+        if (codeEditorPaste) {
+          const codeBlockType = view.state.schema.nodes.codeBlock
+          if (codeBlockType) {
+            event.preventDefault()
+            const codeBlockNode = codeBlockType.create(
+              { language: codeEditorPaste.language },
+              view.state.schema.text(codeEditorPaste.code)
+            )
+            const slice = new Slice(Fragment.from(codeBlockNode), 0, 0)
+            view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView())
+            return true
+          }
+        }
+
         const text = event.clipboardData?.getData('text/plain')
         if (!text) return false
 
-        // 우리 에디터(ProseMirror) 내부에서 복사한 콘텐츠는 text/html에 서식이 그대로 담겨 있다.
-        // 이 경우 마크다운 재파서를 돌리면 "1. 제목"처럼 보이는 평문이 순서 목록 등으로 오탐되어
-        // 리치 text/html을 통째로 버리고 평문으로 붙여넣게 되므로, 네이티브 붙여넣기에 위임한다.
         const pasteHtml = event.clipboardData?.getData('text/html') ?? ''
-        if (pasteHtml.includes('data-pm-slice')) return false
 
         // Excel/구글시트 등에서 복사한 표는 text/html에 <table>로 담겨 있다. 이때 text/plain(TSV)을
         // 마크다운 재파서에 넘기면 셀 내용이 목록/제목 등으로 오탐되어 표가 평문으로 깨지므로,
         // <table>이 있으면 네이티브 붙여넣기에 위임해 표 구조를 보존한다.
         if (hasPastedTable) return false
+
+        // 내용이 소스 코드(또는 KQL 쿼리)로 보이면 코드블록으로 감싼다. 이렇게 하지 않으면 Python '#'
+        // 주석이 마크다운 제목으로, 코드/쿼리 라인이 문단으로 오탐되어 깨진다. 이 판정은 pm-slice 가드보다
+        // 먼저 두어, 에디터 안에 문단으로 붙어있던 코드/KQL을 다시 복사해 붙여넣어도 코드블록이 되게 한다.
+        // (표는 위에서, 코드처럼 보이지 않는 리치 서식 내부복사는 아래 pm-slice 가드에서 각각 보존됨)
+        if (!inCodeBlock && looksLikeSourceCode(text)) {
+          const codeBlockType = view.state.schema.nodes.codeBlock
+          if (codeBlockType) {
+            event.preventDefault()
+            const normalizedCode = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+            const codeBlockNode = codeBlockType.create(
+              { language: detectCodeLanguage(normalizedCode) },
+              view.state.schema.text(normalizedCode)
+            )
+            const slice = new Slice(Fragment.from(codeBlockNode), 0, 0)
+            view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView())
+            return true
+          }
+        }
+
+        // 우리 에디터(ProseMirror) 내부에서 복사한 콘텐츠는 text/html에 서식이 그대로 담겨 있다.
+        // 이 경우 마크다운 재파서를 돌리면 "1. 제목"처럼 보이는 평문이 순서 목록 등으로 오탐되어
+        // 리치 text/html을 통째로 버리고 평문으로 붙여넣게 되므로, 네이티브 붙여넣기에 위임한다.
+        if (pasteHtml.includes('data-pm-slice')) return false
 
         const markdownPasteSlice = parseMarkdownPasteToSlice(view.state.schema, text)
         if (markdownPasteSlice) {
