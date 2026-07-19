@@ -1248,10 +1248,14 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
         // <table>이 있으면 네이티브 붙여넣기에 위임해 표 구조를 보존한다.
         if (hasPastedTable) return false
 
+        // 우리 에디터(ProseMirror) 내부에서 복사한 콘텐츠는 text/html에 원본 구조와
+        // data-pm-slice 마커가 담긴다. 평문 코드 휴리스틱보다 내부 리치 구조를 우선해야
+        // 반복된 `=` 같은 일반 문서 내용이 전체 코드블록으로 오인되지 않는다.
+        if (pasteHtml.includes('data-pm-slice')) return false
+
         // 내용이 소스 코드(또는 KQL 쿼리)로 보이면 코드블록으로 감싼다. 이렇게 하지 않으면 Python '#'
-        // 주석이 마크다운 제목으로, 코드/쿼리 라인이 문단으로 오탐되어 깨진다. 이 판정은 pm-slice 가드보다
-        // 먼저 두어, 에디터 안에 문단으로 붙어있던 코드/KQL을 다시 복사해 붙여넣어도 코드블록이 되게 한다.
-        // (표는 위에서, 코드처럼 보이지 않는 리치 서식 내부복사는 아래 pm-slice 가드에서 각각 보존됨)
+        // 주석이 마크다운 제목으로, 코드/쿼리 라인이 문단으로 오탐되어 깨진다. 내부 복사는 위에서 원본
+        // ProseMirror 구조를 보존하므로, 이 휴리스틱은 외부/평문 붙여넣기에만 적용된다.
         if (!inCodeBlock && looksLikeSourceCode(text)) {
           const codeBlockType = view.state.schema.nodes.codeBlock
           if (codeBlockType) {
@@ -1266,11 +1270,6 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
             return true
           }
         }
-
-        // 우리 에디터(ProseMirror) 내부에서 복사한 콘텐츠는 text/html에 서식이 그대로 담겨 있다.
-        // 이 경우 마크다운 재파서를 돌리면 "1. 제목"처럼 보이는 평문이 순서 목록 등으로 오탐되어
-        // 리치 text/html을 통째로 버리고 평문으로 붙여넣게 되므로, 네이티브 붙여넣기에 위임한다.
-        if (pasteHtml.includes('data-pm-slice')) return false
 
         const markdownPasteSlice = parseMarkdownPasteToSlice(view.state.schema, text)
         if (markdownPasteSlice) {
