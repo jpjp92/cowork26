@@ -14,3 +14,4 @@ scripts/editor-syntax-test.cjs
 scripts/tiptap-to-plaintext-test.mjs
 scripts/page-search-test.mjs
 scripts/workspace-search-review.mjs
+tests/editor-paste-priority.test.mjs

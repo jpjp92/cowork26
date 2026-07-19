@@ -7,6 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test:editor-paste-priority": "node tests/editor-paste-priority.test.mjs",
     "review:workspace-dropdown": "node scripts/workspace-dropdown-review.mjs",
     "typecheck": "tsc --noEmit"
   },
