@@ -69,6 +69,39 @@ interface UploadedImageAsset {
 
 type PageDropPosition = 'above' | 'below' | 'inside'
 
+interface NotionLiteAppProps {
+  initialWorkspaceId?: string
+  initialPageId?: string
+}
+
+function getSelectionPath(workspaceId: string, pageId?: string) {
+  const workspacePath = `/w/${encodeURIComponent(workspaceId)}`
+  return pageId ? `${workspacePath}/p/${encodeURIComponent(pageId)}` : workspacePath
+}
+
+function updateSelectionUrl(workspaceId: string, pageId: string | undefined, history: 'push' | 'replace') {
+  const path = workspaceId ? getSelectionPath(workspaceId, pageId) : '/'
+  if (window.location.pathname === path) return
+
+  const state = { ...window.history.state, coworkSelection: true }
+  if (history === 'push') window.history.pushState(state, '', path)
+  else window.history.replaceState(state, '', path)
+}
+
+function readSelectionFromPath(pathname: string) {
+  const match = pathname.match(/^\/w\/([^/]+)(?:\/p\/([^/]+))?\/?$/)
+  if (!match) return null
+
+  try {
+    return {
+      workspaceId: decodeURIComponent(match[1]),
+      pageId: match[2] ? decodeURIComponent(match[2]) : '',
+    }
+  } catch {
+    return null
+  }
+}
+
 async function readError(response: Response, fallback: string) {
   try {
     const data = await response.json()
@@ -136,15 +169,15 @@ function MembersSkeleton() {
   )
 }
 
-export default function NotionLiteApp() {
+export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId = '' }: NotionLiteAppProps) {
   const [session, setSession] = useState<Session | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [workspacesLoading, setWorkspacesLoading] = useState(false)
   const [pagesLoading, setPagesLoading] = useState(false)
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [pages, setPages] = useState<PageRecord[]>([])
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState('')
-  const [activePageId, setActivePageId] = useState('')
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(initialWorkspaceId)
+  const [activePageId, setActivePageId] = useState(initialPageId)
   const [workspaceName, setWorkspaceName] = useState('')
   const [renameWorkspaceName, setRenameWorkspaceName] = useState('')
   const [newPageTitle, setNewPageTitle] = useState('')
@@ -298,6 +331,45 @@ export default function NotionLiteApp() {
     setActivePageId(pageId)
   }, [])
 
+  const openPage = useCallback((pageId: string, history: 'push' | 'replace' = 'push') => {
+    const workspaceId = activeWorkspaceIdRef.current
+    selectActivePage(pageId)
+    if (!workspaceId || !pageId) return
+    updateSelectionUrl(workspaceId, pageId, history)
+  }, [selectActivePage])
+
+  // 브라우저 뒤로/앞으로 이동 또는 공유 URL 직접 접속 시 선택 상태를 경로에 맞춘다.
+  useEffect(() => {
+    if (!initialWorkspaceId) return
+
+    if (initialWorkspaceId !== activeWorkspaceIdRef.current) {
+      activeWorkspaceIdRef.current = initialWorkspaceId
+      setActiveWorkspaceId(initialWorkspaceId)
+      selectActivePage(initialPageId)
+      return
+    }
+
+    if (initialPageId && initialPageId !== activePageIdRef.current) {
+      selectActivePage(initialPageId)
+    }
+  }, [initialWorkspaceId, initialPageId, selectActivePage])
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const selection = readSelectionFromPath(window.location.pathname)
+      if (!selection) return
+
+      if (selection.workspaceId !== activeWorkspaceIdRef.current) {
+        activeWorkspaceIdRef.current = selection.workspaceId
+        setActiveWorkspaceId(selection.workspaceId)
+      }
+      selectActivePage(selection.pageId)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [selectActivePage])
+
   // 검색 등으로 페이지를 열 때, 접힌 조상들을 펼쳐 사이드바에서 해당 페이지가 보이게 한다.
   const revealPage = useCallback((pageId: string) => {
     const pagesById = new Map(pagesRef.current.map(page => [page.id, page]))
@@ -317,8 +389,8 @@ export default function NotionLiteApp() {
         return next
       })
     }
-    selectActivePage(pageId)
-  }, [selectActivePage])
+    openPage(pageId)
+  }, [openPage])
 
   const startSidebarResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (window.innerWidth < 768) return
@@ -439,7 +511,15 @@ export default function NotionLiteApp() {
 
       const data = await response.json() as Workspace[]
       setWorkspaces(data)
-      setActiveWorkspaceId(current => data.some(workspace => workspace.id === current) ? current : data[0]?.id || '')
+      const currentWorkspaceId = activeWorkspaceIdRef.current
+      const nextWorkspaceId = data.some(workspace => workspace.id === currentWorkspaceId)
+        ? currentWorkspaceId
+        : data[0]?.id || ''
+      activeWorkspaceIdRef.current = nextWorkspaceId
+      setActiveWorkspaceId(nextWorkspaceId)
+      if (nextWorkspaceId !== currentWorkspaceId) {
+        updateSelectionUrl(nextWorkspaceId, undefined, 'replace')
+      }
       return data
     } finally {
       setWorkspacesLoading(false)
@@ -497,11 +577,11 @@ export default function NotionLiteApp() {
       // 화면 반영은 아직 같은 워크스페이스를 보고 있을 때만(전환 중 늦게 온 응답 무시).
       if (workspaceId === activeWorkspaceIdRef.current) {
         setPages(merged)
-        setActivePageId(current => {
-          const nextPageId = merged.some(page => page.id === current) ? current : merged[0]?.id || ''
-          activePageIdRef.current = nextPageId
-          return nextPageId
-        })
+        const currentPageId = activePageIdRef.current
+        const nextPageId = merged.some(page => page.id === currentPageId) ? currentPageId : merged[0]?.id || ''
+        activePageIdRef.current = nextPageId
+        setActivePageId(nextPageId)
+        updateSelectionUrl(workspaceId, nextPageId || undefined, 'replace')
       }
     } finally {
       if (!background) setPagesLoading(false)
@@ -573,11 +653,11 @@ export default function NotionLiteApp() {
     if (cached) {
       // 캐시 히트: 스켈레톤 없이 즉시 표시 + 백그라운드 재검증
       setPages(cached)
-      setActivePageId(current => {
-        const nextPageId = cached.some(page => page.id === current) ? current : cached[0]?.id || ''
-        activePageIdRef.current = nextPageId
-        return nextPageId
-      })
+      const currentPageId = activePageIdRef.current
+      const nextPageId = cached.some(page => page.id === currentPageId) ? currentPageId : cached[0]?.id || ''
+      activePageIdRef.current = nextPageId
+      setActivePageId(nextPageId)
+      updateSelectionUrl(activeWorkspaceId, nextPageId || undefined, 'replace')
       loadPages(activeWorkspaceId, { background: true })
         .catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
     } else {
@@ -781,6 +861,7 @@ export default function NotionLiteApp() {
 
       const data = await response.json() as { workspace: Workspace; page?: PageRecord }
       setWorkspaces(previous => [...previous, { ...data.workspace, order_index: previous.length }])
+      activeWorkspaceIdRef.current = data.workspace.id
       setActiveWorkspaceId(data.workspace.id)
       setWorkspaceName('')
       setWorkspaceMenuOpen(false)
@@ -788,6 +869,9 @@ export default function NotionLiteApp() {
         pageFetchedAtRef.current.set(data.page.id, Date.now())
         setPages([data.page])
         selectActivePage(data.page.id)
+        updateSelectionUrl(data.workspace.id, data.page.id, 'push')
+      } else {
+        updateSelectionUrl(data.workspace.id, undefined, 'push')
       }
     } finally {
       setCreatingWorkspace(false)
@@ -795,7 +879,10 @@ export default function NotionLiteApp() {
   }
 
   const selectWorkspace = (workspaceId: string) => {
+    activeWorkspaceIdRef.current = workspaceId
     setActiveWorkspaceId(workspaceId)
+    selectActivePage('')
+    updateSelectionUrl(workspaceId, undefined, 'push')
     setWorkspaceMenuOpen(false)
   }
 
@@ -868,7 +955,7 @@ export default function NotionLiteApp() {
     pendingCreateIds.current.add(id)
     pageFetchedAtRef.current.set(id, Date.now())
     setPages(previous => [...previous, optimisticPage])
-    selectActivePage(id)
+    openPage(id)
     setNewPageTitle('')
     setCreatingPage(true)
 
@@ -896,10 +983,9 @@ export default function NotionLiteApp() {
       const timer = saveTimers.current.get(id)
       if (timer) { window.clearTimeout(timer); saveTimers.current.delete(id) }
       setPages(previousPages)
-      setActivePageId(() => {
-        activePageIdRef.current = previousActiveId
-        return previousActiveId
-      })
+      activePageIdRef.current = previousActiveId
+      setActivePageId(previousActiveId)
+      updateSelectionUrl(activeWorkspaceId, previousActiveId || undefined, 'replace')
       setError(err instanceof Error ? err.message : '페이지를 만들지 못했습니다.')
     } finally {
       pendingCreateIds.current.delete(id)
@@ -1080,11 +1166,12 @@ export default function NotionLiteApp() {
     // 낙관적 제거: 즉시 사이드바에서 제거 + 선택 이동
     const remaining = pages.filter(page => !deletedIds.has(page.id))
     setPages(remaining)
-    setActivePageId(current => {
-      const nextPageId = deletedIds.has(current) ? remaining[0]?.id ?? '' : current
-      activePageIdRef.current = nextPageId
-      return nextPageId
-    })
+    const nextPageId = deletedIds.has(activePageIdRef.current)
+      ? remaining[0]?.id ?? ''
+      : activePageIdRef.current
+    activePageIdRef.current = nextPageId
+    setActivePageId(nextPageId)
+    updateSelectionUrl(activeWorkspaceId, nextPageId || undefined, 'replace')
 
     try {
       const response = await fetch(`/api/pages?id=${pageId}`, {
@@ -1095,10 +1182,9 @@ export default function NotionLiteApp() {
     } catch (err) {
       // 롤백: 삭제 전 상태로 복원
       setPages(previousPages)
-      setActivePageId(() => {
-        activePageIdRef.current = previousActiveId
-        return previousActiveId
-      })
+      activePageIdRef.current = previousActiveId
+      setActivePageId(previousActiveId)
+      updateSelectionUrl(activeWorkspaceId, previousActiveId || undefined, 'replace')
       setError(err instanceof Error ? err.message : '페이지를 삭제하지 못했습니다.')
     }
   }
@@ -1329,7 +1415,7 @@ export default function NotionLiteApp() {
 
             {/* 페이지 버튼 */}
             <button
-              onClick={() => selectActivePage(page.id)}
+              onClick={() => openPage(page.id)}
               className={`flex h-8 min-w-0 flex-1 items-center rounded-[4px] px-2 text-left text-sm transition-colors ${
                 isActive
                   ? 'border border-black bg-[#baf7c8] font-black text-black shadow-[2px_2px_0_#000]'
