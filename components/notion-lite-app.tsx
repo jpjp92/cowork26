@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AuthPanel from './auth-panel'
 import FloatingAiButton from './floating-ai-button'
 import { supabase } from '../lib/supabase-browser'
+import { getSelectionPath, readSelectionFromPath } from '../lib/selection-route'
 import { tiptapToMarkdown } from '../lib/tiptap-to-markdown'
 import { SearchModal } from './search-modal'
 
@@ -74,11 +75,6 @@ interface NotionLiteAppProps {
   initialPageId?: string
 }
 
-function getSelectionPath(workspaceId: string, pageId?: string) {
-  const workspacePath = `/w/${encodeURIComponent(workspaceId)}`
-  return pageId ? `${workspacePath}/p/${encodeURIComponent(pageId)}` : workspacePath
-}
-
 function updateSelectionUrl(workspaceId: string, pageId: string | undefined, history: 'push' | 'replace') {
   const path = workspaceId ? getSelectionPath(workspaceId, pageId) : '/'
   if (window.location.pathname === path) return
@@ -86,20 +82,6 @@ function updateSelectionUrl(workspaceId: string, pageId: string | undefined, his
   const state = { ...window.history.state, coworkSelection: true }
   if (history === 'push') window.history.pushState(state, '', path)
   else window.history.replaceState(state, '', path)
-}
-
-function readSelectionFromPath(pathname: string) {
-  const match = pathname.match(/^\/w\/([^/]+)(?:\/p\/([^/]+))?\/?$/)
-  if (!match) return null
-
-  try {
-    return {
-      workspaceId: decodeURIComponent(match[1]),
-      pageId: match[2] ? decodeURIComponent(match[2]) : '',
-    }
-  } catch {
-    return null
-  }
 }
 
 async function readError(response: Response, fallback: string) {
@@ -206,8 +188,11 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   const draggedIdRef = useRef<string | null>(null)
   const activePageIdRef = useRef(activePageId)
   const activeWorkspaceIdRef = useRef(activeWorkspaceId)
+  const workspacesRef = useRef<Workspace[]>([])
   const pagesRef = useRef<PageRecord[]>([])
   const pagesCache = useRef(new Map<string, PageRecord[]>())
+  const routeResolutionSequenceRef = useRef(0)
+  const standalonePageIdRef = useRef(initialPageId && !initialWorkspaceId ? initialPageId : '')
   const pendingCreateIds = useRef(new Set<string>())
   const pageFetchedAtRef = useRef(new Map<string, number>())
   const savingResetTimerRef = useRef<number | null>(null)
@@ -276,6 +261,10 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId
   }, [activeWorkspaceId])
+
+  useEffect(() => {
+    workspacesRef.current = workspaces
+  }, [workspaces])
 
   // 삭제 확인 모달: Esc로 닫기
   useEffect(() => {
@@ -354,21 +343,95 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
     }
   }, [initialWorkspaceId, initialPageId, selectActivePage])
 
+  const activateResolvedPage = useCallback((page: PageRecord, availableWorkspaces = workspacesRef.current) => {
+    if (!availableWorkspaces.some(workspace => workspace.id === page.workspace_id)) return false
+
+    const cached = pagesCache.current.get(page.workspace_id) ?? []
+    const nextPages = cached.some(item => item.id === page.id)
+      ? cached.map(item => item.id === page.id ? page : item)
+      : [...cached, page]
+
+    pagesCache.current.set(page.workspace_id, nextPages)
+    pagesRef.current = nextPages
+    pageFetchedAtRef.current.set(page.id, Date.now())
+    activeWorkspaceIdRef.current = page.workspace_id
+    setActiveWorkspaceId(page.workspace_id)
+    setPages(nextPages)
+    selectActivePage(page.id)
+    updateSelectionUrl(page.workspace_id, page.id, 'replace')
+    return true
+  }, [selectActivePage])
+
+  const fallbackFromInvalidPageRoute = useCallback(() => {
+    const fallbackWorkspaceId = workspacesRef.current[0]?.id ?? ''
+    activeWorkspaceIdRef.current = fallbackWorkspaceId
+    setActiveWorkspaceId(fallbackWorkspaceId)
+    selectActivePage('')
+    updateSelectionUrl(fallbackWorkspaceId, undefined, 'replace')
+  }, [selectActivePage])
+
+  const resolvePageRoute = useCallback(async (pageId: string) => {
+    if (!pageId) return
+    const sequence = ++routeResolutionSequenceRef.current
+
+    const currentPage = pagesRef.current.find(page => page.id === pageId)
+    if (currentPage) {
+      if (sequence === routeResolutionSequenceRef.current) activateResolvedPage(currentPage)
+      return
+    }
+
+    for (const workspacePages of pagesCache.current.values()) {
+      const cachedPage = workspacePages.find(page => page.id === pageId)
+      if (cachedPage) {
+        if (sequence === routeResolutionSequenceRef.current) activateResolvedPage(cachedPage)
+        return
+      }
+    }
+
+    if (!accessToken) return
+
+    try {
+      const response = await fetch(`/api/pages?id=${encodeURIComponent(pageId)}`, {
+        headers: authHeaders(),
+      })
+      if (sequence !== routeResolutionSequenceRef.current) return
+
+      const currentRoute = readSelectionFromPath(window.location.pathname)
+      if (currentRoute.pageId !== pageId) return
+
+      if (!response.ok) {
+        fallbackFromInvalidPageRoute()
+        return
+      }
+
+      const page = await response.json() as PageRecord
+      if (sequence !== routeResolutionSequenceRef.current) return
+      if (!activateResolvedPage(page)) fallbackFromInvalidPageRoute()
+    } catch {
+      if (sequence === routeResolutionSequenceRef.current) fallbackFromInvalidPageRoute()
+    }
+  }, [accessToken, activateResolvedPage, authHeaders, fallbackFromInvalidPageRoute])
+
   useEffect(() => {
     const handlePopState = () => {
       const selection = readSelectionFromPath(window.location.pathname)
-      if (!selection) return
+      if (selection.kind === 'page' || selection.kind === 'legacy-page') {
+        resolvePageRoute(selection.pageId)
+        return
+      }
+      if (selection.kind !== 'workspace') return
 
+      routeResolutionSequenceRef.current += 1
       if (selection.workspaceId !== activeWorkspaceIdRef.current) {
         activeWorkspaceIdRef.current = selection.workspaceId
         setActiveWorkspaceId(selection.workspaceId)
       }
-      selectActivePage(selection.pageId)
+      selectActivePage('')
     }
 
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
-  }, [selectActivePage])
+  }, [resolvePageRoute, selectActivePage])
 
   // 검색 등으로 페이지를 열 때, 접힌 조상들을 펼쳐 사이드바에서 해당 페이지가 보이게 한다.
   const revealPage = useCallback((pageId: string) => {
@@ -488,14 +551,23 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   }, [activeWorkspaceId, authHeaders])
 
   const resetClientState = useCallback(() => {
+    const currentRoute = readSelectionFromPath(window.location.pathname)
     setSession(null)
     setWorkspacesLoading(false)
     setPagesLoading(false)
     setWorkspaces([])
+    workspacesRef.current = []
     setPages([])
     setMembers([])
     pagesCache.current.clear()
     pagesRef.current = []
+    routeResolutionSequenceRef.current += 1
+    standalonePageIdRef.current = (
+      currentRoute.kind === 'page' || currentRoute.kind === 'legacy-page'
+        ? currentRoute.pageId
+        : ''
+    )
+    activeWorkspaceIdRef.current = ''
     setActiveWorkspaceId('')
     selectActivePage('')
     setSettingsOpen(false)
@@ -506,11 +578,31 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
     setError('')
     setWorkspacesLoading(true)
     try {
-      const response = await fetch('/api/workspaces', { headers: authHeaders() })
+      const standalonePageId = standalonePageIdRef.current
+      if (standalonePageId) standalonePageIdRef.current = ''
+      const routeSequence = standalonePageId ? ++routeResolutionSequenceRef.current : 0
+      const [response, standalonePageResponse] = await Promise.all([
+        fetch('/api/workspaces', { headers: authHeaders() }),
+        standalonePageId
+          ? fetch(`/api/pages?id=${encodeURIComponent(standalonePageId)}`, { headers: authHeaders() })
+            .catch(() => null)
+          : Promise.resolve(null),
+      ])
       if (!response.ok) throw await readError(response, '워크스페이스를 불러오지 못했습니다.')
 
       const data = await response.json() as Workspace[]
+      workspacesRef.current = data
       setWorkspaces(data)
+
+      if (standalonePageId && routeSequence === routeResolutionSequenceRef.current) {
+        const currentRoute = readSelectionFromPath(window.location.pathname)
+        if (currentRoute.pageId === standalonePageId && standalonePageResponse?.ok) {
+          const standalonePage = await standalonePageResponse.json() as PageRecord
+          if (activateResolvedPage(standalonePage, data)) return data
+        }
+        setError('요청한 페이지를 열 수 없어 기본 워크스페이스로 이동했습니다.')
+      }
+
       const currentWorkspaceId = activeWorkspaceIdRef.current
       const nextWorkspaceId = data.some(workspace => workspace.id === currentWorkspaceId)
         ? currentWorkspaceId
@@ -524,7 +616,7 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
     } finally {
       setWorkspacesLoading(false)
     }
-  }, [accessToken, authHeaders])
+  }, [accessToken, activateResolvedPage, authHeaders])
 
   const loadPages = useCallback(async (
     workspaceId: string,
