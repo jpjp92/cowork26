@@ -1,17 +1,26 @@
-node_modules
-dist
-.next/
-.env
-ref/
-.env.local
-.vercel
-AGI-client.exe
-agi-client.log
+# Dependencies
+/node_modules/
+
+# Next.js and build output
+/.next/
+/dist/
 *.tsbuildinfo
-public/url-chip-review.html
-scripts/url-chip-review.mjs
-scripts/editor-syntax-test.cjs
-scripts/tiptap-to-plaintext-test.mjs
-scripts/page-search-test.mjs
-scripts/workspace-search-review.mjs
-tests/editor-paste-priority.test.mjs
+
+# Environment variables
+.env*
+!.env.example
+
+# Deployment metadata
+/.vercel/
+
+# Local references and generated artifacts
+/ref/
+*.log
+/AGI-client.exe
+/public/url-chip-review.html
+
+# Local verification scripts
+/scripts/*-test.*
+/scripts/*-review.*
+!/scripts/workspace-dropdown-review.mjs
+/tests/editor-paste-priority.test.mjs

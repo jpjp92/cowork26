@@ -65,9 +65,13 @@ export function AppHeader({
             : '↻'}
         </button>
         <button
+          type="button"
+          aria-label="Settings"
+          aria-controls="settings-panel"
+          aria-expanded={settingsOpen}
           onClick={onToggleSettings}
           className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000]"
-          title="설정"
+          title="Settings"
         >
           ⚙
         </button>
