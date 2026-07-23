@@ -4,6 +4,22 @@
 
 **Architecture:** 한 번에 상태 구조를 다시 쓰지 않는다. 먼저 타입과 순수 계산을 분리해 테스트 기반을 만들고, 다음으로 JSX만 표현 컴포넌트로 이동한다. 그 후 비교적 독립적인 UI 상태 훅을 분리하고, 마지막에 저장·라우팅·데이터 로딩처럼 경쟁 조건이 있는 로직을 하나씩 옮긴다. 각 단계는 별도 검증을 통과해야 다음 단계로 진행한다.
 
+## 진행 현황 (2026-07-22)
+
+- Phase 0~4 구현 및 자동 회귀 검증 완료
+- `notion-lite-app.tsx`: 2,084줄 → 901줄
+- 메인 조립 컴포넌트의 직접 `fetch`: 16개 → 0개
+- 타입 검사, 페이지 트리·이동, URL, 에디터 붙여넣기 테스트 통과
+- 개발 서버에서 `/`, `/p/:pageId`, `/w/:workspaceId/p/:pageId` 응답 200 확인
+- 인증된 브라우저 Phase 0 수동 스모크 체크 완료
+- Phase 5.1 저장 훅 분리 및 자동 검증 완료 (`notion-lite-app.tsx` 801줄)
+- Phase 5.1 저장 집중 수동 체크 완료
+- Phase 5.2 URL 내비게이션 훅 분리 및 자동 검증 완료 (`notion-lite-app.tsx` 694줄)
+- Phase 5.2 URL·뒤로/앞으로 집중 수동 체크 완료
+- Phase 5.3 이미지 asset 훅 분리 완료
+- Phase 6 cleanup, 전체 자동 검사, production build와 네 실행 경로 검증 완료
+- 최종 `notion-lite-app.tsx`: 612줄, 직접 `fetch`: 0개
+
 **Tech Stack:** Next.js 16 App Router, React 19, TypeScript, Supabase, Tailwind CSS v4, 브라우저 History API.
 
 ---
