@@ -1069,6 +1069,7 @@ function documentHasPendingImageUpload(content: Record<string, unknown>) {
 
 export default function DocumentEditor({ content, editable, onChange, onUploadImage, onCloneImage }: DocumentEditorProps) {
   const resolvedContent = content ?? EMPTY_DOC_CONTENT
+  const [imageError, setImageError] = useState<string | null>(null)
   const onChangeRef = useRef(onChange)
   const onUploadImageRef = useRef(onUploadImage)
   const onCloneImageRef = useRef(onCloneImage)
@@ -1138,6 +1139,7 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
 
         if (imageFile && onUploadImageRef.current && !hasPastedTable) {
           event.preventDefault()
+          setImageError(null)
           const previewUrl = URL.createObjectURL(imageFile)
           const imageNode = view.state.schema.nodes.image?.create({
             src: previewUrl,
@@ -1170,6 +1172,7 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
             })
             .catch(error => {
               console.error('Image upload failed', error)
+              setImageError(error instanceof Error ? error.message : '이미지를 업로드하지 못했습니다.')
               applyingContentRef.current = false
               removeImageBySrc(view, previewUrl)
             })
@@ -1183,6 +1186,7 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
         const coworkImage = getCoworkImageFromHtml(event.clipboardData?.getData('text/html') ?? '')
         if (coworkImage && onCloneImageRef.current) {
           event.preventDefault()
+          setImageError(null)
           const imageNode = view.state.schema.nodes.image?.create({
             src: coworkImage.src,
             alt: coworkImage.alt ?? 'copied image',
@@ -1211,6 +1215,7 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
             })
             .catch(error => {
               console.error('Image clone failed', error)
+              setImageError(error instanceof Error ? error.message : '이미지를 복제하지 못했습니다.')
               applyingContentRef.current = false
               removeImageBySrc(view, coworkImage.src)
             })
@@ -1394,6 +1399,21 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
 
   return (
     <div>
+      {imageError && (
+        <div
+          role="alert"
+          className="mb-3 flex items-start justify-between gap-3 rounded-[8px] border border-black bg-[#fecaca] px-3 py-2 text-sm font-bold text-black shadow-[2px_2px_0_#000]"
+        >
+          <span>{imageError}</span>
+          <button
+            type="button"
+            className="shrink-0 text-xs font-black underline"
+            onClick={() => setImageError(null)}
+          >
+            닫기
+          </button>
+        </div>
+      )}
       <EditorContent editor={editor} />
     </div>
   )

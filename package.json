@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "test:editor-paste-priority": "node tests/editor-paste-priority.test.mjs",
+    "test:image-assets": "node tests/image-assets.test.mjs",
     "review:workspace-dropdown": "node scripts/workspace-dropdown-review.mjs",
     "typecheck": "tsc --noEmit"
   },

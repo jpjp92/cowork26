@@ -65,7 +65,7 @@ supabase/migrations/003_workspace_member_order.sql
 
 `003_workspace_member_order.sql`은 `workspace_members.order_index`를 추가합니다. 이 값은 사용자별 워크스페이스 목록 정렬 순서를 저장합니다.
 
-이미지 붙여넣기 기능을 사용하려면 Supabase Storage에 public bucket `page_assets`를 만들고, 이미지 메타데이터용 `page_assets` 테이블을 생성합니다. 실행 SQL과 세부 정책은 `docs/history/DEV_260615.md`에 기록되어 있습니다.
+이미지 붙여넣기 기능을 사용하려면 Supabase Storage에 public bucket `page_assets`를 만들고, 이미지 메타데이터용 `page_assets` 테이블을 생성합니다. 버킷에는 파일 크기 제한 `20MB`와 허용 MIME `image/png`, `image/jpeg`, `image/webp`, `image/gif`를 설정해야 합니다. 실행 SQL과 세부 정책은 `docs/history/DEV_260615.md`에 기록되어 있습니다.
 
 ---
 
@@ -162,7 +162,8 @@ docs/
 - Tiptap 표: 열 너비 조절, 행 높이 드래그 조절
 - 목록 `Tab` / `Shift+Tab` 들여쓰기 조절
 - 클립보드 이미지 붙여넣기
-  - 이미지는 `pages.content`에 base64로 저장하지 않고 Supabase Storage `page_assets` bucket에 업로드
+  - 이미지는 `pages.content`에 base64로 저장하지 않고 Signed Upload URL을 통해 Supabase Storage `page_assets` bucket에 직접 업로드 (최대 20MB)
+  - API는 업로드 전 페이지 편집 권한을 확인하고, 완료 시 Storage의 실제 MIME·크기를 다시 검증
   - TipTap 문서에는 이미지 URL과 `assetId`, `storagePath` 메타데이터만 저장
   - 이미지 hover 시 `Copy` 버튼 표시
   - 앱 내부 이미지 복사 후 다른 페이지/워크스페이스에 붙여넣으면 `/api/assets/clone`으로 대상 페이지 전용 asset을 복제

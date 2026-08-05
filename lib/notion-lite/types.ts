@@ -33,6 +33,12 @@ export interface UploadedImageAsset {
   alt?: string
 }
 
+export interface PreparedImageUpload {
+  id: string
+  token: string
+  storagePath: string
+}
+
 export interface CloneImageSource {
   assetId?: string
   storagePath?: string

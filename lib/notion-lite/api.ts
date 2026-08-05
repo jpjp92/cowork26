@@ -1,10 +1,13 @@
 import type {
   CloneImageSource,
   PageRecord,
+  PreparedImageUpload,
   UploadedImageAsset,
   Workspace,
   WorkspaceMember,
 } from './types'
+import { getImageSizeError, isSupportedImageType } from '../image-assets'
+import { supabase } from '../supabase-browser'
 
 interface CreateWorkspaceResponse {
   workspace: Workspace
@@ -186,18 +189,71 @@ export const notionLiteApi = {
     pageId: string,
     file: File,
   ) {
-    const formData = new FormData()
-    formData.append('workspaceId', workspaceId)
-    formData.append('pageId', pageId)
-    formData.append('file', file)
+    if (!isSupportedImageType(file.type)) {
+      throw new Error('PNG, JPEG, WebP, GIF 이미지만 업로드할 수 있습니다.')
+    }
+    const sizeError = getImageSizeError(file.size)
+    if (sizeError) throw new Error(sizeError)
 
-    const data = await requestJson<UploadedImageAsset>(
+    const prepared = await requestJson<PreparedImageUpload>(
       accessToken,
       '/api/assets',
-      '이미지를 업로드하지 못했습니다.',
-      { method: 'POST', body: formData },
+      '이미지 업로드를 준비하지 못했습니다.',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'prepare',
+          workspaceId,
+          pageId,
+          mimeType: file.type,
+          sizeBytes: file.size,
+        }),
+      },
     )
-    return { ...data, alt: file.name || data.alt || 'pasted image' }
+
+    try {
+      const { error: uploadError } = await supabase
+        .storage
+        .from('page_assets')
+        .uploadToSignedUrl(prepared.storagePath, prepared.token, file, {
+          contentType: file.type,
+          upsert: false,
+        })
+      if (uploadError) throw uploadError
+
+      const data = await requestJson<UploadedImageAsset>(
+        accessToken,
+        '/api/assets',
+        '이미지 업로드를 완료하지 못했습니다.',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'complete',
+            workspaceId,
+            pageId,
+            assetId: prepared.id,
+            mimeType: file.type,
+          }),
+        },
+      )
+      return { ...data, alt: file.name || data.alt || 'pasted image' }
+    } catch (error) {
+      await requestEmpty(
+        accessToken,
+        '/api/assets',
+        '업로드 중인 이미지를 정리하지 못했습니다.',
+        {
+          method: 'DELETE',
+          body: JSON.stringify({
+            workspaceId,
+            pageId,
+            assetId: prepared.id,
+            mimeType: file.type,
+          }),
+        },
+      ).catch(cleanupError => console.error('Image upload cleanup failed', cleanupError))
+      throw error
+    }
   },
 
   async cloneAsset(

@@ -1,20 +1,13 @@
 import { NextResponse } from 'next/server'
+import {
+  getImageStoragePath,
+  IMAGE_ASSET_BUCKET,
+  isSupportedImageType,
+  isValidImageSize,
+} from '../../../../lib/image-assets'
 import { supabaseAdmin } from '../../../../lib/supabase-admin'
 import { getUserFromRequest, requireWorkspaceRole } from '../../_utils/auth'
 import { createApiTiming } from '../../_utils/timing'
-
-const ASSET_BUCKET = 'page_assets'
-
-const IMAGE_EXTENSIONS: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-  'image/gif': 'gif',
-}
-
-function getExtension(mimeType: string) {
-  return IMAGE_EXTENSIONS[mimeType] ?? 'png'
-}
 
 export async function POST(request: Request) {
   const timing = createApiTiming('POST /api/assets/clone')
@@ -72,6 +65,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Source asset not found' }, { status: 404 })
     }
 
+    if (!isSupportedImageType(sourceAsset.mime_type) || !isValidImageSize(sourceAsset.size_bytes)) {
+      return NextResponse.json({ error: 'Source asset type or size is not supported' }, { status: 400 })
+    }
+
     cloneType = sourceAsset.mime_type
     const canReadSource = await requireWorkspaceRole(
       sourceAsset.workspace_id,
@@ -82,32 +79,19 @@ export async function POST(request: Request) {
     )
     if (!canReadSource) return NextResponse.json({ error: 'Source asset forbidden' }, { status: 403 })
 
-    const { data: sourceBlob, error: downloadError } = await timing.measure('storage.download', () => supabaseAdmin
-      .storage
-      .from(ASSET_BUCKET)
-      .download(sourceAsset.storage_path))
-
-    if (downloadError || !sourceBlob) {
-      return NextResponse.json({ error: downloadError?.message ?? 'Source asset download failed' }, { status: 500 })
-    }
-
     const assetId = crypto.randomUUID()
-    const storagePath = `workspaces/${workspaceId}/pages/${pageId}/${assetId}.${getExtension(sourceAsset.mime_type)}`
-    const buffer = Buffer.from(await timing.measure('source.arrayBuffer', () => sourceBlob.arrayBuffer()))
+    const storagePath = getImageStoragePath(workspaceId, pageId, assetId, sourceAsset.mime_type)
 
-    const { error: uploadError } = await timing.measure('storage.upload', () => supabaseAdmin
+    const { error: copyError } = await timing.measure('storage.copy', () => supabaseAdmin
       .storage
-      .from(ASSET_BUCKET)
-      .upload(storagePath, buffer, {
-        contentType: sourceAsset.mime_type,
-        upsert: false,
-      }))
+      .from(IMAGE_ASSET_BUCKET)
+      .copy(sourceAsset.storage_path, storagePath))
 
-    if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
+    if (copyError) return NextResponse.json({ error: copyError.message }, { status: 500 })
 
     const { data: publicUrlData } = supabaseAdmin
       .storage
-      .from(ASSET_BUCKET)
+      .from(IMAGE_ASSET_BUCKET)
       .getPublicUrl(storagePath)
 
     const publicUrl = publicUrlData.publicUrl
@@ -127,7 +111,16 @@ export async function POST(request: Request) {
       .select('id, workspace_id, page_id, storage_path, public_url, mime_type, size_bytes, created_at')
       .single())
 
-    if (assetError) return NextResponse.json({ error: assetError.message }, { status: 500 })
+    if (assetError) {
+      const { error: cleanupError } = await supabaseAdmin
+        .storage
+        .from(IMAGE_ASSET_BUCKET)
+        .remove([storagePath])
+      if (cleanupError) {
+        console.error('Failed to clean up cloned image', { storagePath, error: cleanupError.message })
+      }
+      return NextResponse.json({ error: assetError.message }, { status: 500 })
+    }
 
     return NextResponse.json({
       id: asset.id,
