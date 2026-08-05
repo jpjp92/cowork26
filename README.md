@@ -91,7 +91,7 @@ app/
   globals.css                     # 전역 스타일 (ProseMirror, hljs 토큰 등)
   api/
     _utils/auth.ts                # JWT 검증 · 워크스페이스 권한 헬퍼
-    assets/route.ts               # 이미지 업로드
+    assets/route.ts               # 이미지 Signed Upload 준비 · 완료 검증 · 실패 정리
     assets/clone/route.ts         # 이미지 asset 복제
     pages/route.ts                # GET(목록·단건) / POST / PATCH / DELETE
     workspaces/route.ts           # GET / POST / PATCH
@@ -105,6 +105,7 @@ components/
 lib/
   supabase-admin.ts               # service role 클라이언트 (서버 전용)
   supabase-browser.ts             # anon 클라이언트 (브라우저)
+  image-assets.ts                 # 이미지 MIME · 크기 · Storage 경로 규칙
 
 supabase/
   migrations/
@@ -123,6 +124,7 @@ docs/
     DEV_260529.md                 # 2026-05-29 Markdown 다운로드
     DEV_260602.md                 # 2026-06-02 AGI 비활성 가드 및 검증
     DEV_260615.md                 # 2026-06-15 이미지 붙여넣기 · 페이지 이동 · 사이드바 리사이즈
+    DEV_260805.md                 # 2026-08-05 이미지 직접 업로드 · 대용량 최적화
 ```
 
 ---
@@ -162,8 +164,12 @@ docs/
 - Tiptap 표: 열 너비 조절, 행 높이 드래그 조절
 - 목록 `Tab` / `Shift+Tab` 들여쓰기 조절
 - 클립보드 이미지 붙여넣기
-  - 이미지는 `pages.content`에 base64로 저장하지 않고 Signed Upload URL을 통해 Supabase Storage `page_assets` bucket에 직접 업로드 (최대 20MB)
+  - 원본 입력은 PNG/JPEG/WebP/GIF, 최대 20MB까지 허용
+  - 5MB 초과 PNG/JPEG/WebP는 브라우저에서 긴 변 최대 2560px의 WebP로 변환해 5MB 이하로 최적화
+  - 애니메이션 보존을 위해 GIF는 변환하지 않으며 최대 5MB까지 허용
+  - 이미지는 `pages.content`에 base64로 저장하지 않고 서버가 발급한 Signed Upload URL로 Supabase Storage `page_assets` bucket에 직접 업로드
   - API는 업로드 전 페이지 편집 권한을 확인하고, 완료 시 Storage의 실제 MIME·크기를 다시 검증
+  - 전송 실패 시 미등록 Storage 객체를 정리하고 에디터에 오류 원인을 표시
   - TipTap 문서에는 이미지 URL과 `assetId`, `storagePath` 메타데이터만 저장
   - 이미지 hover 시 `Copy` 버튼 표시
   - 앱 내부 이미지 복사 후 다른 페이지/워크스페이스에 붙여넣으면 `/api/assets/clone`으로 대상 페이지 전용 asset을 복제
@@ -239,7 +245,8 @@ POST   /api/pages
 PATCH  /api/pages
 DELETE /api/pages?id=...
 
-POST   /api/assets
+POST   /api/assets              # action=prepare | complete
+DELETE /api/assets              # 실패한 미등록 업로드 정리
 POST   /api/assets/clone
 
 GET    /api/workspaces/:id/members

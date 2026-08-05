@@ -35,7 +35,7 @@ export interface UploadedImageAsset {
 
 export interface PreparedImageUpload {
   id: string
-  token: string
+  signedUrl: string
   storagePath: string
 }
 
