@@ -26,11 +26,20 @@ export function useJjapvisBridge({
       console.error('[JjapvisBridge] 마크다운 변환 실패함:', err)
     }
 
+    const promptHeader = [
+      '[코워크(Cowork26) 연동 업무 모드]',
+      '코워크 업무 수행 및 지원을 위한 요청입니다.',
+      '분석 내용, 연구 결과, 작성된 문서나 미디어 등 결과물이 필요한 경우 코워크(Cowork26)에 직접 저장 및 반영해 주세요.',
+      '',
+      `[현재 열람 중인 코워크 문서: "${activePage.title || '제목 없음'}"]`,
+      markdown || '(문서 내용 비어 있음)',
+    ].join('\n')
+
     const message: JjapvisParentMessage = {
       type: 'page_context',
       title: activePage.title,
       pageId: activePage.id,
-      context: markdown,
+      context: promptHeader,
     }
 
     // 짭비스 iframe 내부로 postMessage 발행함
