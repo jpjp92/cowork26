@@ -19,6 +19,7 @@ import { TableRow } from '@tiptap/extension-table-row'
 import ImageExtension from '@tiptap/extension-image'
 import { createLowlight, common } from 'lowlight'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import katex from 'katex'
 
 const lowlight = createLowlight(common)
 
@@ -176,6 +177,322 @@ const MermaidBlock = Node.create({
 
   addNodeView() {
     return ReactNodeViewRenderer(MermaidBlockView)
+  },
+})
+
+// ── KaTeX LaTeX 렌더링 헬퍼 ──────────────────────────────────────────────
+function renderLatexToHtml(latex: string, displayMode: boolean): string {
+  if (!latex || !latex.trim()) return ''
+  try {
+    return katex.renderToString(latex.trim(), {
+      displayMode,
+      throwOnError: false,
+      errorColor: '#ef4444',
+    })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '수식 오류'
+    return `<span class="text-red-400 font-mono text-xs">[수식 렌더링 실패: ${escapeHtmlAttribute(msg)}]</span>`
+  }
+}
+
+// ── MathBlock (블록 수식) NodeView ─────────────────────────────────────────
+function MathBlockView({ node, updateAttributes, editor }: NodeViewProps) {
+  const [editing, setEditing] = useState(false)
+  const [draftLatex, setDraftLatex] = useState<string>(node.attrs.latex as string)
+  const savedLatexRef = useRef<string>(node.attrs.latex as string)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!editing) {
+      setDraftLatex(node.attrs.latex as string)
+      savedLatexRef.current = node.attrs.latex as string
+    }
+  }, [node.attrs.latex, editing])
+
+  const handleSave = useCallback(() => {
+    updateAttributes({ latex: draftLatex })
+    savedLatexRef.current = draftLatex
+    setEditing(false)
+  }, [draftLatex, updateAttributes])
+
+  const handleCancel = useCallback(() => {
+    setDraftLatex(savedLatexRef.current)
+    setEditing(false)
+  }, [])
+
+  const handleCopy = useCallback(async () => {
+    const raw = (node.attrs.latex as string) || ''
+    try {
+      await navigator.clipboard.writeText(`$$\n${raw}\n$$`)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1000)
+    } catch {
+      // 클립보드 접근 불가 시 무시함
+    }
+  }, [node.attrs.latex])
+
+  const rawLatex = (node.attrs.latex as string) || ''
+  const renderedHtml = renderLatexToHtml(rawLatex, true)
+
+  return (
+    <NodeViewWrapper className="math-block my-4" contentEditable={false}>
+      <div className="rounded-[8px] border border-black bg-[#161b22] text-[#e6edf3] shadow-[4px_4px_0_#000] overflow-hidden">
+        {/* 상단 헤더 바 */}
+        <div className="flex items-center justify-between border-b border-[#30363d] px-3 py-1.5 bg-[#0d1117]">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[0.7rem] font-bold tracking-widest text-[#58a6ff]">TeX</span>
+            <span className="text-[0.68rem] text-[#8b949e]">수식 블록</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onMouseDown={e => { e.preventDefault(); handleCopy() }}
+              className="text-[0.7rem] font-bold text-[#8b949e] hover:text-[#58a6ff] transition-colors"
+            >
+              {copied ? '복사됨' : '복사'}
+            </button>
+            {editor.isEditable && (
+              <button
+                onMouseDown={e => {
+                  e.preventDefault()
+                  setDraftLatex(node.attrs.latex as string)
+                  setEditing(v => !v)
+                }}
+                className="text-[0.7rem] font-bold text-[#8b949e] hover:text-white transition-colors"
+              >
+                {editing ? '닫기' : '편집'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 수식 렌더링 뷰 */}
+        {!editing && (
+          <div className="p-4 overflow-x-auto text-center flex justify-center items-center min-h-[56px]">
+            {rawLatex.trim() ? (
+              <div
+                className="inline-block max-w-full [&_.katex-display]:my-0"
+                dangerouslySetInnerHTML={{ __html: renderedHtml }}
+              />
+            ) : (
+              <p className="text-xs text-[#8b949e]">수식이 비어 있습니다 (편집을 눌러 LaTeX 입력)</p>
+            )}
+          </div>
+        )}
+
+        {/* 편집기 (텍스트에어리어 + 실시간 미리보기) */}
+        {editing && (
+          <div className="p-3 bg-[#0d1117] border-t border-[#30363d]">
+            <textarea
+              className="w-full resize-none rounded border border-[#30363d] bg-[#161b22] p-2.5 font-mono text-sm text-[#79c0ff] outline-none focus:border-[#58a6ff]"
+              rows={Math.max(3, draftLatex.split('\n').length + 1)}
+              value={draftLatex}
+              placeholder="LaTeX 수식을 입력하세요. (예: M_{reg}(r, \theta) = ...)"
+              onChange={e => setDraftLatex(e.target.value)}
+              onKeyDown={e => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                  e.preventDefault()
+                  handleSave()
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  handleCancel()
+                }
+              }}
+            />
+            {/* 실시간 미리보기 */}
+            <div className="mt-2 p-3 rounded border border-[#21262d] bg-[#161b22] text-center overflow-x-auto min-h-[44px] flex items-center justify-center">
+              <div
+                className="inline-block max-w-full [&_.katex-display]:my-0"
+                dangerouslySetInnerHTML={{ __html: renderLatexToHtml(draftLatex, true) }}
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-[10px] text-[#8b949e]">Ctrl+Enter: 저장 | Esc: 취소</span>
+              <div className="flex gap-2">
+                <button
+                  onMouseDown={e => { e.preventDefault(); handleSave() }}
+                  className="rounded-[6px] border border-black bg-[#baf7c8] px-3 py-1 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5"
+                >저장</button>
+                <button
+                  onMouseDown={e => { e.preventDefault(); handleCancel() }}
+                  className="rounded-[6px] border border-[#555] px-3 py-1 text-xs font-bold text-[#ccc] hover:text-white"
+                >취소</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </NodeViewWrapper>
+  )
+}
+
+// ── MathBlock TipTap 노드 정의 ──────────────────────────────────────────────
+const MathBlock = Node.create({
+  name: 'mathBlock',
+  group: 'block',
+  atom: true,
+
+  addAttributes() {
+    return {
+      latex: {
+        default: '',
+        parseHTML: element => element.getAttribute('data-latex') ?? '',
+        renderHTML: attributes => ({ 'data-latex': attributes.latex as string }),
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'div[data-type="math-block"]' },
+      { tag: 'div.math-block' },
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes({ 'data-type': 'math-block' }, HTMLAttributes)]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(MathBlockView)
+  },
+
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /^\$\$\s*$/,
+        handler: ({ state, range }) => {
+          const { tr } = state
+          const mathBlockType = state.schema.nodes.mathBlock
+          if (!mathBlockType) return null
+          tr.replaceWith(range.from - 1, range.to, mathBlockType.create({ latex: '' }))
+        },
+      }),
+    ]
+  },
+})
+
+// ── MathInline (인라인 수식) NodeView ─────────────────────────────────────────
+function MathInlineView({ node, updateAttributes, editor }: NodeViewProps) {
+  const [editing, setEditing] = useState(false)
+  const [draftLatex, setDraftLatex] = useState<string>(node.attrs.latex as string)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!editing) {
+      setDraftLatex(node.attrs.latex as string)
+    }
+  }, [node.attrs.latex, editing])
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+  }, [editing])
+
+  const handleSave = () => {
+    updateAttributes({ latex: draftLatex })
+    setEditing(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSave()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setDraftLatex(node.attrs.latex as string)
+      setEditing(false)
+    }
+  }
+
+  const rawLatex = (node.attrs.latex as string) || ''
+  const renderedHtml = renderLatexToHtml(rawLatex, false)
+
+  return (
+    <NodeViewWrapper as="span" className="math-inline inline-flex items-center align-baseline mx-0.5" contentEditable={false}>
+      {!editing ? (
+        <span
+          onClick={() => { if (editor.isEditable) setEditing(true) }}
+          className={`inline-flex items-center px-1 py-0.5 rounded cursor-pointer transition-colors ${
+            editor.isEditable
+              ? 'hover:bg-[#58a6ff1a] hover:outline hover:outline-1 hover:outline-[#58a6ff80]'
+              : ''
+          }`}
+          title={editor.isEditable ? `수식 편집 (클릭): $${rawLatex}$` : `$${rawLatex}$`}
+          dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        />
+      ) : (
+        <span className="inline-flex items-center gap-0.5 bg-[#0d1117] border border-[#58a6ff] rounded px-1.5 py-0.5 shadow-sm text-xs">
+          <span className="text-[10px] text-[#58a6ff] font-mono font-bold">$</span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={draftLatex}
+            onChange={e => setDraftLatex(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleSave}
+            className="bg-transparent border-none outline-none font-mono text-[#79c0ff] min-w-[100px] max-w-[300px]"
+          />
+          <span className="text-[10px] text-[#58a6ff] font-mono font-bold">$</span>
+        </span>
+      )}
+    </NodeViewWrapper>
+  )
+}
+
+// ── MathInline TipTap 노드 정의 ──────────────────────────────────────────────
+const MathInline = Node.create({
+  name: 'mathInline',
+  group: 'inline',
+  inline: true,
+  atom: true,
+
+  addAttributes() {
+    return {
+      latex: {
+        default: '',
+        parseHTML: element => element.getAttribute('data-latex') ?? '',
+        renderHTML: attributes => ({ 'data-latex': attributes.latex as string }),
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'span[data-type="math-inline"]' },
+      { tag: 'span.math-inline' },
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes({ 'data-type': 'math-inline' }, HTMLAttributes)]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(MathInlineView)
+  },
+
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /(?:^|\s)(\$([^$\n]+)\$)$/,
+        handler: ({ state, range, match }) => {
+          const fullMatch = match[0]
+          const latexWithDollar = match[1]
+          const latex = match[2]
+          if (!latexWithDollar || !latex) return null
+
+          const leadingOffset = fullMatch.indexOf(latexWithDollar)
+          const from = range.from + leadingOffset
+          const to = from + latexWithDollar.length
+          const mathInlineType = state.schema.nodes.mathInline
+          if (!mathInlineType) return null
+
+          state.tr.replaceWith(from, to, mathInlineType.create({ latex }))
+        },
+      }),
+    ]
   },
 })
 
@@ -467,7 +784,7 @@ function escapeHtml(value: string) {
 }
 
 const MARKDOWN_LINK_PATTERN = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g
-const INLINE_MARKDOWN_PATTERN = /(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|~~[^~\n]+~~|(^|[\s(])\*(?!\*)([^*\n]+?)\*(?!\*)|(^|[\s(])_(?!_)([^_\n]+?)_(?!_))/
+const INLINE_MARKDOWN_PATTERN = /(`[^`\n]+`|\$[^$\n]+\$|\*\*[^*\n]+\*\*|__[^_\n]+__|~~[^~\n]+~~|(^|[\s(])\*(?!\*)([^*\n]+?)\*(?!\*)|(^|[\s(])_(?!_)([^_\n]+?)_(?!_))/
 
 function hasMarkdownLink(text: string) {
   MARKDOWN_LINK_PATTERN.lastIndex = 0
@@ -492,6 +809,20 @@ function renderInlineMarkdown(value: string) {
   ))
 
   escaped = escaped.replace(/`([^`]+)`/g, (_match, code) => stash(`<code>${code}</code>`))
+
+  // 인라인 수식 ($...$) 토큰화: 밑줄(_)이나 별표(*)가 이탤릭으로 깨지지 않도록 강조 서식보다 먼저 보호함
+  escaped = escaped.replace(/\$([^$\n]+)\$/g, (_match, rawLatexEscaped) => {
+    const rawLatex = rawLatexEscaped
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;/g, "'")
+
+    if (!rawLatex.trim()) return _match
+    return stash(`<span data-type="math-inline" data-latex="${escapeHtmlAttribute(rawLatex)}">${escapeHtml(rawLatex)}</span>`)
+  })
+
   escaped = escaped.replace(/__(.+?)__/g, (_match, strong) => stash(`<strong>${strong}</strong>`))
   escaped = escaped.replace(/\*\*(.+?)\*\*/g, (_match, strong) => stash(`<strong>${strong}</strong>`))
   escaped = escaped.replace(/~~(.+?)~~/g, (_match, strike) => stash(`<s>${strike}</s>`))
@@ -618,6 +949,7 @@ type MarkdownPasteBlock =
   | { type: 'list'; kind: 'bullet' | 'ordered'; items: string[] }
   | { type: 'table'; lines: string[] }
   | { type: 'code'; language: string | null; code: string }
+  | { type: 'math'; latex: string }
 
 const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/
 const HORIZONTAL_RULE_PATTERN = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/
@@ -720,10 +1052,11 @@ function looksLikeSourceCode(text: string) {
   const nonEmpty = lines.filter(line => line.trim())
   if (nonEmpty.length < 2) return false
 
-  // 펜스/마크다운 표가 있으면 마크다운 파서가 코드블록/표로 더 잘 처리한다.
+  // 펜스/마크다운 표/수식 블록이 있으면 마크다운 파서가 코드블록/표/수식으로 더 잘 처리한다.
   for (let i = 0; i < lines.length; i += 1) {
     if (getFencedCodeStart(lines[i] ?? '')) return false
     if ((lines[i] ?? '').includes('|') && isMarkdownTableDivider(lines[i + 1] ?? '')) return false
+    if ((lines[i] ?? '').trim().startsWith('$$')) return false
   }
 
   // Azure KQL: '| where', '| project' 같은 파이프 리딩 연산자 라인이 2개 이상이면 코드로 본다.
@@ -868,6 +1201,41 @@ function parseMarkdownPasteBlocks(text: string) {
       continue
     }
 
+    // 수식 블록 ($$...$$ 또는 다중행/미완성 $$) 감지함
+    if (trimmed.startsWith('$$')) {
+      flushParagraph()
+      if (trimmed.endsWith('$$') && trimmed.length > 2 && trimmed !== '$$') {
+        const latex = trimmed.slice(2, -2).trim()
+        blocks.push({ type: 'math', latex })
+        handledMarkdown = true
+        index += 1
+        continue
+      }
+
+      const mathLines: string[] = []
+      const firstLineContent = trimmed.slice(2).trim()
+      if (firstLineContent) mathLines.push(firstLineContent)
+      index += 1
+
+      while (index < lines.length) {
+        const nextRaw = lines[index] ?? ''
+        const nextTrimmed = nextRaw.trim()
+        if (nextTrimmed.endsWith('$$')) {
+          const lastLineContent = nextTrimmed.slice(0, -2).trim()
+          if (lastLineContent) mathLines.push(lastLineContent)
+          index += 1
+          break
+        }
+        mathLines.push(nextRaw)
+        index += 1
+      }
+
+      const latex = mathLines.join('\n').trim()
+      blocks.push({ type: 'math', latex })
+      handledMarkdown = true
+      continue
+    }
+
     const fenceStart = getFencedCodeStart(line)
     if (fenceStart) {
       flushParagraph()
@@ -985,6 +1353,15 @@ function markdownPasteBlocksToSlice(schema: Schema, blocks: MarkdownPasteBlock[]
           ? codeBlockType.create({ language: block.language }, schema.text(block.code))
           : codeBlockType.create({ language: block.language })
       )
+      continue
+    }
+
+    if (block.type === 'math') {
+      const mathBlockType = schema.nodes.mathBlock
+      if (mathBlockType) {
+        nodes.push(mathBlockType.create({ latex: block.latex }))
+      }
+      continue
     }
   }
 
@@ -1105,6 +1482,8 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
         },
       }),
       MermaidBlock,
+      MathBlock,
+      MathInline,
       DocumentImage,
       ListTabKeymap,
       FontSize,

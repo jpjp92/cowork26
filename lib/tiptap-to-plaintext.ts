@@ -1,5 +1,6 @@
 type TiptapNode = {
   type?: string
+  attrs?: Record<string, unknown>
   content?: TiptapNode[]
   text?: string
 }
@@ -7,6 +8,13 @@ type TiptapNode = {
 function collect(node: TiptapNode, out: string[]): void {
   if (typeof node.text === 'string' && node.text.length > 0) {
     out.push(node.text)
+  }
+  // 수식(LaTeX) 및 코드 원문 텍스트도 검색 색인에 반영함
+  if (typeof node.attrs?.latex === 'string' && node.attrs.latex.length > 0) {
+    out.push(node.attrs.latex)
+  }
+  if (typeof node.attrs?.code === 'string' && node.attrs.code.length > 0) {
+    out.push(node.attrs.code)
   }
   if (Array.isArray(node.content)) {
     for (const child of node.content) collect(child, out)

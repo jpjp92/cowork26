@@ -65,6 +65,11 @@ function inlineText(node: TiptapNode): string {
     return text
   }
 
+  if (node.type === 'mathInline') {
+    const latex = (node.attrs?.latex as string) ?? ''
+    return `$${latex}$`
+  }
+
   if (node.type === 'hardBreak') return '  \n'
 
   return (node.content ?? []).map(inlineText).join('')
@@ -118,6 +123,11 @@ function convertNode(node: TiptapNode, listDepth = 0): string {
     case 'mermaidBlock': {
       const code = (node.attrs?.code as string) ?? ''
       return fencedCodeBlock('mermaid', code)
+    }
+
+    case 'mathBlock': {
+      const latex = (node.attrs?.latex as string) ?? ''
+      return `$$\n${latex}\n$$`
     }
 
     case 'image': {
