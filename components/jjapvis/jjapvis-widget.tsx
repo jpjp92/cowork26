@@ -1,6 +1,6 @@
 'use client'
 
-// 짭비스 연동 모듈의 모든 UI, 브리지 로직, 실시간 스트림(생각과정/미디어), 구글 계정 인증을 캡슐화한 최상위 위젯 컴포넌트임
+// 짭비스 연동 모듈의 모든 UI, 브리지 로직, 백엔드 세션 활성화, 구글 계정 인증을 캡슐화한 최상위 위젯 컴포넌트임
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { JJAPVIS_CONFIG } from '../../lib/jjapvis/config'
 import type { ActivePageContext, JjapvisViewMode } from '../../lib/jjapvis/types'
@@ -16,7 +16,7 @@ import { JjapvisFloatingButton } from './jjapvis-floating-button'
 import { JjapvisPanel } from './jjapvis-panel'
 import { JjapvisIframe } from './jjapvis-iframe'
 import { useJjapvisBridge } from './use-jjapvis-bridge'
-import { useJjapvisStream } from './use-jjapvis-stream'
+import { useJjapvisAgentSession } from './use-jjapvis-agent-session'
 
 export interface JjapvisWidgetProps {
   activePage: ActivePageContext | null
@@ -49,16 +49,12 @@ export function JjapvisWidget({ activePage, userId }: JjapvisWidgetProps) {
     }
   }, [userId])
 
-  // 짭비스 백엔드 실시간 WebSocket(생각 과정, 미디어 갤러리) 스트림 바인딩함
-  const {
-    isThinking,
-    currentStep,
-    thoughtHistory,
-    aiState,
-    mediaList,
-    clearThoughts,
-    clearMedia,
-  } = useJjapvisStream({ token })
+  // 짭비스 백엔드 에이전트 세션(/ws/agent)을 백그라운드로 항시 유지하여,
+  // 짭비스 백엔드가 생각과정(progress)과 우측 미디어(media)를 100% 정상 송출하도록 보장함
+  useJjapvisAgentSession({
+    token,
+    googleAccessToken: googleUser?.accessToken,
+  })
 
   // 구글 팝업 로그인 실행 핸들러임
   const handleGoogleLogin = useCallback(async () => {
@@ -118,19 +114,12 @@ export function JjapvisWidget({ activePage, userId }: JjapvisWidgetProps) {
         onClick={() => setIsOpen((prev) => !prev)}
       />
 
-      {/* 짭비스 홀로그램 HUD 윈도우 패널임 */}
+      {/* 짭비스 홀로그램 HUD 윈도우 패널임 (짭비스 원형 100% 일치) */}
       <JjapvisPanel
         isOpen={isOpen}
         viewMode={viewMode}
         googleUser={googleUser}
         isLoggingIn={isLoggingIn}
-        isThinking={isThinking}
-        currentStep={currentStep}
-        thoughtHistory={thoughtHistory}
-        aiState={aiState}
-        mediaList={mediaList}
-        onClearThoughts={clearThoughts}
-        onClearMedia={clearMedia}
         onGoogleLogin={handleGoogleLogin}
         onGoogleLogout={handleGoogleLogout}
         onClose={() => setIsOpen(false)}
