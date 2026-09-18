@@ -10,6 +10,7 @@ import { tiptapToMarkdown } from '../lib/tiptap-to-markdown'
 import { SearchModal } from './search-modal'
 
 const DocumentEditor = dynamic(() => import('./document-editor'), { ssr: false })
+const JjapvisWidget = dynamic(() => import('./jjapvis').then(mod => mod.JjapvisWidget), { ssr: false })
 const DEBUG_SAVE_FLOW = process.env.NODE_ENV !== 'production'
 const PAGE_REVALIDATE_INTERVAL_MS = 30_000
 const DEFAULT_SIDEBAR_WIDTH = 312
@@ -183,8 +184,6 @@ export default function NotionLiteApp() {
   // 현재 collapsedPages가 대표하는 워크스페이스 id. 워크스페이스가 바뀌면 해당 워크스페이스의
   // 접힘 상태를 다시 로드하기 위한 추적 ref(전환 시 재동기화 판단 + 저장 오염 방지).
   const collapsedWorkspaceRef = useRef<string | null>(null)
-  const [showAgiPrompt, setShowAgiPrompt] = useState(false)
-  const [agiDownloadUrl, setAgiDownloadUrl] = useState('')
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH)
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
 
@@ -226,44 +225,7 @@ export default function NotionLiteApp() {
     'Content-Type': 'application/json',
   }), [accessToken])
 
-  // AGI 자동 백그라운드 실행을 위해 API 호출
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (process.env.NEXT_PUBLIC_ENABLE_AGI === 'false') return
 
-    let token = localStorage.getItem('agi_hud_token')
-    if (!token) {
-      token = crypto.randomUUID()
-      localStorage.setItem('agi_hud_token', token)
-    }
-
-    fetch('/api/agi', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hud_token: token })
-    })
-      .then(res => res.json())
-      .then(d => {
-        if (d.ok && d.agi_url) {
-          if (d.download_url) setAgiDownloadUrl(d.download_url)
-
-          // @ts-ignore
-          const _launched = window.agi_launched
-          if (!_launched) {
-            // @ts-ignore
-            window.agi_launched = true
-            // 무조건 커스텀 프로토콜 쏘기 (Vercel 환경 지원)
-            window.location.href = d.agi_url
-            
-            // 3초 뒤에 안내 팝업 띄우기
-            setTimeout(() => {
-              setShowAgiPrompt(true)
-            }, 3000)
-          }
-        }
-      })
-      .catch(() => {})
-  }, [])
 
 
 
@@ -1882,24 +1844,15 @@ export default function NotionLiteApp() {
         </section>
       </div>
 
-      {showAgiPrompt && (
-        <div className="fixed bottom-6 right-6 z-50 flex w-80 flex-col gap-3 rounded-[8px] border-[2px] border-black bg-white p-5 shadow-[6px_6px_0_#000]">
-          <div className="flex items-center justify-between">
-            <h3 className="font-black text-black">AGI 짭비스 실행 중...</h3>
-            <button onClick={() => setShowAgiPrompt(false)} className="text-black hover:opacity-70 transition-opacity">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12" /></svg>
-            </button>
-          </div>
-          <p className="text-sm font-medium text-gray-700">
-            앱 실행을 시도 중입니다. 만약 앱이 켜지지 않는다면 아래에서 다운로드 후 최초 1회 직접 실행해주세요.
-          </p>
-          <div className="mt-1 flex gap-2">
-            {agiDownloadUrl && (
-              <a href={agiDownloadUrl} onClick={() => setShowAgiPrompt(false)} className="flex-1 rounded-[4px] border-[2px] border-black bg-[#baf7c8] px-3 py-2 text-center text-xs font-black text-black hover:bg-[#86efac] transition-colors shadow-[2px_2px_0_#000] hover:translate-y-[1px] hover:shadow-[1px_1px_0_#000] active:translate-y-[2px] active:shadow-none">다운로드</a>
-            )}
-          </div>
-        </div>
-      )}
+      {/* 짭비스 AGI 독립 임베드 위젯임 */}
+      <JjapvisWidget
+        activePage={activePage ? {
+          id: activePage.id,
+          title: activePage.title,
+          content: activePageContent,
+        } : null}
+        userId={session?.user?.id}
+      />
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"

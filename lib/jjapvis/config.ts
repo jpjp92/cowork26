@@ -1,0 +1,28 @@
+// 짭비스 연동 인프라 환경변수 및 기본 설정 모듈임
+
+export const JJAPVIS_CONFIG = {
+  // 짭비스 FastAPI 서버 URL (기본 8000번 포트)
+  serverUrl: (
+    process.env.NEXT_PUBLIC_JJAPVIS_SERVER_URL ||
+    process.env.JJAPVIS_SERVER_URL ||
+    'http://localhost:8000'
+  ).replace(/\/$/, ''),
+
+  // AGI 위젯 활성화 플래그 (명시적 false가 아니면 기본 활성화함)
+  isEnabled: process.env.NEXT_PUBLIC_ENABLE_AGI !== 'false',
+
+  // 세션 스토리지 키
+  storageKey: 'cowork26:jjapvis:hud_token',
+
+  // 기본 HUD 윈도우 규격 (반응형 지원)
+  defaultWidth: 460,
+  defaultHeight: 740,
+  minWidth: 360,
+  minHeight: 500,
+} as const
+
+// 사용자별 격리 HUD 접속 URL 생성함
+export function getJjapvisHudUrl(token: string): string {
+  const base = `${JJAPVIS_CONFIG.serverUrl}/hud/hud.html`
+  return token ? `${base}?hud_token=${encodeURIComponent(token)}` : base
+}
