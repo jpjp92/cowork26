@@ -1,13 +1,18 @@
 'use client'
 
-// 짭비스 HUD 윈도우 컨테이너 패널 컴포넌트임 (드래그 리사이즈 및 와이드 뷰 지원)
+// 짭비스 HUD 윈도우 컨테이너 패널 컴포넌트임 (구글 개인 쿼터 연동, 드래그 리사이즈, 와이드 뷰 지원)
 import { ReactNode, useState, useRef, useEffect, useCallback } from 'react'
 import type { JjapvisViewMode } from '../../lib/jjapvis/types'
+import type { GoogleAuthUser } from '../../lib/jjapvis/google-auth'
 import { JJAPVIS_CONFIG } from '../../lib/jjapvis/config'
 
 interface JjapvisPanelProps {
   isOpen: boolean
   viewMode: JjapvisViewMode
+  googleUser: GoogleAuthUser | null
+  isLoggingIn: boolean
+  onGoogleLogin: () => void
+  onGoogleLogout: () => void
   onClose: () => void
   onToggleMaximize: () => void
   onMinimize: () => void
@@ -19,6 +24,10 @@ const STORAGE_SIZE_KEY = 'cowork26:jjapvis:panel_size'
 export function JjapvisPanel({
   isOpen,
   viewMode,
+  googleUser,
+  isLoggingIn,
+  onGoogleLogin,
+  onGoogleLogout,
   onClose,
   onToggleMaximize,
   onMinimize,
@@ -46,7 +55,7 @@ export function JjapvisPanel({
         }
       }
     } catch {
-      // 로드 실패 시 기본값 사용함
+      // 무시함
     }
   }, [])
 
@@ -144,8 +153,8 @@ export function JjapvisPanel({
       )}
 
       {/* HUD 상단 타이틀바임 */}
-      <div className="flex items-center justify-between px-3.5 py-2 bg-[#111827] border-b-2 border-black text-[#5eead4] select-none">
-        <div className="flex items-center space-x-2 pl-2">
+      <div className="flex items-center justify-between px-3.5 py-2 bg-[#111827] border-b-2 border-black text-[#5eead4] select-none gap-2">
+        <div className="flex items-center space-x-2 pl-2 shrink-0">
           <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] animate-pulse" />
           <span className="text-xs font-mono font-bold tracking-wider">
             JJAPVIS AGI // NEURAL HUD
@@ -157,29 +166,58 @@ export function JjapvisPanel({
           )}
         </div>
 
-        {/* 윈도우 컨트롤 버튼 그룹임 */}
-        <div className="flex items-center space-x-1.5">
-          <button
-            onClick={onMinimize}
-            title={isMinimized ? '복원' : '최소화'}
-            className="w-5 h-5 flex items-center justify-center rounded border border-black bg-[#374151] hover:bg-[#4b5563] text-white text-xs font-mono transition-colors shadow-[1px_1px_0_#000]"
-          >
-            _
-          </button>
-          <button
-            onClick={onToggleMaximize}
-            title={isMaximized ? '기본 크기로 복원' : '최대화'}
-            className="w-5 h-5 flex items-center justify-center rounded border border-black bg-[#374151] hover:bg-[#4b5563] text-white text-xs font-mono transition-colors shadow-[1px_1px_0_#000]"
-          >
-            {isMaximized ? '❐' : '□'}
-          </button>
-          <button
-            onClick={onClose}
-            title="닫기"
-            className="w-5 h-5 flex items-center justify-center rounded border border-black bg-[#ef4444] hover:bg-[#dc2626] text-white text-xs font-mono transition-colors shadow-[1px_1px_0_#000]"
-          >
-            ✕
-          </button>
+        {/* 구글 사용자 계정 연동 영역 및 컨트롤 버튼임 */}
+        <div className="flex items-center space-x-2">
+          {/* 구글 개인 계정 연동 버튼 및 뱃지임 */}
+          {googleUser ? (
+            <div className="flex items-center space-x-1.5 bg-[#064e3b] border border-[#10b981] px-2.5 py-0.5 rounded text-[11px] font-mono text-[#a7f3d0]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
+              <span className="truncate max-w-[120px] sm:max-w-[180px]" title={googleUser.email}>
+                {googleUser.email}
+              </span>
+              <button
+                onClick={onGoogleLogout}
+                title="구글 연동 해제"
+                className="ml-1 text-slate-300 hover:text-red-400 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onGoogleLogin}
+              disabled={isLoggingIn}
+              title="사용자 개인 구글 쿼터 사용을 위해 연동함"
+              className="flex items-center space-x-1 bg-[#1e293b] hover:bg-[#334155] border border-[#f59e0b] text-[#fbbf24] px-2 py-0.5 rounded text-[11px] font-mono font-bold transition-all shadow-[1px_1px_0_#000] active:translate-y-0.5"
+            >
+              <span>{isLoggingIn ? '인증 진행 중...' : '🔐 구글 계정 연동'}</span>
+            </button>
+          )}
+
+          {/* 윈도우 컨트롤 버튼 그룹임 */}
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={onMinimize}
+              title={isMinimized ? '복원' : '최소화'}
+              className="w-5 h-5 flex items-center justify-center rounded border border-black bg-[#374151] hover:bg-[#4b5563] text-white text-xs font-mono transition-colors shadow-[1px_1px_0_#000]"
+            >
+              _
+            </button>
+            <button
+              onClick={onToggleMaximize}
+              title={isMaximized ? '기본 크기로 복원' : '최대화'}
+              className="w-5 h-5 flex items-center justify-center rounded border border-black bg-[#374151] hover:bg-[#4b5563] text-white text-xs font-mono transition-colors shadow-[1px_1px_0_#000]"
+            >
+              {isMaximized ? '❐' : '□'}
+            </button>
+            <button
+              onClick={onClose}
+              title="닫기"
+              className="w-5 h-5 flex items-center justify-center rounded border border-black bg-[#ef4444] hover:bg-[#dc2626] text-white text-xs font-mono transition-colors shadow-[1px_1px_0_#000]"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       </div>
 
