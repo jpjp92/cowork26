@@ -52,7 +52,7 @@ export const JjapvisIframe = forwardRef<HTMLIFrameElement, JjapvisIframeProps>(
           src={hudUrl}
           title="Jjapvis Hologram HUD"
           className="w-full h-full border-none"
-          allow="microphone; camera; display-capture; clipboard-read; clipboard-write"
+          allow="microphone; camera; display-capture; clipboard-read; clipboard-write; autoplay"
           onLoad={() => {
             setIsLoading(false)
             if (onLoad) onLoad()

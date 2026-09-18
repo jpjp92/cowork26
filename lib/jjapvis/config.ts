@@ -14,11 +14,11 @@ export const JJAPVIS_CONFIG = {
   // 세션 스토리지 키
   storageKey: 'cowork26:jjapvis:hud_token',
 
-  // 기본 HUD 윈도우 규격 (사이버네틱 가로형 대시보드 지원)
-  defaultWidth: 960,
-  defaultHeight: 680,
-  minWidth: 480,
-  minHeight: 420,
+  // 기본 HUD 윈도우 규격 (사이버네틱 와이드 가로형 대시보드 및 우측 미디어 패널 지원)
+  defaultWidth: 1280,
+  defaultHeight: 740,
+  minWidth: 540,
+  minHeight: 460,
 
   // 구글 OAuth 2.0 설정
   googleClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
@@ -31,4 +31,13 @@ export function getJjapvisHudUrl(token: string): string {
   return token
     ? `${base}?hud_token=${encodeURIComponent(token)}&v=${v}`
     : `${base}?v=${v}`
+}
+
+// 짭비스 백엔드 실시간 WebSocket URL 생성함
+export function getJjapvisWsUrl(token: string): string {
+  const httpUrl = JJAPVIS_CONFIG.serverUrl
+  const wsProto = httpUrl.startsWith('https://') ? 'wss://' : 'ws://'
+  const host = httpUrl.replace(/^https?:\/\//, '')
+  const base = `${wsProto}${host}/ws/hud`
+  return token ? `${base}?hud_token=${encodeURIComponent(token)}` : base
 }

@@ -1,6 +1,6 @@
 'use client'
 
-// 짭비스 연동 모듈의 모든 UI, 브리지 로직, 구글 계정 인증을 캡슐화한 최상위 위젯 컴포넌트임
+// 짭비스 연동 모듈의 모든 UI, 브리지 로직, 실시간 스트림(생각과정/미디어), 구글 계정 인증을 캡슐화한 최상위 위젯 컴포넌트임
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { JJAPVIS_CONFIG } from '../../lib/jjapvis/config'
 import type { ActivePageContext, JjapvisViewMode } from '../../lib/jjapvis/types'
@@ -16,6 +16,7 @@ import { JjapvisFloatingButton } from './jjapvis-floating-button'
 import { JjapvisPanel } from './jjapvis-panel'
 import { JjapvisIframe } from './jjapvis-iframe'
 import { useJjapvisBridge } from './use-jjapvis-bridge'
+import { useJjapvisStream } from './use-jjapvis-stream'
 
 export interface JjapvisWidgetProps {
   activePage: ActivePageContext | null
@@ -47,6 +48,17 @@ export function JjapvisWidget({ activePage, userId }: JjapvisWidgetProps) {
       registerTokenToJjapvis(savedGoogleUser.email, savedGoogleUser.accessToken).catch(() => {})
     }
   }, [userId])
+
+  // 짭비스 백엔드 실시간 WebSocket(생각 과정, 미디어 갤러리) 스트림 바인딩함
+  const {
+    isThinking,
+    currentStep,
+    thoughtHistory,
+    aiState,
+    mediaList,
+    clearThoughts,
+    clearMedia,
+  } = useJjapvisStream({ token })
 
   // 구글 팝업 로그인 실행 핸들러임
   const handleGoogleLogin = useCallback(async () => {
@@ -90,12 +102,12 @@ export function JjapvisWidget({ activePage, userId }: JjapvisWidgetProps) {
 
   // 최대화 토글 핸들러임
   const toggleMaximize = () => {
-    setViewMode(prev => (prev === 'maximized' ? 'normal' : 'maximized'))
+    setViewMode((prev) => (prev === 'maximized' ? 'normal' : 'maximized'))
   }
 
   // 최소화 토글 핸들러임
   const toggleMinimize = () => {
-    setViewMode(prev => (prev === 'minimized' ? 'normal' : 'minimized'))
+    setViewMode((prev) => (prev === 'minimized' ? 'normal' : 'minimized'))
   }
 
   return (
@@ -103,7 +115,7 @@ export function JjapvisWidget({ activePage, userId }: JjapvisWidgetProps) {
       {/* 화면 우측 하단 플로팅 토글 버튼임 */}
       <JjapvisFloatingButton
         isOpen={isOpen}
-        onClick={() => setIsOpen(prev => !prev)}
+        onClick={() => setIsOpen((prev) => !prev)}
       />
 
       {/* 짭비스 홀로그램 HUD 윈도우 패널임 */}
@@ -112,6 +124,13 @@ export function JjapvisWidget({ activePage, userId }: JjapvisWidgetProps) {
         viewMode={viewMode}
         googleUser={googleUser}
         isLoggingIn={isLoggingIn}
+        isThinking={isThinking}
+        currentStep={currentStep}
+        thoughtHistory={thoughtHistory}
+        aiState={aiState}
+        mediaList={mediaList}
+        onClearThoughts={clearThoughts}
+        onClearMedia={clearMedia}
         onGoogleLogin={handleGoogleLogin}
         onGoogleLogout={handleGoogleLogout}
         onClose={() => setIsOpen(false)}

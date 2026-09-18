@@ -1,16 +1,25 @@
 'use client'
 
-// 짭비스 HUD 윈도우 컨테이너 패널 컴포넌트임 (구글 개인 쿼터 연동, 드래그 리사이즈, 와이드 뷰 지원)
+// 짭비스 HUD 윈도우 컨테이너 패널 컴포넌트임 (생각 과정 HUD, 우측 미디어 패널, 구글 계정 연동, 와이드 뷰 지원)
 import { ReactNode, useState, useRef, useEffect, useCallback } from 'react'
-import type { JjapvisViewMode } from '../../lib/jjapvis/types'
+import type { JjapvisViewMode, JjapvisThoughtStep, JjapvisMediaItem } from '../../lib/jjapvis/types'
 import type { GoogleAuthUser } from '../../lib/jjapvis/google-auth'
 import { JJAPVIS_CONFIG } from '../../lib/jjapvis/config'
+import { JjapvisThinkingBar } from './jjapvis-thinking-bar'
+import { JjapvisMediaDrawer } from './jjapvis-media-drawer'
 
 interface JjapvisPanelProps {
   isOpen: boolean
   viewMode: JjapvisViewMode
   googleUser: GoogleAuthUser | null
   isLoggingIn: boolean
+  isThinking?: boolean
+  currentStep?: string
+  thoughtHistory?: JjapvisThoughtStep[]
+  aiState?: string
+  mediaList?: JjapvisMediaItem[]
+  onClearThoughts?: () => void
+  onClearMedia?: () => void
   onGoogleLogin: () => void
   onGoogleLogout: () => void
   onClose: () => void
@@ -26,6 +35,13 @@ export function JjapvisPanel({
   viewMode,
   googleUser,
   isLoggingIn,
+  isThinking = false,
+  currentStep = '',
+  thoughtHistory = [],
+  aiState = 'idle',
+  mediaList = [],
+  onClearThoughts,
+  onClearMedia,
   onGoogleLogin,
   onGoogleLogout,
   onClose,
@@ -39,7 +55,17 @@ export function JjapvisPanel({
     height: JJAPVIS_CONFIG.defaultHeight,
   })
   const [isResizing, setIsResizing] = useState(false)
+  const [isMediaDrawerOpen, setIsMediaDrawerOpen] = useState(false)
   const resizeRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null)
+
+  // 미디어가 새로 추가되면 미디어 드로어 자동 열기 지원함
+  const prevMediaCountRef = useRef(mediaList.length)
+  useEffect(() => {
+    if (mediaList.length > prevMediaCountRef.current) {
+      setIsMediaDrawerOpen(true)
+    }
+    prevMediaCountRef.current = mediaList.length
+  }, [mediaList.length])
 
   // 저장된 크기 로드함
   useEffect(() => {
@@ -125,14 +151,14 @@ export function JjapvisPanel({
           width: `${size.width}px`,
           height: `${size.height}px`,
           maxWidth: 'calc(100vw - 2rem)',
-          maxHeight: 'calc(100vh - 5rem)',
+          maxHeight: 'calc(100vh - 4rem)',
         }
 
   const containerClasses = isMaximized
     ? 'fixed inset-4 z-50 rounded-xl'
     : isMinimized
-      ? 'fixed bottom-20 right-6 z-50 w-80 h-12 rounded-lg'
-      : 'fixed bottom-20 right-6 z-50 rounded-xl'
+      ? 'fixed bottom-20 right-6 z-50 w-96 h-12 rounded-lg'
+      : 'fixed bottom-14 right-6 z-50 rounded-xl'
 
   return (
     <div
@@ -153,12 +179,22 @@ export function JjapvisPanel({
       )}
 
       {/* HUD 상단 타이틀바임 */}
-      <div className="flex items-center justify-between px-3.5 py-2 bg-[#111827] border-b-2 border-black text-[#5eead4] select-none gap-2">
-        <div className="flex items-center space-x-2 pl-2 shrink-0">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] animate-pulse" />
-          <span className="text-xs font-mono font-bold tracking-wider">
+      <div className="flex items-center justify-between px-3 py-2 bg-[#111827] border-b-2 border-black text-[#5eead4] select-none gap-2 shrink-0">
+        <div className="flex items-center space-x-2 pl-2 shrink-0 overflow-hidden">
+          <span
+            className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+              isThinking ? 'bg-[#10b981] animate-ping' : 'bg-[#10b981]'
+            }`}
+          />
+          <span className="text-xs font-mono font-bold tracking-wider shrink-0">
             JJAPVIS AGI // NEURAL HUD
           </span>
+          {/* 최소화 모드일 때 표시되는 인라인 상태 요약임 */}
+          {isMinimized && (
+            <span className="text-[11px] font-mono text-[#a7f3d0] truncate ml-2">
+              {isThinking ? `🧠 ${currentStep || '추론 중...'}` : 'READY'}
+            </span>
+          )}
           {!isMaximized && !isMinimized && (
             <span className="text-[10px] font-mono text-slate-400 hidden sm:inline">
               ({size.width} × {size.height})
@@ -166,13 +202,31 @@ export function JjapvisPanel({
           )}
         </div>
 
-        {/* 구글 사용자 계정 연동 영역 및 컨트롤 버튼임 */}
-        <div className="flex items-center space-x-2">
+        {/* 구글 사용자 계정 연동 영역, 미디어 토글 및 컨트롤 버튼임 */}
+        <div className="flex items-center space-x-1.5 shrink-0">
+          {/* 우측 미디어 갤러리 토글 버튼임 */}
+          {!isMinimized && (
+            <button
+              onClick={() => setIsMediaDrawerOpen((prev) => !prev)}
+              className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold transition-all border shadow-[1px_1px_0_#000] ${
+                isMediaDrawerOpen
+                  ? 'bg-cyan-950 text-cyan-300 border-cyan-400'
+                  : 'bg-[#1e293b] hover:bg-[#334155] text-slate-300 border-slate-700'
+              }`}
+              title="우측 미디어 갤러리 토글"
+            >
+              <span>🖼️ 미디어</span>
+              <span className="px-1 py-0.2 rounded-full bg-black/40 text-[10px] text-cyan-300">
+                {mediaList.length}
+              </span>
+            </button>
+          )}
+
           {/* 구글 개인 계정 연동 버튼 및 뱃지임 */}
           {googleUser ? (
-            <div className="flex items-center space-x-1.5 bg-[#064e3b] border border-[#10b981] px-2.5 py-0.5 rounded text-[11px] font-mono text-[#a7f3d0]">
+            <div className="flex items-center space-x-1.5 bg-[#064e3b] border border-[#10b981] px-2 py-0.5 rounded text-[11px] font-mono text-[#a7f3d0]">
               <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
-              <span className="truncate max-w-[120px] sm:max-w-[180px]" title={googleUser.email}>
+              <span className="truncate max-w-[100px] sm:max-w-[160px]" title={googleUser.email}>
                 {googleUser.email}
               </span>
               <button
@@ -190,7 +244,7 @@ export function JjapvisPanel({
               title="사용자 개인 구글 쿼터 사용을 위해 연동함"
               className="flex items-center space-x-1 bg-[#1e293b] hover:bg-[#334155] border border-[#f59e0b] text-[#fbbf24] px-2 py-0.5 rounded text-[11px] font-mono font-bold transition-all shadow-[1px_1px_0_#000] active:translate-y-0.5"
             >
-              <span>{isLoggingIn ? '인증 진행 중...' : '🔐 구글 계정 연동'}</span>
+              <span>{isLoggingIn ? '인증 진행 중...' : '🔐 구글 연동'}</span>
             </button>
           )}
 
@@ -221,10 +275,32 @@ export function JjapvisPanel({
         </div>
       </div>
 
-      {/* 내부 iframe 렌더링 영역임 */}
+      {/* 생각 과정 실시간 사이버네틱 HUD 바임 */}
       {!isMinimized && (
-        <div className="flex-1 w-full h-full relative overflow-hidden bg-black">
-          {children}
+        <JjapvisThinkingBar
+          isThinking={isThinking}
+          currentStep={currentStep}
+          thoughtHistory={thoughtHistory}
+          aiState={aiState}
+          onClearHistory={onClearThoughts}
+        />
+      )}
+
+      {/* 내부 본체 영역 (iframe + 우측 미디어 갤러리 드로어) */}
+      {!isMinimized && (
+        <div className="flex-1 w-full h-full relative overflow-hidden bg-black flex flex-row">
+          {/* 짭비스 원형 HUD iframe 영역임 */}
+          <div className="flex-1 h-full relative overflow-hidden">
+            {children}
+          </div>
+
+          {/* 우측 미디어 갤러리 패널임 */}
+          <JjapvisMediaDrawer
+            isOpen={isMediaDrawerOpen}
+            mediaList={mediaList}
+            onClose={() => setIsMediaDrawerOpen(false)}
+            onClear={onClearMedia || (() => {})}
+          />
         </div>
       )}
     </div>

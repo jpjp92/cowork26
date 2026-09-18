@@ -30,3 +30,25 @@ export interface ActivePageContext {
   title: string
   content?: Record<string, unknown> | null
 }
+
+// 짭비스 미디어 아이템 타입 (이미지, 동영상, 차트, 오디오 등)
+export interface JjapvisMediaItem {
+  id: string
+  type: 'image' | 'video' | 'audio' | 'chart' | 'map' | 'screenshot' | 'image_url' | '3d_model' | 'html_widget' | 'text_dashboard'
+  data: string
+  caption?: string
+  timestamp: number
+  is_background?: boolean
+  bg_name?: string
+  link?: string
+}
+
+// 짭비스 실시간 생각 과정 및 추론 단계 타입임
+export interface JjapvisThoughtStep {
+  id: string
+  text: string
+  timestamp: number
+  is_background?: boolean
+  status?: 'running' | 'done' | 'error'
+  elapsedSec?: number
+}

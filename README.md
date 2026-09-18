@@ -291,3 +291,22 @@ docs/history/DEV_YYMMDD.md
 ```
 
 이전 `docs/specs` 문서는 날짜별 plan 문서로 통합했습니다.
+
+---
+
+## 짭비스(Jjapvis) 지각 방지 행동 교정 프레임워크 (Anti-Tardiness Engine)
+
+심층 연구를 통해 도출된 만성적 지각(Chronic Tardiness)의 인지심리학·행동경제학적 3대 결함 모델과 실증적 에이전트 교정 파이프라인 규격입니다.
+
+### 1. 3대 인지 결함 모델
+- **계획 오류 (Planning Fallacy)**: 최선 시나리오 편향($T_{est} \ll T_{act}$)으로 인한 소요 시간 과소평가
+- **쌍곡 할인 (Hyperbolic Discounting)**: 현재 편향($\beta < 1$)에 따른 출발 직전 고통 회피 및 마감 직전 행동 지연
+- **실행 통제 실패 (Executive Dysfunction)**: 작업 몰입 상태에서 외출 준비로의 전이 마찰(Task-Switching Friction)
+
+### 2. 실증적 교정 파이프라인
+1. **역산 스케줄링 (Reverse Scheduling)**: 약속 시각($T_0$) 기준 이동 시간 및 완충 버퍼($+25\%$) 역방향 강제 자동 배치
+2. **시간 지각 너지 (Temporal Nudge)**: 잔여 시간을 마이크로 행동 단위(Action Unit)로 치환 표기하여 현재 편향 억제
+3. **조건부 실행 의도 (If-Then Trigger)**: 전두엽 인지 마찰을 우회하는 자동 반사적 화면 잠금 및 텔레메트리 HUD 알람 송출
+
+> 상세 연구 보고서: `만성적_지각_방지_행동교정_프레임워크_연구보고서.md` 참조
+
