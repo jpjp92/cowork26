@@ -14,11 +14,11 @@ export const JJAPVIS_CONFIG = {
   // 세션 스토리지 키
   storageKey: 'cowork26:jjapvis:hud_token',
 
-  // 기본 HUD 윈도우 규격 (반응형 지원)
-  defaultWidth: 460,
-  defaultHeight: 740,
-  minWidth: 360,
-  minHeight: 500,
+  // 기본 HUD 윈도우 규격 (사이버네틱 가로형 대시보드 지원)
+  defaultWidth: 960,
+  defaultHeight: 680,
+  minWidth: 480,
+  minHeight: 420,
 } as const
 
 // 사용자별 격리 HUD 접속 URL 생성함
