@@ -9,34 +9,73 @@ export default function GoogleAuthCallbackPage() {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    // URL 해시(#access_token=...&token_type=Bearer&expires_in=...) 파싱함
-    const hash = window.location.hash.substring(1)
-    const params = new URLSearchParams(hash)
-    const accessToken = params.get('access_token')
-    const expiresIn = params.get('expires_in') || '3600'
-    const error = params.get('error')
+    // 1. URL 쿼리 파라미터(?code=... 또는 ?error=...) 확인함
+    const searchParams = new URLSearchParams(window.location.search)
+    const code = searchParams.get('code')
+    const errorParam = searchParams.get('error')
 
-    if (error) {
-      setStatus(`인증 오류 발생: ${error}`)
-      setTimeout(() => window.close(), 2000)
+    // 2. 하위 호환: URL 해시(#access_token=...) 확인함
+    const hashParams = new URLSearchParams(window.location.hash.substring(1))
+    const hashToken = hashParams.get('access_token')
+
+    if (errorParam) {
+      setStatus(`구글 인증 오류: ${errorParam}`)
+      setTimeout(() => window.close(), 2500)
       return
     }
 
-    if (accessToken && window.opener) {
-      // 부모 창으로 액세스 토큰 전달함
+    if (code) {
+      setStatus('구글 인가 코드 수신 완료. 토큰 교환 중...')
+      const redirectUri = `${window.location.origin}/auth/callback/google`
+
+      fetch('/api/jjapvis/auth/exchange', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, redirect_uri: redirectUri }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.ok && data.accessToken) {
+            if (window.opener) {
+              window.opener.postMessage(
+                {
+                  type: 'google_oauth_token',
+                  accessToken: data.accessToken,
+                  email: data.email,
+                  expiresIn: data.expiresIn,
+                },
+                window.location.origin
+              )
+            }
+            setStatus(`인증 성공! (${data.email}) 창을 닫습니다...`)
+            setTimeout(() => window.close(), 800)
+          } else {
+            setStatus(`토큰 교환 실패: ${data.error || '알 수 없는 오류'}`)
+            setTimeout(() => window.close(), 3000)
+          }
+        })
+        .catch((err) => {
+          setStatus(`서버 통신 실패: ${err.message}`)
+          setTimeout(() => window.close(), 3000)
+        })
+      return
+    }
+
+    if (hashToken && window.opener) {
       window.opener.postMessage(
         {
           type: 'google_oauth_token',
-          accessToken,
-          expiresIn,
+          accessToken: hashToken,
+          expiresIn: hashParams.get('expires_in') || '3600',
         },
         window.location.origin
       )
       setStatus('인증 성공! 창을 닫습니다...')
       setTimeout(() => window.close(), 500)
-    } else {
-      setStatus('인증 토큰이 없거나 부모 창이 닫혔습니다.')
+      return
     }
+
+    setStatus('인증 코드 또는 토큰이 감지되지 않았습니다.')
   }, [])
 
   return (

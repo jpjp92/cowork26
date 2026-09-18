@@ -9,8 +9,8 @@ export interface GoogleAuthUser {
 
 const STORAGE_AUTH_KEY = 'cowork26:jjapvis:google_user'
 
-// 구글 OAuth 2.0 공식 Client ID (Antigravity / Cloud Code)
-const GOOGLE_CLIENT_ID = '32555940559.apps.googleusercontent.com'
+// 구글 OAuth 2.0 공식 Client ID (짭비스 인프라 연동)
+const GOOGLE_CLIENT_ID = JJAPVIS_CONFIG.googleClientId
 const SCOPES = [
   'openid',
   'email',
@@ -61,14 +61,19 @@ export function openGoogleLoginPopup(): Promise<GoogleAuthUser> {
       return reject(new Error('브라우저 환경이 아님'))
     }
 
+    if (!GOOGLE_CLIENT_ID) {
+      return reject(new Error('구글 OAuth 클라이언트 ID(NEXT_PUBLIC_GOOGLE_CLIENT_ID)가 설정되지 않았습니다.'))
+    }
+
     const redirectUri = `${window.location.origin}/auth/callback/google`
     const authUrl =
       `https://accounts.google.com/o/oauth2/v2/auth?` +
       `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&response_type=token` +
+      `&response_type=code` +
       `&scope=${encodeURIComponent(SCOPES)}` +
-      `&prompt=select_account`
+      `&access_type=offline` +
+      `&prompt=consent`
 
     const width = 500
     const height = 650
@@ -95,12 +100,15 @@ export function openGoogleLoginPopup(): Promise<GoogleAuthUser> {
         clearInterval(pollTimer)
 
         try {
-          // 토큰으로 구글 사용자 프로필(email) 조회함
-          const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-            headers: { Authorization: `Bearer ${data.accessToken}` },
-          })
-          const userInfo = await userInfoRes.json()
-          const email = userInfo.email || 'unknown_user'
+          let email = data.email
+          if (!email) {
+            // 토큰으로 구글 사용자 프로필(email) 조회함
+            const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${data.accessToken}` },
+            })
+            const userInfo = await userInfoRes.json()
+            email = userInfo.email || 'unknown_user'
+          }
 
           const authUser: GoogleAuthUser = {
             email,

@@ -19,6 +19,9 @@ export const JJAPVIS_CONFIG = {
   defaultHeight: 680,
   minWidth: 480,
   minHeight: 420,
+
+  // 구글 OAuth 2.0 설정
+  googleClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
 } as const
 
 // 사용자별 격리 HUD 접속 URL 생성함
