@@ -27,7 +27,7 @@ export const JJAPVIS_CONFIG = {
 // 사용자별 격리 HUD 접속 URL 생성함
 export function getJjapvisHudUrl(token: string): string {
   const base = `${JJAPVIS_CONFIG.serverUrl}/hud/hud.html`
-  const v = '20260918_v3'
+  const v = '20260918_notimeout'
   return token
     ? `${base}?hud_token=${encodeURIComponent(token)}&v=${v}`
     : `${base}?v=${v}`
