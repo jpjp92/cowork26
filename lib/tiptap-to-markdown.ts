@@ -138,6 +138,13 @@ function convertNode(node: TiptapNode, listDepth = 0): string {
       return title ? `![${alt}](${src} "${title}")` : `![${alt}](${src})`
     }
 
+    case 'videoBlock': {
+      const src = typeof node.attrs?.src === 'string' ? node.attrs.src : ''
+      if (!src) return ''
+      const title = typeof node.attrs?.title === 'string' ? node.attrs.title : ''
+      return title ? `![video:${title}](${src})` : `![video](${src})`
+    }
+
     case 'table': {
       const rows = node.content ?? []
       if (rows.length === 0) return ''

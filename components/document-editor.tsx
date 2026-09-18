@@ -496,6 +496,178 @@ const MathInline = Node.create({
   },
 })
 
+// ── VideoBlock (동영상 임베드 블록) NodeView ──────────────────────────────────
+function VideoBlockView({ node, updateAttributes, editor }: NodeViewProps) {
+  const [copied, setCopied] = useState(false)
+  const src = (node.attrs.src as string) || ''
+  const title = (node.attrs.title as string) || ''
+  const [editing, setEditing] = useState(!src)
+  const [draftSrc, setDraftSrc] = useState(src)
+  const [draftTitle, setDraftTitle] = useState(title)
+
+  const handleCopyUrl = useCallback(async () => {
+    if (!src) return
+    try {
+      await navigator.clipboard.writeText(src)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1000)
+    } catch {
+      // 클립보드 접근 불가 시 무시함
+    }
+  }, [src])
+
+  const handleSave = useCallback(() => {
+    updateAttributes({
+      src: draftSrc.trim(),
+      title: draftTitle.trim() || null,
+    })
+    setEditing(false)
+  }, [draftSrc, draftTitle, updateAttributes])
+
+  return (
+    <NodeViewWrapper className="video-block my-4" contentEditable={false}>
+      <div className="rounded-[8px] border border-black bg-[#161b22] text-[#e6edf3] shadow-[4px_4px_0_#000] overflow-hidden">
+        {/* 헤더 바 */}
+        <div className="flex items-center justify-between border-b border-[#30363d] px-3 py-1.5 bg-[#0d1117]">
+          <div className="flex items-center gap-2">
+            <span className="text-xs">🎬</span>
+            <span className="font-mono text-[0.7rem] font-bold tracking-wider text-[#58a6ff]">VIDEO</span>
+            {title ? (
+              <span className="text-[0.7rem] text-[#e6edf3] font-medium truncate max-w-[260px]">{title}</span>
+            ) : (
+              <span className="text-[0.68rem] text-[#8b949e]">동영상 플레이어</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {src && (
+              <>
+                <button
+                  onMouseDown={e => { e.preventDefault(); handleCopyUrl() }}
+                  className="text-[0.7rem] font-bold text-[#8b949e] hover:text-[#58a6ff] transition-colors"
+                  title="영상 URL 복사"
+                >
+                  {copied ? '복사됨' : 'URL 복사'}
+                </button>
+                <a
+                  href={src}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[0.7rem] font-bold text-[#8b949e] hover:text-[#58a6ff] transition-colors"
+                  title="새 창에서 원본 열기"
+                >
+                  새 창 ↗
+                </a>
+              </>
+            )}
+            {editor.isEditable && (
+              <button
+                onMouseDown={e => { e.preventDefault(); setEditing(v => !v) }}
+                className="text-[0.7rem] font-bold text-[#8b949e] hover:text-white transition-colors"
+              >
+                {editing ? '닫기' : '설정'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 비디오 재생 뷰 */}
+        {!editing && src && (
+          <div className="p-2 bg-black flex justify-center items-center">
+            <video
+              controls
+              playsInline
+              preload="metadata"
+              src={src}
+              className="max-h-[500px] w-full max-w-full rounded-[4px] bg-black"
+            >
+              사용자의 브라우저가 비디오 재생을 지원하지 않습니다.
+            </video>
+          </div>
+        )}
+
+        {/* 비디오 URL 설정/편집 UI */}
+        {(editing || !src) && (
+          <div className="p-3 bg-[#0d1117] border-t border-[#30363d] space-y-2">
+            <div>
+              <label className="block text-[0.68rem] font-bold text-[#8b949e] mb-1">동영상 URL (MP4 / WebM / 스토리지 URL)</label>
+              <input
+                type="text"
+                value={draftSrc}
+                onChange={e => setDraftSrc(e.target.value)}
+                placeholder="https://... 또는 /storage/v1/object/public/..."
+                className="w-full rounded border border-[#30363d] bg-[#161b22] px-2 py-1 text-xs text-[#e6edf3] font-mono focus:border-[#58a6ff] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[0.68rem] font-bold text-[#8b949e] mb-1">제목 / 캡션 (선택)</label>
+              <input
+                type="text"
+                value={draftTitle}
+                onChange={e => setDraftTitle(e.target.value)}
+                placeholder="영상 제목 또는 설명..."
+                className="w-full rounded border border-[#30363d] bg-[#161b22] px-2 py-1 text-xs text-[#e6edf3] focus:border-[#58a6ff] focus:outline-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onMouseDown={e => { e.preventDefault(); handleSave() }}
+                className="rounded bg-[#238636] px-3 py-1 text-xs font-bold text-white hover:bg-[#2ea043] transition-colors"
+              >
+                적용
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </NodeViewWrapper>
+  )
+}
+
+// ── VideoBlock TipTap 노드 정의 ──────────────────────────────────────────────
+const VideoBlock = Node.create({
+  name: 'videoBlock',
+  group: 'block',
+  atom: true,
+
+  addAttributes() {
+    return {
+      src: {
+        default: '',
+        parseHTML: element => element.getAttribute('src') || element.getAttribute('data-src') || '',
+        renderHTML: attributes => ({
+          src: attributes.src as string,
+          'data-type': 'video-block',
+        }),
+      },
+      title: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-title') || element.getAttribute('title') || null,
+        renderHTML: attributes => attributes.title ? { 'data-title': attributes.title as string } : {},
+      },
+      poster: {
+        default: null,
+        parseHTML: element => element.getAttribute('poster') || null,
+        renderHTML: attributes => attributes.poster ? { poster: attributes.poster as string } : {},
+      },
+    }
+  },
+
+  parseHTML() {
+    return [
+      { tag: 'div[data-type="video-block"]' },
+      { tag: 'video' },
+    ]
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes({ 'data-type': 'video-block' }, HTMLAttributes)]
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(VideoBlockView)
+  },
+})
+
 // ──────────────────────────────────────────────────────────────────────────
 
 const CodeBlockWithLang = CodeBlockLowlight.extend({
@@ -600,6 +772,17 @@ function normalizeParagraphNode(paragraph: Record<string, unknown>): Array<Recor
   if (trimmed.startsWith('$$') && trimmed.endsWith('$$') && trimmed.length > 4) {
     const latex = trimmed.slice(2, -2).trim()
     return [{ type: 'mathBlock', attrs: { latex } }]
+  }
+
+  // 문단 전체가 동영상 태그/문법인 경우 videoBlock 노드로 승격함
+  const videoTagMatch = trimmed.match(/^<video[^>]*src=["']([^"']+)["'][^>]*>(?:<\/video>)?$/i)
+  const videoMdMatch = trimmed.match(/^!\[video(?::([^\]]*))?\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)$/i)
+  if (videoTagMatch || videoMdMatch) {
+    const src = videoTagMatch ? videoTagMatch[1] : (videoMdMatch ? videoMdMatch[2] : '')
+    const title = videoMdMatch ? (videoMdMatch[1]?.trim() || null) : null
+    if (src) {
+      return [{ type: 'videoBlock', attrs: { src, title } }]
+    }
   }
 
   // 문단 내 인라인 텍스트에 $수식$이 포함되어 있는지 검사하여 mathInline으로 분할함
@@ -1044,6 +1227,7 @@ type MarkdownPasteBlock =
   | { type: 'table'; lines: string[] }
   | { type: 'code'; language: string | null; code: string }
   | { type: 'math'; latex: string }
+  | { type: 'video'; src: string; title: string | null }
 
 const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/
 const HORIZONTAL_RULE_PATTERN = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/
@@ -1330,6 +1514,21 @@ function parseMarkdownPasteBlocks(text: string) {
       continue
     }
 
+    // 비디오 블록 (![video:제목](URL) 또는 <video src="...">) 감지함
+    const videoTagMatch = trimmed.match(/^<video[^>]*src=["']([^"']+)["'][^>]*>(?:<\/video>)?$/i)
+    const videoMdMatch = trimmed.match(/^!\[video(?::([^\]]*))?\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)$/i)
+    if (videoTagMatch || videoMdMatch) {
+      flushParagraph()
+      const src = videoTagMatch ? videoTagMatch[1] : (videoMdMatch ? videoMdMatch[2] : '')
+      const title = videoMdMatch ? (videoMdMatch[1]?.trim() || null) : null
+      if (src) {
+        blocks.push({ type: 'video', src, title })
+        handledMarkdown = true
+        index += 1
+        continue
+      }
+    }
+
     const fenceStart = getFencedCodeStart(line)
     if (fenceStart) {
       flushParagraph()
@@ -1454,6 +1653,14 @@ function markdownPasteBlocksToSlice(schema: Schema, blocks: MarkdownPasteBlock[]
       const mathBlockType = schema.nodes.mathBlock
       if (mathBlockType) {
         nodes.push(mathBlockType.create({ latex: block.latex }))
+      }
+      continue
+    }
+
+    if (block.type === 'video') {
+      const videoBlockType = schema.nodes.videoBlock
+      if (videoBlockType && block.src) {
+        nodes.push(videoBlockType.create({ src: block.src, title: block.title }))
       }
       continue
     }
@@ -1582,6 +1789,7 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
       MermaidBlock,
       MathBlock,
       MathInline,
+      VideoBlock,
       DocumentImage,
       ListTabKeymap,
       FontSize,

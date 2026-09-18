@@ -16,6 +16,10 @@ function collect(node: TiptapNode, out: string[]): void {
   if (typeof node.attrs?.code === 'string' && node.attrs.code.length > 0) {
     out.push(node.attrs.code)
   }
+  if (node.type === 'videoBlock') {
+    const title = typeof node.attrs?.title === 'string' ? node.attrs.title : ''
+    out.push(title ? `[동영상: ${title}]` : '[동영상]')
+  }
   if (Array.isArray(node.content)) {
     for (const child of node.content) collect(child, out)
   }
