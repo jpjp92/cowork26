@@ -18,7 +18,7 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import { TableRow } from '@tiptap/extension-table-row'
 import ImageExtension from '@tiptap/extension-image'
 import { createLowlight, common } from 'lowlight'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import katex from 'katex'
 
 const lowlight = createLowlight(common)
@@ -549,6 +549,100 @@ interface DocumentEditorProps {
 const EMPTY_DOC_CONTENT: Record<string, unknown> = {
   type: 'doc',
   content: [{ type: 'paragraph' }],
+}
+
+// ── 레거시/외부 평문 텍스트 내 수식($...$, $$...$$) 자동 정규화 헬퍼 ──────────────────
+function splitTextWithMath(text: string, marks?: Record<string, unknown>[]): Array<Record<string, unknown>> {
+  if (!text || (!text.includes('$') && !text.includes('$$'))) {
+    return [{ type: 'text', text, ...(marks?.length ? { marks } : {}) }]
+  }
+
+  const result: Array<Record<string, unknown>> = []
+  const mathRegex = /(\${1,2})([^$\n]+?)\1/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = mathRegex.exec(text)) !== null) {
+    const matchStart = match.index
+    const matchEnd = mathRegex.lastIndex
+    const latex = match[2].trim()
+
+    if (matchStart > lastIndex) {
+      const before = text.slice(lastIndex, matchStart)
+      result.push({ type: 'text', text: before, ...(marks?.length ? { marks } : {}) })
+    }
+
+    if (latex) {
+      result.push({ type: 'mathInline', attrs: { latex } })
+    } else {
+      result.push({ type: 'text', text: match[0], ...(marks?.length ? { marks } : {}) })
+    }
+
+    lastIndex = matchEnd
+  }
+
+  if (lastIndex < text.length) {
+    result.push({ type: 'text', text: text.slice(lastIndex), ...(marks?.length ? { marks } : {}) })
+  }
+
+  return result.length ? result : [{ type: 'text', text, ...(marks?.length ? { marks } : {}) }]
+}
+
+function normalizeParagraphNode(paragraph: Record<string, unknown>): Array<Record<string, unknown>> {
+  const content = paragraph.content as Array<Record<string, unknown>> | undefined
+  if (!Array.isArray(content) || content.length === 0) {
+    return [paragraph]
+  }
+
+  // 문단 전체가 $$...$$ 로만 이루어진 블록 수식인 경우 mathBlock 노드로 승격함
+  const fullText = content.map(c => (typeof c.text === 'string' ? c.text : '')).join('')
+  const trimmed = fullText.trim()
+  if (trimmed.startsWith('$$') && trimmed.endsWith('$$') && trimmed.length > 4) {
+    const latex = trimmed.slice(2, -2).trim()
+    return [{ type: 'mathBlock', attrs: { latex } }]
+  }
+
+  // 문단 내 인라인 텍스트에 $수식$이 포함되어 있는지 검사하여 mathInline으로 분할함
+  let hasMath = false
+  const newContent: Array<Record<string, unknown>> = []
+
+  for (const item of content) {
+    if (item.type === 'text' && typeof item.text === 'string' && item.text.includes('$')) {
+      const parts = splitTextWithMath(item.text, item.marks as Record<string, unknown>[] | undefined)
+      if (parts.some(p => p.type === 'mathInline')) {
+        hasMath = true
+        newContent.push(...parts)
+        continue
+      }
+    }
+    newContent.push(item)
+  }
+
+  return hasMath ? [{ ...paragraph, content: newContent }] : [paragraph]
+}
+
+function normalizeDocumentMathContent(doc: Record<string, unknown>): Record<string, unknown> {
+  if (!doc || typeof doc !== 'object') return doc
+  if (!Array.isArray(doc.content)) return doc
+
+  const newContent: Array<Record<string, unknown>> = []
+
+  for (const node of doc.content as Array<Record<string, unknown>>) {
+    if (!node || typeof node !== 'object') {
+      newContent.push(node)
+      continue
+    }
+
+    if (node.type === 'paragraph') {
+      newContent.push(...normalizeParagraphNode(node))
+    } else if (Array.isArray(node.content)) {
+      newContent.push(normalizeDocumentMathContent(node))
+    } else {
+      newContent.push(node)
+    }
+  }
+
+  return { ...doc, content: newContent }
 }
 
 function escapeHtmlAttribute(value: string) {
@@ -1445,7 +1539,11 @@ function documentHasPendingImageUpload(content: Record<string, unknown>) {
 }
 
 export default function DocumentEditor({ content, editable, onChange, onUploadImage, onCloneImage }: DocumentEditorProps) {
-  const resolvedContent = content ?? EMPTY_DOC_CONTENT
+  // 레거시/외부에서 들어온 평문 수식($...$, $$...$$)을 TipTap mathBlock/mathInline 노드로 자동 정규화함
+  const resolvedContent = useMemo(
+    () => normalizeDocumentMathContent(content ?? EMPTY_DOC_CONTENT),
+    [content]
+  )
   const onChangeRef = useRef(onChange)
   const onUploadImageRef = useRef(onUploadImage)
   const onCloneImageRef = useRef(onCloneImage)
