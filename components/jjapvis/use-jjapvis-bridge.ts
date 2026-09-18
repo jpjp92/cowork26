@@ -61,6 +61,12 @@ export function useJjapvisBridge({
         sendCurrentPageContext()
       } else if (data.type === 'window_control' && data.action && onControlAction) {
         onControlAction(data.action)
+      } else if (data.type === 'jjapvis:open_web' && data.url) {
+        try {
+          window.open(data.url, '_blank', 'noopener,noreferrer')
+        } catch (e) {
+          console.warn('[JjapvisBridge] 웹 화면 팝업 실패:', e)
+        }
       }
     }
 

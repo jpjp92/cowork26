@@ -11,11 +11,14 @@ export interface JjapvisParentMessage {
 
 // 짭비스(iframe) -> 부모(코워크) 수신 메시지 타입임
 export interface JjapvisChildMessage {
-  type: 'save_file' | 'hud_state' | 'window_control' | 'request_context'
+  type: 'save_file' | 'hud_state' | 'window_control' | 'request_context' | 'jjapvis:open_web'
   action?: 'minimize' | 'maximize' | 'restore' | 'close'
   state?: string
   filename?: string
   data?: string
+  url?: string
+  title?: string
+  view_id?: string
 }
 
 // 짭비스 윈도우 뷰 모드임
