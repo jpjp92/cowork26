@@ -5,7 +5,7 @@ export const JJAPVIS_CONFIG = {
   serverUrl: (
     process.env.NEXT_PUBLIC_JJAPVIS_SERVER_URL ||
     process.env.JJAPVIS_SERVER_URL ||
-    'http://localhost:8000'
+    'http://localhost:1777'
   ).replace(/\/$/, ''),
 
   // AGI 위젯 활성화 플래그 (명시적 false가 아니면 기본 활성화함)
