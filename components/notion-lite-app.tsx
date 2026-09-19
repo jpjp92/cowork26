@@ -919,6 +919,63 @@ export default function NotionLiteApp() {
     }
   }
 
+  // 짭비스 AGI가 생성한 산출물(보고서, 문서, 코드 등)을 현재 활성 워크스페이스에 즉시 새 페이지로 자동 생성함
+  const handleCreatePageFromJjapvis = useCallback(async ({
+    title,
+    content,
+  }: {
+    title: string
+    content: Record<string, unknown>
+  }) => {
+    if (!activeWorkspaceId || !accessToken || !canEdit) return
+
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const siblingCount = pages.filter(page => page.parent_id === null).length
+    const optimisticPage: PageRecord = {
+      id,
+      workspace_id: activeWorkspaceId,
+      parent_id: null,
+      title,
+      order_index: siblingCount,
+      content,
+      created_at: now,
+      updated_at: now,
+    }
+
+    // 낙관적 반영: 즉시 사이드바에 추가 + 화면 열기
+    pendingCreateIds.current.add(id)
+    pageFetchedAtRef.current.set(id, Date.now())
+    setPages(previous => [...previous, optimisticPage])
+    selectActivePage(id)
+
+    try {
+      const response = await fetch('/api/pages', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          id,
+          workspaceId: activeWorkspaceId,
+          parentId: null,
+          title,
+          content,
+        }),
+      })
+      if (!response.ok) throw await readError(response, '페이지를 만들지 못했습니다.')
+
+      const page = await response.json() as PageRecord
+      pageFetchedAtRef.current.set(page.id, Date.now())
+      setPages(previous => previous.map(item => (
+        item.id === id ? page : item
+      )))
+      showSavingStatus('saved')
+    } catch (err) {
+      console.error('[NotionLiteApp] 짭비스 페이지 자동 생성 실패함:', err)
+      setPages(previous => previous.filter(p => p.id !== id))
+      pendingCreateIds.current.delete(id)
+    }
+  }, [activeWorkspaceId, accessToken, canEdit, pages, selectActivePage, authHeaders, showSavingStatus])
+
   const renameWorkspace = async () => {
     if (!activeWorkspaceId || !renameWorkspaceName.trim() || !canManageMembers || renamingWorkspace) return
     setError('')
@@ -1852,6 +1909,7 @@ export default function NotionLiteApp() {
           content: activePageContent,
         } : null}
         userId={session?.user?.id}
+        onPageCreated={handleCreatePageFromJjapvis}
       />
       {deleteTarget && (
         <div

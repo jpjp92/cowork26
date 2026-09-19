@@ -89,6 +89,13 @@ export async function POST(request: Request) {
         : pageCountQuery.is('parent_id', null)
     ))
 
+    const initialContent = body.content && typeof body.content === 'object'
+      ? body.content
+      : {
+          type: 'doc',
+          content: [{ type: 'paragraph' }],
+        }
+
     const { data, error } = await timing.measure('page.insert', () => supabaseAdmin
       .from('pages')
       .insert({
@@ -97,10 +104,7 @@ export async function POST(request: Request) {
         parent_id: parentId,
         title,
         order_index: count ?? 0,
-        content: {
-          type: 'doc',
-          content: [{ type: 'paragraph' }],
-        },
+        content: initialContent,
         created_by: user.id,
         updated_by: user.id,
       })

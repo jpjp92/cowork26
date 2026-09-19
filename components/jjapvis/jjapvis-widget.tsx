@@ -17,13 +17,15 @@ import { JjapvisPanel } from './jjapvis-panel'
 import { JjapvisIframe } from './jjapvis-iframe'
 import { useJjapvisBridge } from './use-jjapvis-bridge'
 import { useJjapvisAgentSession } from './use-jjapvis-agent-session'
+import { markdownToTiptap } from '../../lib/markdown-to-tiptap'
 
 export interface JjapvisWidgetProps {
   activePage: ActivePageContext | null
   userId?: string | null
+  onPageCreated?: (page: { title: string; content: Record<string, unknown> }) => Promise<void> | void
 }
 
-export function JjapvisWidget({ activePage, userId }: JjapvisWidgetProps) {
+export function JjapvisWidget({ activePage, userId, onPageCreated }: JjapvisWidgetProps) {
   // 환경변수로 비활성화된 경우 렌더링 생략함
   if (!JJAPVIS_CONFIG.isEnabled) {
     return null
@@ -49,11 +51,40 @@ export function JjapvisWidget({ activePage, userId }: JjapvisWidgetProps) {
     }
   }, [userId])
 
+  // 짭비스 백엔드가 save_file 이벤트로 산출물을 스트리밍할 때 코워크 웹 워크스페이스에 신규 페이지로 즉시 자동 생성함
+  const handleSaveFile = useCallback(async (file: {
+    filename: string
+    content: string
+    b64_data: string
+    category?: string
+  }) => {
+    if (!onPageCreated) return
+
+    // 파일 확장자 분리 및 제목 포맷팅
+    const cleanTitle = file.filename
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[_-]/g, ' ')
+      .trim() || 'Jjapvis 산출물 문서'
+
+    // 마크다운 파싱하여 Tiptap Doc 형식으로 변환함
+    const tiptapDoc = markdownToTiptap(file.content)
+
+    try {
+      await onPageCreated({
+        title: cleanTitle,
+        content: tiptapDoc,
+      })
+    } catch (err) {
+      console.error('[JjapvisWidget] 코워크 페이지 자동 생성 실패함:', err)
+    }
+  }, [onPageCreated])
+
   // 짭비스 백엔드 에이전트 세션(/ws/agent)을 백그라운드로 항시 유지하여,
-  // 짭비스 백엔드가 생각과정(progress)과 우측 미디어(media)를 100% 정상 송출하도록 보장함
+  // 짭비스 백엔드가 생각과정(progress)과 우측 미디어(media), 파일 산출물(save_file)을 100% 정상 송출하도록 보장함
   useJjapvisAgentSession({
     token,
     googleAccessToken: googleUser?.accessToken,
+    onSaveFile: handleSaveFile,
   })
 
   // 구글 팝업 로그인 실행 핸들러임

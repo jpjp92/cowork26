@@ -7,14 +7,39 @@ import { JJAPVIS_CONFIG } from '../../lib/jjapvis/config'
 interface UseJjapvisAgentSessionProps {
   token: string
   googleAccessToken?: string
+  onSaveFile?: (file: { filename: string; content: string; b64_data: string; category?: string }) => void
+}
+
+// Base64 문자열을 UTF-8 텍스트로 안전하게 복원함 (한글/특수문자 100% 무손실 디코딩)
+function decodeBase64ToUtf8(b64: string): string {
+  try {
+    const binary = atob(b64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return new TextDecoder('utf-8').decode(bytes)
+  } catch {
+    try {
+      return decodeURIComponent(escape(atob(b64)))
+    } catch {
+      return atob(b64)
+    }
+  }
 }
 
 export function useJjapvisAgentSession({
   token,
   googleAccessToken,
+  onSaveFile,
 }: UseJjapvisAgentSessionProps) {
   const wsRef = useRef<WebSocket | null>(null)
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const onSaveFileRef = useRef(onSaveFile)
+
+  useEffect(() => {
+    onSaveFileRef.current = onSaveFile
+  }, [onSaveFile])
 
   useEffect(() => {
     if (!token) return
@@ -49,11 +74,22 @@ export function useJjapvisAgentSession({
         }
 
         ws.onmessage = (evt) => {
-          // 필요 시 시스템 이벤트 수신
           try {
             const data = JSON.parse(evt.data)
             if (data.type === 'ping') {
               ws.send(JSON.stringify({ type: 'pong' }))
+            } else if (data.type === 'hud' && data.cmd === 'save_file' && data.arg) {
+              // 짭비스 백엔드가 생성한 문서/코드/산출물 실시간 수신함
+              const { filename, b64_data, category } = data.arg
+              if (filename && b64_data && onSaveFileRef.current) {
+                const textContent = decodeBase64ToUtf8(b64_data)
+                onSaveFileRef.current({
+                  filename,
+                  content: textContent,
+                  b64_data,
+                  category,
+                })
+              }
             }
           } catch {
             // 무시함
