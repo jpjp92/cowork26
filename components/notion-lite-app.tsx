@@ -59,6 +59,7 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('editor')
@@ -242,6 +243,19 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   useOutsidePointerDown(workspaceMenuOpen, workspaceMenuRef, () => setWorkspaceMenuOpen(false))
 
   useEffect(() => {
+    if (!mobileSidebarOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setMobileSidebarOpen(false)
+      setWorkspaceMenuOpen(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [mobileSidebarOpen])
+
+  useEffect(() => {
     workspacesRef.current = workspaces
   }, [workspaces])
 
@@ -249,6 +263,8 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   const revealPage = useCallback((pageId: string) => {
     revealAncestors(pageId)
     openPage(pageId)
+    setMobileSidebarOpen(false)
+    setWorkspaceMenuOpen(false)
   }, [openPage, revealAncestors])
   const { uploadImage, cloneImage } = usePageAssets(
     accessToken,
@@ -264,6 +280,8 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
     workspacesRef.current = []
     resetSelection()
     setSettingsOpen(false)
+    setMobileSidebarOpen(false)
+    setWorkspaceMenuOpen(false)
   }, [resetPageData, resetPagePersistence, resetSelection, resetWorkspaceData])
 
   const loadWorkspaces = useCallback(async () => {
@@ -372,7 +390,15 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   const selectWorkspace = (workspaceId: string) => {
     selectWorkspaceNavigation(workspaceId)
     setWorkspaceMenuOpen(false)
+    setMobileSidebarOpen(false)
   }
+
+  const openPageFromSidebar = useCallback((pageId: string) => {
+    revealAncestors(pageId)
+    openPage(pageId)
+    setMobileSidebarOpen(false)
+    setWorkspaceMenuOpen(false)
+  }, [openPage, revealAncestors])
 
   const reorderWorkspaces = async (
     sourceId: string,
@@ -398,7 +424,7 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
         workspaceId: activeWorkspaceId,
         parentId,
         title,
-        onOpen: openPage,
+        onOpen: openPageFromSidebar,
         onSelectionChange: replaceLoadedPageSelection,
       })
     } catch (err) {
@@ -494,13 +520,13 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   }
 
   if (authLoading) {
-    return <main className="flex min-h-screen items-center justify-center text-[#77736a]">로딩 중...</main>
+    return <main className="flex min-h-screen min-h-dvh items-center justify-center text-[#77736a]">로딩 중...</main>
   }
 
   if (!session) return <AuthPanel />
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-[#777773] text-black">
+    <main className="flex h-screen h-dvh flex-col overflow-hidden bg-[#777773] text-black">
       <AppHeader
         email={session.user.email ?? ''}
         workspace={activeWorkspace}
@@ -513,8 +539,17 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
         inviteEmail={inviteEmail}
         inviteRole={inviteRole}
         inviteLoading={inviteLoading}
+        mobileNavigationOpen={mobileSidebarOpen}
+        onToggleMobileNavigation={() => {
+          setSettingsOpen(false)
+          setMobileSidebarOpen(open => !open)
+        }}
         onRefresh={refreshWorkspaceData}
-        onToggleSettings={() => setSettingsOpen(open => !open)}
+        onToggleSettings={() => {
+          setMobileSidebarOpen(false)
+          setWorkspaceMenuOpen(false)
+          setSettingsOpen(open => !open)
+        }}
         onInviteEmailChange={setInviteEmail}
         onInviteRoleChange={setInviteRole}
         onInvite={inviteMember}
@@ -524,7 +559,7 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
         }}
       />
 
-      <div className="flex min-h-0 flex-1 max-md:flex-col">
+      <div className="flex min-h-0 flex-1">
         <WorkspaceSidebar
           sidebarWidth={sidebarWidth}
           menuContainerRef={workspaceMenuRef}
@@ -553,15 +588,24 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
           onReorderWorkspaces={reorderWorkspaces}
           onRenameWorkspaceNameChange={setRenameWorkspaceName}
           onRenameWorkspace={renameWorkspace}
-          onSearch={() => setSearchOpen(true)}
+          onSearch={() => {
+            setMobileSidebarOpen(false)
+            setWorkspaceMenuOpen(false)
+            setSearchOpen(true)
+          }}
           onNewPageTitleChange={setNewPageTitle}
           onCreatePage={createPage}
-          onOpenPage={openPage}
+          onOpenPage={openPageFromSidebar}
           onTogglePageCollapse={togglePageCollapse}
           onRequestDeletePage={setDeleteTargetId}
           onDownloadMarkdown={downloadPageMarkdown}
           onMovePage={movePage}
           onResizeStart={startSidebarResize}
+          mobileOpen={mobileSidebarOpen}
+          onCloseMobile={() => {
+            setMobileSidebarOpen(false)
+            setWorkspaceMenuOpen(false)
+          }}
         />
 
         <DocumentPane

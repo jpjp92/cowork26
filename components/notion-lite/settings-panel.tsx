@@ -11,6 +11,7 @@ interface SettingsPanelProps {
   inviteEmail: string
   inviteRole: Extract<WorkspaceRole, 'editor' | 'viewer'>
   inviteLoading: boolean
+  onClose: () => void
   onInviteEmailChange: (email: string) => void
   onInviteRoleChange: (role: Extract<WorkspaceRole, 'editor' | 'viewer'>) => void
   onInvite: () => void
@@ -26,6 +27,7 @@ export function SettingsPanel({
   inviteEmail,
   inviteRole,
   inviteLoading,
+  onClose,
   onInviteEmailChange,
   onInviteRoleChange,
   onInvite,
@@ -34,11 +36,24 @@ export function SettingsPanel({
   return (
     <div
       id="settings-panel"
-      aria-label="Settings"
-      className="absolute right-0 top-11 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-[8px] border border-black bg-[#50504d] p-3 text-white shadow-[5px_5px_0_#000]"
+      role="dialog"
+      aria-label="설정"
+      className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 max-h-[calc(100dvh-5.5rem)] overflow-y-auto rounded-[8px] border border-black bg-[#50504d] p-3 text-white shadow-[5px_5px_0_#000] sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-11 sm:max-h-[calc(100dvh-5rem)] sm:w-[min(20rem,calc(100vw-2rem))]"
     >
-      <p className="truncate text-xs font-bold text-neutral-100">{email}</p>
-      {workspace && <p className="mt-1 truncate text-sm font-black uppercase">{workspace.name}</p>}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-xs font-bold text-neutral-100">{email}</p>
+          {workspace && <p className="mt-1 truncate text-sm font-black uppercase">{workspace.name}</p>}
+        </div>
+        <button
+          type="button"
+          aria-label="설정 닫기"
+          onClick={onClose}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] border border-black bg-[#62625f] text-xl font-black text-white sm:hidden"
+        >
+          ×
+        </button>
+      </div>
       {workspace && (
         <>
           <div className="mt-3 border-t border-black pt-3">
@@ -77,7 +92,7 @@ export function SettingsPanel({
                 id="member-email"
                 aria-label="Member email"
                 autoComplete="email"
-                className="w-full rounded-[8px] border border-black bg-white px-2.5 py-2 text-sm font-bold text-black outline-none placeholder:text-[#666] focus-visible:ring-2 focus-visible:ring-[#baf7c8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#50504d]"
+                className="w-full rounded-[8px] border border-black bg-white px-2.5 py-2 text-base font-bold text-black outline-none placeholder:text-[#666] focus-visible:ring-2 focus-visible:ring-[#baf7c8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#50504d] sm:text-sm"
                 placeholder="Email"
                 type="email"
                 value={inviteEmail}
@@ -90,7 +105,7 @@ export function SettingsPanel({
                     type="button"
                     aria-pressed={inviteRole === 'editor'}
                     onClick={() => onInviteRoleChange('editor')}
-                    className={`flex-1 py-1.5 text-xs font-black uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white ${
+                    className={`min-h-11 flex-1 py-1.5 text-xs font-black uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white sm:min-h-0 ${
                       inviteRole === 'editor' ? 'bg-[#fde68a] text-black' : 'bg-[#62625f] text-neutral-300 hover:text-white'
                     }`}
                   >editor</button>
@@ -99,7 +114,7 @@ export function SettingsPanel({
                     type="button"
                     aria-pressed={inviteRole === 'viewer'}
                     onClick={() => onInviteRoleChange('viewer')}
-                    className={`flex-1 py-1.5 text-xs font-black uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white ${
+                    className={`min-h-11 flex-1 py-1.5 text-xs font-black uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white sm:min-h-0 ${
                       inviteRole === 'viewer' ? 'bg-[#c4b5fd] text-black' : 'bg-[#62625f] text-neutral-300 hover:text-white'
                     }`}
                   >viewer</button>
@@ -110,7 +125,7 @@ export function SettingsPanel({
                   aria-busy={inviteLoading}
                   onClick={onInvite}
                   disabled={!inviteEmail.trim() || inviteLoading}
-                  className="h-9 rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-[2px_2px_0_#000]"
+                  className="h-11 rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-[2px_2px_0_#000] sm:h-9"
                 >
                   {inviteLoading ? <span aria-hidden="true" className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : 'Add'}
                 </button>
@@ -122,7 +137,7 @@ export function SettingsPanel({
       <button
         type="button"
         onClick={onSignOut}
-        className="mt-3 h-9 w-full rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        className="mt-3 h-11 w-full rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:h-9"
       >
         Logout
       </button>

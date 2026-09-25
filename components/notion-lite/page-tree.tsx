@@ -30,6 +30,7 @@ export function PageTree({
 }: PageTreeProps) {
   const draggedIdRef = useRef<string | null>(null)
   const [dragOver, setDragOver] = useState<{ id: string; position: PageDropPosition } | null>(null)
+  const [openActionsId, setOpenActionsId] = useState<string | null>(null)
 
   const renderItems = (parentId: string | null, depth = 0): React.ReactNode => {
     const items = tree.get(parentId ?? 'root') ?? []
@@ -105,8 +106,8 @@ export function PageTree({
             </button>
 
             <button
-              onClick={() => onOpen(page.id)}
-              className={`flex h-8 min-w-0 flex-1 items-center rounded-[4px] px-2 text-left text-sm transition-colors ${
+              onClick={() => { setOpenActionsId(null); onOpen(page.id) }}
+              className={`flex min-h-11 min-w-0 flex-1 items-center rounded-[4px] px-2 text-left text-sm transition-colors md:min-h-8 ${
                 isActive
                   ? 'border border-black bg-[#baf7c8] font-black text-black shadow-[2px_2px_0_#000]'
                   : 'font-medium text-neutral-300 hover:bg-[#50504d] hover:text-white'
@@ -115,7 +116,7 @@ export function PageTree({
               <span className="block min-w-0 truncate">{page.title}</span>
             </button>
 
-            <div className="flex shrink-0 gap-1 pl-1 opacity-0 transition-opacity group-hover/page-row:opacity-100 group-focus-within/page-row:opacity-100">
+            <div className="hidden shrink-0 gap-1 pl-1 opacity-0 transition-opacity group-hover/page-row:opacity-100 group-focus-within/page-row:opacity-100 md:flex">
               {canEdit && (
                 <button
                   onClick={() => onCreateChild(page.id)}
@@ -142,6 +143,54 @@ export function PageTree({
                 ↓
               </button>
             </div>
+            <button
+              type="button"
+              aria-label={`${page.title} 페이지 작업`}
+              aria-expanded={openActionsId === page.id}
+              onClick={event => {
+                event.stopPropagation()
+                setOpenActionsId(current => current === page.id ? null : page.id)
+              }}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] text-lg font-black text-neutral-200 hover:bg-[#50504d] hover:text-white md:hidden"
+            >
+              ⋯
+            </button>
+            {openActionsId === page.id && (
+              <div
+                role="menu"
+                aria-label={`${page.title} 페이지 작업`}
+                className="absolute right-0 top-[calc(100%+4px)] z-30 w-44 rounded-[8px] border border-black bg-[#50504d] p-1.5 text-white shadow-[4px_4px_0_#000] md:hidden"
+              >
+                {canEdit && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setOpenActionsId(null); onCreateChild(page.id) }}
+                    className="min-h-11 w-full rounded-[6px] px-3 text-left text-sm font-bold hover:bg-[#62625f]"
+                  >
+                    하위 페이지 추가
+                  </button>
+                )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setOpenActionsId(null); onDownloadMarkdown(page) }}
+                  className="min-h-11 w-full rounded-[6px] px-3 text-left text-sm font-bold hover:bg-[#62625f]"
+                >
+                  마크다운 다운로드
+                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setOpenActionsId(null); onRequestDelete(page.id) }}
+                    className="min-h-11 w-full rounded-[6px] px-3 text-left text-sm font-bold text-red-200 hover:bg-[#62625f]"
+                  >
+                    페이지 삭제
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {dragOver?.id === page.id && dragOver.position === 'below' && (

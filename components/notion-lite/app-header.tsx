@@ -14,6 +14,8 @@ interface AppHeaderProps {
   inviteEmail: string
   inviteRole: Extract<WorkspaceRole, 'editor' | 'viewer'>
   inviteLoading: boolean
+  mobileNavigationOpen: boolean
+  onToggleMobileNavigation: () => void
   onRefresh: () => void
   onToggleSettings: () => void
   onInviteEmailChange: (email: string) => void
@@ -34,6 +36,8 @@ export function AppHeader({
   inviteEmail,
   inviteRole,
   inviteLoading,
+  mobileNavigationOpen,
+  onToggleMobileNavigation,
   onRefresh,
   onToggleSettings,
   onInviteEmailChange,
@@ -42,14 +46,24 @@ export function AppHeader({
   onSignOut,
 }: AppHeaderProps) {
   return (
-    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-black bg-[#777773] px-4">
+    <header className="sticky top-0 z-40 flex min-h-16 shrink-0 items-center justify-between gap-2 border-b border-black bg-[#777773] px-3 pt-[env(safe-area-inset-top)] sm:px-4">
       <div className="flex min-w-0 items-center gap-3">
+        <button
+          type="button"
+          aria-label={mobileNavigationOpen ? '페이지 탐색 닫기' : '페이지 탐색 열기'}
+          aria-controls="workspace-sidebar"
+          aria-expanded={mobileNavigationOpen}
+          onClick={onToggleMobileNavigation}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-xl font-black leading-none text-white shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] hover:text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white md:hidden"
+        >
+          {mobileNavigationOpen ? '×' : '☰'}
+        </button>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border border-black bg-[#baf7c8] text-sm font-black leading-none text-black shadow-[2px_2px_0_#000]">
           C
         </span>
         <div className="min-w-0">
           <p className="truncate text-sm font-black uppercase tracking-normal text-white">Cowork26</p>
-          <p className="truncate text-xs font-bold text-neutral-100">{email}</p>
+          <p className="hidden truncate text-xs font-bold text-neutral-100 sm:block">{email}</p>
         </div>
       </div>
 
@@ -57,7 +71,8 @@ export function AppHeader({
         <button
           onClick={onRefresh}
           disabled={refreshing}
-          className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
+          aria-label="새로고침"
+          className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40 sm:h-9 sm:w-9"
           title="새로고침"
         >
           {refreshing
@@ -66,11 +81,11 @@ export function AppHeader({
         </button>
         <button
           type="button"
-          aria-label="Settings"
+          aria-label="설정"
           aria-controls="settings-panel"
           aria-expanded={settingsOpen}
           onClick={onToggleSettings}
-          className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000]"
+          className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] sm:h-9 sm:w-9"
           title="Settings"
         >
           ⚙
@@ -85,6 +100,7 @@ export function AppHeader({
             inviteEmail={inviteEmail}
             inviteRole={inviteRole}
             inviteLoading={inviteLoading}
+            onClose={onToggleSettings}
             onInviteEmailChange={onInviteEmailChange}
             onInviteRoleChange={onInviteRoleChange}
             onInvite={onInvite}

@@ -122,7 +122,7 @@ export function WorkspaceMenu({
       >
         <div className="grid grid-cols-[minmax(0,1fr)_38px] items-center gap-2">
           <input
-            className="h-[38px] min-w-0 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:shadow-[3px_3px_0_#000]"
+            className="h-11 min-w-0 rounded-[8px] border border-black bg-white px-3 text-base font-bold text-black outline-none placeholder:text-[#555] focus:shadow-[3px_3px_0_#000] md:h-[38px] md:text-sm"
             placeholder="새 워크스페이스"
             value={workspaceName}
             onChange={event => onWorkspaceNameChange(event.target.value)}
@@ -130,7 +130,7 @@ export function WorkspaceMenu({
           <button
             type="submit"
             disabled={!workspaceName.trim() || creatingWorkspace}
-            className={`${creatingWorkspace ? '' : 'workspace-plus'} relative h-[38px] rounded-[8px] border border-black bg-[#baf7c8] text-black shadow-[2px_2px_0_#000] disabled:opacity-40`}
+            className={`${creatingWorkspace ? '' : 'workspace-plus'} relative h-11 rounded-[8px] border border-black bg-[#baf7c8] text-black shadow-[2px_2px_0_#000] disabled:opacity-40 md:h-[38px]`}
             title="워크스페이스 생성"
             aria-label="워크스페이스 생성"
           >

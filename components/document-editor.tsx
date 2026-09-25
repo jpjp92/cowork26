@@ -310,7 +310,7 @@ function DocumentImageView({ node, selected }: NodeViewProps) {
       />
       <button
         type="button"
-        className="absolute right-2 top-2 rounded-[8px] border border-black bg-[#baf7c8] px-2 py-1 text-[11px] font-black text-black opacity-0 shadow-[2px_2px_0_#000] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-[#d7d2c8] disabled:opacity-80 group-hover:opacity-100"
+        className="absolute right-2 top-2 min-h-11 rounded-[8px] border border-black bg-[#baf7c8] px-3 py-1 text-[11px] font-black text-black opacity-100 shadow-[2px_2px_0_#000] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-[#d7d2c8] disabled:opacity-80 sm:min-h-0 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
         onMouseDown={event => event.preventDefault()}
         onClick={copyImage}
         disabled={!src || isUploading}

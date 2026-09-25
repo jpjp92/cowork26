@@ -70,6 +70,20 @@ body {
   min-height: 100%;
 }
 
+@supports (height: 100dvh) {
+  html,
+  body {
+    min-height: 100dvh;
+  }
+}
+
+@media (pointer: coarse) {
+  button,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+}
+
 body {
   margin: 0;
   background: var(--background);

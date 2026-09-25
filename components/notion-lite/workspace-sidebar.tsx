@@ -44,6 +44,8 @@ interface WorkspaceSidebarProps {
   onDownloadMarkdown: (page: PageRecord) => void
   onMovePage: (draggedId: string, targetId: string, position: PageDropPosition) => void
   onResizeStart: PointerEventHandler<HTMLButtonElement>
+  mobileOpen: boolean
+  onCloseMobile: () => void
 }
 
 export function WorkspaceSidebar({
@@ -83,12 +85,33 @@ export function WorkspaceSidebar({
   onDownloadMarkdown,
   onMovePage,
   onResizeStart,
+  mobileOpen,
+  onCloseMobile,
 }: WorkspaceSidebarProps) {
   return (
+    <>
+      <button
+        type="button"
+        aria-label="페이지 탐색 닫기"
+        className={`fixed inset-0 top-16 z-40 bg-black/45 transition-opacity md:hidden ${mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        onClick={onCloseMobile}
+      />
     <aside
-      className="relative flex w-full shrink-0 flex-col border-r border-black bg-[#62625f] md:w-[var(--sidebar-width)] max-md:border-r-0 max-md:border-b"
+      id="workspace-sidebar"
+      className={`fixed inset-y-0 left-0 z-50 flex w-[min(88vw,22rem)] shrink-0 flex-col border-r border-black bg-[#62625f] pt-[env(safe-area-inset-top)] shadow-[6px_0_0_#000] transition-[transform,visibility] duration-200 md:visible md:relative md:z-auto md:w-[var(--sidebar-width)] md:translate-x-0 md:pt-0 md:shadow-none ${mobileOpen ? 'visible translate-x-0' : 'invisible -translate-x-[calc(100%+8px)]'}`}
       style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
     >
+      <div className="flex items-center justify-between border-b border-black px-3 py-2 text-white md:hidden">
+        <p className="text-sm font-black uppercase">페이지 탐색</p>
+        <button
+          type="button"
+          aria-label="페이지 탐색 닫기"
+          onClick={onCloseMobile}
+          className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-xl font-black shadow-[2px_2px_0_#000]"
+        >
+          ×
+        </button>
+      </div>
       <div className="border-b border-black p-3">
         <p className="mb-2 px-1 text-[11px] font-black uppercase tracking-normal text-white">Workspace</p>
         <div className="relative mb-2" ref={menuContainerRef}>
@@ -134,7 +157,7 @@ export function WorkspaceSidebar({
         {canManageMembers && activeWorkspace && (
           <div className="mb-2 flex gap-2">
             <input
-              className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
+              className="h-11 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-base font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000] md:h-9 md:text-sm"
               placeholder="워크스페이스 이름"
               value={renameWorkspaceName}
               onChange={event => onRenameWorkspaceNameChange(event.target.value)}
@@ -143,7 +166,7 @@ export function WorkspaceSidebar({
             <button
               onClick={onRenameWorkspace}
               disabled={!renameWorkspaceName.trim() || renamingWorkspace}
-              className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] disabled:opacity-40"
+              className="h-11 w-11 shrink-0 rounded-[8px] border border-black bg-white text-sm font-black leading-none text-black shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] disabled:opacity-40 md:h-9 md:w-9"
               title="워크스페이스 이름 저장"
             >
               {renamingWorkspace ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : '✓'}
@@ -162,7 +185,7 @@ export function WorkspaceSidebar({
               onClick={onSearch}
               disabled={!activeWorkspaceId}
               aria-label="페이지 검색"
-              className="flex h-6 w-6 items-center justify-center border border-black bg-[#50504d] text-sm font-black leading-none text-white shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] hover:text-black disabled:opacity-40"
+              className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-sm font-black leading-none text-white shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] hover:text-black disabled:opacity-40 md:h-6 md:w-6 md:rounded-none"
             >
               ⌕
             </button>
@@ -170,7 +193,7 @@ export function WorkspaceSidebar({
         </div>
         <div className="mb-3 flex items-center gap-2">
           <input
-            className="h-9 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000]"
+            className="h-11 min-w-0 flex-1 rounded-[8px] border border-black bg-white px-3 text-base font-bold text-black outline-none placeholder:text-[#555] focus:-translate-y-0.5 focus:shadow-[3px_3px_0_#000] md:h-9 md:text-sm"
             placeholder="새 페이지"
             value={newPageTitle}
             onChange={event => onNewPageTitleChange(event.target.value)}
@@ -180,12 +203,12 @@ export function WorkspaceSidebar({
           <button
             onClick={() => onCreatePage()}
             disabled={!activeWorkspaceId || !canEdit || creatingPage}
-            className="h-9 w-9 shrink-0 rounded-[8px] border border-black bg-[#50504d] text-sm font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40"
+            className="h-11 w-11 shrink-0 rounded-[8px] border border-black bg-[#50504d] text-sm font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40 md:h-9 md:w-9"
           >
             {creatingPage ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : '+'}
           </button>
         </div>
-        <div className="page-tree-scroll min-h-0 flex-1 overflow-y-auto max-md:max-h-56">
+        <div className="page-tree-scroll min-h-0 flex-1 overflow-y-auto">
           {workspacesLoading && workspaces.length === 0 ? (
             <PageTreeSkeleton />
           ) : activeWorkspaceId ? (
@@ -226,5 +249,6 @@ export function WorkspaceSidebar({
         onPointerDown={onResizeStart}
       />
     </aside>
+    </>
   )
 }

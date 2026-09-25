@@ -72,11 +72,14 @@ export function SearchModal({ open, pages, onClose, onSelect }: SearchModalProps
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-3 pt-[max(1rem,env(safe-area-inset-top))] sm:p-4 sm:pt-[12vh]"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="페이지 검색"
     >
       <div
-        className="w-full max-w-lg border border-black bg-white shadow-[4px_4px_0_#000]"
+        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden border border-black bg-white shadow-[4px_4px_0_#000] sm:max-h-[76vh]"
         onClick={event => event.stopPropagation()}
         onKeyDown={onKeyDown}
       >
@@ -86,10 +89,10 @@ export function SearchModal({ open, pages, onClose, onSelect }: SearchModalProps
             value={query}
             onChange={event => setQuery(event.target.value)}
             placeholder="페이지 제목·내용 검색"
-            className="h-9 w-full border border-black bg-white px-3 text-sm font-bold text-black outline-none placeholder:text-[#555]"
+            className="h-11 w-full border border-black bg-white px-3 text-base font-bold text-black outline-none placeholder:text-[#555] sm:h-9 sm:text-sm"
           />
         </div>
-        <ul className="max-h-[50vh] overflow-y-auto">
+        <ul className="min-h-0 flex-1 overflow-y-auto">
           {results.length === 0 ? (
             <li className="px-4 py-6 text-center text-sm font-bold text-[#555]">
               {query.trim() ? '검색 결과가 없습니다.' : '검색어를 입력하세요.'}
@@ -101,7 +104,7 @@ export function SearchModal({ open, pages, onClose, onSelect }: SearchModalProps
                   type="button"
                   onMouseEnter={() => setActiveIndex(index)}
                   onClick={() => choose(index)}
-                  className={`block w-full px-4 py-2 text-left ${index === activeIndex ? 'bg-[#baf7c8] text-black' : 'bg-white text-black'}`}
+                  className={`block min-h-11 w-full px-4 py-2 text-left ${index === activeIndex ? 'bg-[#baf7c8] text-black' : 'bg-white text-black'}`}
                 >
                   <p className="truncate text-sm font-black">
                     {hit.titleMatch
