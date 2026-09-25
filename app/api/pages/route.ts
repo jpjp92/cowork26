@@ -2,6 +2,37 @@ import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '../../../lib/supabase-admin'
 import { getUserFromRequest, requireWorkspaceRole } from '../_utils/auth'
 import { createApiTiming } from '../_utils/timing'
+import { getPageParentValidationError } from '../../../lib/notion-lite/page-tree'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+async function validatePageParent(
+  pageId: string,
+  workspaceId: string,
+  parentId: string | null,
+  timing: ReturnType<typeof createApiTiming>,
+) {
+  if (parentId === null) return null
+
+  const { data: pages, error } = await timing.measure('page.parent.validate', () => supabaseAdmin
+    .from('pages')
+    .select('id, workspace_id, parent_id')
+    .eq('workspace_id', workspaceId))
+
+  if (error) {
+    return NextResponse.json({ error: 'Failed to validate page hierarchy' }, { status: 500 })
+  }
+
+  const validationError = getPageParentValidationError(
+    pages ?? [],
+    pageId,
+    workspaceId,
+    parentId,
+  )
+  return validationError
+    ? NextResponse.json({ error: validationError }, { status: 400 })
+    : null
+}
 
 export async function GET(request: Request) {
   const timing = createApiTiming('GET /api/pages')
@@ -73,10 +104,23 @@ export async function POST(request: Request) {
     const title = typeof body.title === 'string' && body.title.trim()
       ? body.title.trim()
       : 'Untitled'
-    const parentId = typeof body.parentId === 'string' && body.parentId ? body.parentId : null
+    const rawParentId = body.parentId
+    const parentId = rawParentId === undefined || rawParentId === null || rawParentId === ''
+      ? null
+      : rawParentId
+    if (parentId !== null && (typeof parentId !== 'string' || !UUID_RE.test(parentId))) {
+      return NextResponse.json({ error: 'Valid parentId is required' }, { status: 400 })
+    }
     // 클라이언트 낙관적 생성용: 유효한 UUID면 그 id로 insert(없으면 DB 기본값 사용)
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     const requestedId = typeof body.id === 'string' && UUID_RE.test(body.id) ? body.id : undefined
+
+    const parentValidationResponse = await validatePageParent(
+      requestedId ?? crypto.randomUUID(),
+      workspaceId,
+      parentId,
+      timing,
+    )
+    if (parentValidationResponse) return parentValidationResponse
 
     const pageCountQuery = supabaseAdmin
       .from('pages')
@@ -141,7 +185,25 @@ export async function PATCH(request: Request) {
     const patch: Record<string, unknown> = { updated_by: user.id }
     if (typeof body.title === 'string') patch.title = body.title.trim() || 'Untitled'
     if (body.content && typeof body.content === 'object') patch.content = body.content
-    if (typeof body.parentId === 'string' || body.parentId === null) patch.parent_id = body.parentId
+    const hasParentPatch = Object.prototype.hasOwnProperty.call(body, 'parentId')
+    if (
+      hasParentPatch &&
+      body.parentId !== null &&
+      (typeof body.parentId !== 'string' || !UUID_RE.test(body.parentId))
+    ) {
+      return NextResponse.json({ error: 'Valid parentId is required' }, { status: 400 })
+    }
+    if (hasParentPatch) {
+      const parentId = body.parentId as string | null
+      const parentValidationResponse = await validatePageParent(
+        body.id,
+        page.workspace_id,
+        parentId,
+        timing,
+      )
+      if (parentValidationResponse) return parentValidationResponse
+      patch.parent_id = parentId
+    }
     if (typeof body.orderIndex === 'number') patch.order_index = body.orderIndex
     patchType = [
       patch.title !== undefined ? 'title' : '',

@@ -1,301 +1,281 @@
 # Cowork26
 
-Next.js + Supabase + Tiptap 기반 Notion-lite 협업 문서 앱.
+Next.js, Supabase, Tiptap 기반의 workspace 문서 편집 앱입니다. Workspace별 중첩 page, 역할 기반 접근 제어, 자동 저장, 검색, Markdown 변환, 이미지 첨부를 제공합니다.
 
-워크스페이스 단위로 페이지를 만들고 멤버를 초대해 함께 편집합니다. 실시간 동시 편집은 미연결이며, 페이지 전환 시 최신 내용을 자동으로 불러옵니다.
+현재는 서버 저장 기반 협업 모델입니다. Yjs와 Hocuspocus 패키지는 설치되어 있지만 실시간 동시 편집에는 연결하지 않았습니다.
 
----
+## 주요 기능
 
-## 시작하기
+### 인증과 workspace
+
+- Supabase 이메일 회원가입·로그인 및 이메일 인증
+- `owner`, `editor`, `viewer` 역할 기반 접근 제어
+- workspace 생성·이름 변경·사용자별 표시 순서 변경
+- 가입된 사용자를 이메일로 멤버 추가
+- 짧은 workspace/page URL 및 브라우저 뒤로·앞으로 이동 지원
+
+### Page와 편집기
+
+- `parent_id` 기반 중첩 page 트리
+- page 생성·삭제·드래그 순서 변경·계층 이동
+- 같은 workspace의 page만 부모로 지정 가능하며 자기참조와 cycle 차단
+- 제목 blur 저장 및 본문 1.5초 debounce 자동 저장
+- page 검색 및 Markdown 다운로드
+- 표 열 너비·행 높이 조절
+- 코드 블록 syntax highlighting
+- Markdown 표·목록·제목·인라인 문법 붙여넣기 변환
+- Mermaid 코드 블록 렌더링 및 소스 편집
+
+### 이미지
+
+- PNG, JPEG, WebP, GIF 첨부
+- API가 발급한 Supabase Signed Upload URL로 브라우저에서 직접 업로드
+- 업로드 전 page 편집 권한, 완료 후 실제 MIME·크기 재검증
+- 전체 API 상한 20MB
+- 5MB 초과 PNG/JPEG/WebP는 최대 2560px WebP로 최적화
+- 애니메이션 GIF는 변환하지 않으며 5MB 이하만 허용
+- 앱 내부 이미지 복사 시 대상 page 전용 asset으로 복제
+
+## 요구 사항
+
+- Node.js 20.9 이상
+- npm
+- Supabase 프로젝트
+- 배포 시 Vercel 또는 Next.js를 실행할 수 있는 Node.js 환경
+
+## 로컬 실행
 
 ```bash
-# 의존성 설치
-npm install
-
-# 개발 서버 실행
+npm ci
+cp .env.example .env.local
 npm run dev
-# → http://localhost:3000
-
-# 타입 검사
-npm run typecheck
-
-# 프로덕션 빌드
-npm run build
 ```
 
----
+기본 개발 주소는 `http://localhost:3000`입니다.
 
 ## 환경 변수
 
-`.env.local` 파일을 생성하고 아래 값을 설정합니다.
+`.env.local`에 다음 값을 설정합니다.
 
 ```env
+# 브라우저 공개 설정
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
+# 서버 전용 설정
 SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
 
+# Legacy AGI — local development에서만 선택적으로 사용
 NEXT_PUBLIC_ENABLE_AGI=false
-JJAPVIS_SERVER_URL=...
-NEXT_PUBLIC_JJAPVIS_SERVER_URL=...
+ENABLE_LEGACY_AGI=false
+JJAPVIS_SERVER_URL=
+NEXT_PUBLIC_JJAPVIS_SERVER_URL=
+AGI_CLIENT_SHA256=
 ```
 
-배포 환경에서는 `NEXT_PUBLIC_SITE_URL`을 실제 도메인으로 변경합니다.
-Supabase Authentication → Redirect URLs에도 해당 도메인을 등록해야 합니다.
-현재 dev 환경 기본값: `https://cowork26dev.vercel.app`
+### 환경변수 주의사항
 
-`NEXT_PUBLIC_ENABLE_AGI`가 `true`일 때만 플로팅 AGI 버튼을 렌더링합니다. Vercel 배포 환경에서는 Windows EXE 실행이 불가능하고 HTTP iframe이 차단될 수 있으므로 기본값은 `false`로 둡니다.
+- `SUPABASE_SERVICE_KEY`는 서버 전용 secret입니다. `NEXT_PUBLIC_` 접두어를 붙이거나 브라우저 코드에서 참조하지 않습니다.
+- `SUPABASE_KEY` fallback은 지원하지 않습니다. 배포 환경에도 정확히 `SUPABASE_SERVICE_KEY`를 설정해야 합니다.
+- `NEXT_PUBLIC_SITE_URL`은 실제 접속 origin과 일치시킵니다. Supabase Authentication의 Redirect URLs에도 같은 주소를 등록합니다.
+- Production과 Preview는 가능하면 서로 다른 Supabase 프로젝트와 service key를 사용합니다.
+- `.env*` 파일은 `.env.example`을 제외하고 Git에서 무시됩니다.
 
----
+## Supabase 설정
 
-## Supabase 세팅
+Supabase SQL Editor 또는 프로젝트의 migration workflow에서 아래 파일을 순서대로 적용합니다.
 
-Supabase Dashboard → SQL Editor에서 마이그레이션을 순서대로 실행합니다.
-
-```
+```text
 supabase/migrations/001_init.sql
 supabase/migrations/002_notion_lite.sql
 supabase/migrations/003_workspace_member_order.sql
+supabase/migrations/004_workspace_members_hardening.sql
+supabase/migrations/005_pages_tree_integrity.sql
 ```
 
-핵심 테이블: `workspaces` · `workspace_members` · `pages` · `page_assets`  
-권한 검증은 API route에서 service role 클라이언트로 처리합니다.
+| Migration | 역할 |
+|---|---|
+| `001_init.sql` | 초기 profile·sheet PoC schema와 RLS |
+| `002_notion_lite.sql` | workspace, membership, page schema와 RLS |
+| `003_workspace_member_order.sql` | 사용자별 workspace 정렬 순서 |
+| `004_workspace_members_hardening.sql` | 브라우저 직접 membership 변경과 self-owner 권한 상승 차단 |
+| `005_pages_tree_integrity.sql` | cross-workspace parent와 page hierarchy cycle 차단 |
 
-`003_workspace_member_order.sql`은 `workspace_members.order_index`를 추가합니다. 이 값은 사용자별 워크스페이스 목록 정렬 순서를 저장합니다.
+보안 migration 적용 안내:
 
-이미지 붙여넣기 기능을 사용하려면 Supabase Storage에 public bucket `page_assets`를 만들고, 이미지 메타데이터용 `page_assets` 테이블을 생성합니다. 버킷에는 파일 크기 제한 `20MB`와 허용 MIME `image/png`, `image/jpeg`, `image/webp`, `image/gif`를 설정해야 합니다. 실행 SQL과 세부 정책은 `docs/history/DEV_260615.md`에 기록되어 있습니다.
+- [Migration 004 runbook](./docs/SUPABASE_MIGRATION_004_RUNBOOK.md)
+- [Migration 005 runbook](./docs/SUPABASE_MIGRATION_005_RUNBOOK.md)
 
----
+`workspace_members` 쓰기는 server API의 service-role client를 통해 처리합니다. 일반 사용자는 앱에서 멤버를 추가하지만, publishable key로 table을 직접 INSERT/UPDATE/DELETE할 수는 없습니다.
 
-## 기술 스택
+### 이미지 Storage
 
-| 분류 | 패키지 |
-|------|--------|
-| 프레임워크 | Next.js 16, React 19, TypeScript |
-| 스타일 | Tailwind CSS |
-| 에디터 | Tiptap, @tiptap/extension-table, @tiptap/extension-code-block-lowlight, @tiptap/extension-image |
-| 하이라이팅 | lowlight (common — 36개 언어, VS Code Dark+ 테마) |
-| 백엔드 | Supabase Auth, Supabase Postgres, Supabase Storage |
-| 미래 협업 | Yjs, Hocuspocus (설치만, 미연결) |
+이미지 기능에는 Supabase Storage bucket과 `page_assets` metadata table이 필요합니다.
 
----
+- Bucket: `page_assets`
+- 최대 파일 크기: 20MB
+- 허용 MIME: `image/png`, `image/jpeg`, `image/webp`, `image/gif`
+- 현재 구현은 public URL을 문서에 저장
 
-## 아키텍처
-
-```
-app/
-  layout.tsx                      # 루트 레이아웃
-  page.tsx                        # 진입점 → NotionLiteApp 렌더
-  globals.css                     # 전역 스타일 (ProseMirror, hljs 토큰 등)
-  api/
-    _utils/auth.ts                # JWT 검증 · 워크스페이스 권한 헬퍼
-    assets/route.ts               # 이미지 Signed Upload 준비 · 완료 검증 · 실패 정리
-    assets/clone/route.ts         # 이미지 asset 복제
-    pages/route.ts                # GET(목록·단건) / POST / PATCH / DELETE
-    workspaces/route.ts           # GET / POST / PATCH
-    workspaces/[id]/members/      # GET / POST
-
-components/
-  auth-panel.tsx                  # 로그인 / 회원가입 폼
-  notion-lite-app.tsx             # 앱 전체 상태 관리 · 사이드바 · 헤더
-  document-editor.tsx             # Tiptap 에디터 (표, 코드 블록, 붙여넣기 파싱)
-
-lib/
-  supabase-admin.ts               # service role 클라이언트 (서버 전용)
-  supabase-browser.ts             # anon 클라이언트 (브라우저)
-  image-assets.ts                 # 이미지 MIME · 크기 · Storage 경로 규칙
-
-supabase/
-  migrations/
-    001_init.sql
-    002_notion_lite.sql
-    003_workspace_member_order.sql
-
-docs/
-  plans/
-    PLAN_20260513.md              # 초기 스프레드시트 PoC 계획
-    PLAN_20260514.md              # Notion-lite 피벗 및 현재 계획
-  history/
-    DEV_260526.md                 # 2026-05-26 개발 변경 기록
-    DEV_260527.md                 # 2026-05-27 이메일 인증 개선 · 코드 리뷰 이슈
-    DEV_260528.md                 # 2026-05-28 페이지 전환 성능 개선
-    DEV_260529.md                 # 2026-05-29 Markdown 다운로드
-    DEV_260602.md                 # 2026-06-02 AGI 비활성 가드 및 검증
-    DEV_260615.md                 # 2026-06-15 이미지 붙여넣기 · 페이지 이동 · 사이드바 리사이즈
-    DEV_260805.md                 # 2026-08-05 이미지 직접 업로드 · 대용량 최적화
-```
-
----
-
-## 주요 기능
-
-**인증 · 워크스페이스**
-- 이메일 회원가입 / 로그인 (Supabase Auth)
-- 회원가입 후 이메일 인증 필수 (Supabase Email Confirmations ON)
-- 미인증 상태 로그인 시 한국어 안내 메시지 + 인증 메일 재발송 버튼 표시
-- 인증 메일 리다이렉트 URL은 `NEXT_PUBLIC_SITE_URL` 환경변수로 고정 (localhost 발송 방지)
-- 워크스페이스 생성, 조회, 이름 변경
-- 커스텀 워크스페이스 스위처
-- 워크스페이스 드래그 순서 변경 (사용자별 `workspace_members.order_index` 저장)
-- 멤버 이메일 초대 · 역할 기반 권한: `owner` / `editor` / `viewer`
-- 잘못된 refresh token 자동 정리
-
-**페이지**
-- `parent_id` 기반 중첩 페이지 트리
-- 페이지 생성, 삭제
-- 사이드바 드래그로 페이지 순서 및 계층 변경
-  - 대상 행 위/아래 영역: 같은 부모 아래 순서 변경
-  - 대상 행 가운데 영역: 해당 페이지의 하위 페이지로 이동
-- 사이드바(워크스페이스 + 페이지 목록) 스크롤 시 고정 — 에디터 영역만 스크롤됨
-- 사이드바 폭 좌우 드래그 조절 (`240px~520px`, localStorage 저장)
-- 페이지 전환 시 서버에서 최신 content 자동 fetch → "불러옴" 배지 표시 (노란색)
-- 서버 데이터 로드는 저장 트리거 없음 — 사용자 편집 시에만 저장 (Tiptap `emitUpdate: false`)
-- 페이지 전환 시 에디터 인스턴스를 재마운트하지 않고 content만 교체해 전환 비용 완화
-- 페이지 fresh fetch는 30초 TTL과 background revalidate를 사용하며, 미저장 local content가 있으면 서버 응답으로 덮어쓰지 않음
-
-**에디터**
-- 문서 제목 수정 (blur 저장)
-- 본문 자동 저장 (1.5초 디바운스) → Supabase `pages.content` JSONB에 Tiptap 문서 전체 저장
-- 수동 새로고침 전 미저장 디바운스 내용을 먼저 저장한 뒤 서버 데이터를 다시 불러옴
-- 저장 상태 배지: `저장됨` (초록, 현재 페이지 자동 저장 완료 시) · `불러옴` (노란색, 페이지 전환 및 새로고침 시) — fade-out 중에도 마지막 실제 상태 텍스트를 유지
-- 개발 환경에서는 `[save-flow]` 콘솔 로그로 page load, editor update, autosave schedule, PATCH start/success 흐름을 확인 가능
-- Tiptap 표: 열 너비 조절, 행 높이 드래그 조절
-- 목록 `Tab` / `Shift+Tab` 들여쓰기 조절
-- 클립보드 이미지 붙여넣기
-  - 원본 입력은 PNG/JPEG/WebP/GIF, 최대 20MB까지 허용
-  - 5MB 초과 PNG/JPEG/WebP는 브라우저에서 긴 변 최대 2560px의 WebP로 변환해 5MB 이하로 최적화
-  - 애니메이션 보존을 위해 GIF는 변환하지 않으며 최대 5MB까지 허용
-  - 이미지는 `pages.content`에 base64로 저장하지 않고 서버가 발급한 Signed Upload URL로 Supabase Storage `page_assets` bucket에 직접 업로드
-  - API는 업로드 전 페이지 편집 권한을 확인하고, 완료 시 Storage의 실제 MIME·크기를 다시 검증
-  - 전송 실패 시 미등록 Storage 객체를 정리하고 에디터에 오류 원인을 표시
-  - TipTap 문서에는 이미지 URL과 `assetId`, `storagePath` 메타데이터만 저장
-  - 이미지 hover 시 `Copy` 버튼 표시
-  - 앱 내부 이미지 복사 후 다른 페이지/워크스페이스에 붙여넣으면 `/api/assets/clone`으로 대상 페이지 전용 asset을 복제
-- Markdown 다운로드 시 image node는 `![alt](url)` 형식으로 export
-
-**붙여넣기 변환**
-- 마크다운 파이프 표 → 편집 가능한 표 (divider 행 유무 무관)
-  - 셀 인라인 파싱: `**bold**` `__bold__` `*italic*` `_italic_` `~~strike~~` `` `code` `` 링크
-- 펜스 코드 블록(` ```lang ``` `) → 코드 블록 노드 (syntax highlighting 적용)
-- ` ```mermaid ``` ` → Mermaid 다이어그램 노드 (바로 렌더링)
-- 클립보드 `image/*` → 이미지 업로드 후 image node 삽입
-- 앱 내부 이미지 HTML → 대상 페이지로 asset 복제 후 image node 삽입
-
-**코드 블록**
-- lowlight 기반 syntax highlighting (36개 언어, VS Code Dark+ 테마)
-- 좌측 상단 언어 배지 (언어별 고유 색상)
-
-**Mermaid 다이어그램**
-- ` ```mermaid ``` ` 붙여넣기 시 다이어그램으로 즉시 렌더링
-- flowchart, sequenceDiagram, classDiagram 등 Mermaid 전체 문법 지원
-- **편집** 버튼으로 소스 수정 후 저장 가능
-- 렌더링 오류 시 오류 메시지 표시
-
----
-
-## 현재 제약
-
-- 실시간 동시 편집 미연결 (페이지 전환 시 fetch, 헤더 새로고침 버튼으로 수동 동기화)
-- 본문 저장은 문서 JSON 전체 덮어쓰기 방식이므로, 여러 사용자가 같은 페이지를 동시에 편집하면 마지막 저장이 이전 저장을 덮을 수 있음
-- 멤버 제거 / 역할 변경 UI 없음
-- 초대 메일 발송 없음
-- Markdown 다운로드는 이미지 파일을 묶지 않고 public URL 참조로 내보냄
-
-## 추가 개발 예정
-
-- **충돌 감지 / 버전 관리**: `updated_at` 또는 별도 revision 값을 이용해 오래된 클라이언트의 전체 덮어쓰기 저장을 차단
-- **되돌리기(Undo) 히스토리**: 동시 작업 중 내용이 꼬일 경우 이전 상태로 복원 — 페이지별 버전 스냅샷 또는 Tiptap History 기반 서버 측 undo 스택 고려
-- **ZIP export**: Markdown과 이미지 파일을 함께 묶어 오프라인 백업용으로 다운로드
-
-10. 표 열 너비는 기본 Tiptap 리사이즈로 조절합니다.
-11. 표 행 높이는 행 하단 경계 드래그로 조절합니다.
-12. 설정 메뉴에서 멤버 목록을 확인하고, 가입된 사용자 이메일로 멤버를 추가합니다.
-13. 다른 사용자 변경 사항은 최상단 새로고침 버튼으로 다시 불러옵니다.
+현재 `page_assets` 생성 SQL은 [DEV_260615.md](./docs/history/DEV_260615.md)에 기록되어 있습니다. 정식 baseline migration으로 승격하는 작업이 남아 있으므로 새 Supabase 프로젝트를 구성할 때 누락하지 않도록 주의합니다.
 
 ## 권한 모델
 
-```txt
-owner
-- 워크스페이스 이름 변경
-- 멤버 추가
-- 페이지 생성 / 수정 / 삭제
-- 문서 편집
+| 기능 | owner | editor | viewer |
+|---|:---:|:---:|:---:|
+| Workspace 조회 | ✓ | ✓ | ✓ |
+| Workspace 이름 변경 | ✓ |  |  |
+| 멤버 목록 조회 | ✓ | ✓ | ✓ |
+| 멤버 추가·역할 upsert | ✓ |  |  |
+| Page 조회 | ✓ | ✓ | ✓ |
+| Page 생성·편집·이동·삭제 | ✓ | ✓ |  |
+| 문서 편집·이미지 첨부 | ✓ | ✓ |  |
 
-editor
-- 페이지 생성 / 수정 / 삭제
-- 문서 편집
+현재 멤버 추가는 초대 메일 방식이 아닙니다. 이미 가입한 사용자의 이메일을 찾아 membership을 생성합니다. 같은 이메일을 다시 추가하면 `editor`/`viewer` 역할이 갱신되며, 멤버 제거 UI/API는 아직 없습니다.
 
-viewer
-- 읽기 전용
-```
+## 보안 경계
 
-멤버 추가는 초대 링크나 메일 발송이 아니라, 이미 가입 및 이메일 인증을 완료한 사용자의 이메일을 찾아 `workspace_members`에 추가하는 방식입니다.
+- 브라우저 요청의 Supabase access token을 서버에서 다시 검증합니다.
+- 모든 workspace/page mutation은 서버에서 membership과 역할을 재확인합니다.
+- Service-role client는 `server-only` 모듈로 브라우저 bundle 유입을 차단합니다.
+- Page parent는 API와 DB trigger에서 같은 workspace·비순환 조건을 모두 검사합니다.
+- 이미지 업로드는 고정 bucket·UUID 경로·MIME allowlist·크기 제한을 사용합니다.
+- Legacy AGI는 production에서 비활성화됩니다.
+
+### Legacy AGI
+
+Legacy AGI는 local development 전용 선택 기능입니다. 다음 조건을 모두 만족해야 활성화됩니다.
+
+- `NODE_ENV=development`
+- `NEXT_PUBLIC_ENABLE_AGI=true`
+- `ENABLE_LEGACY_AGI=true`
+- 서버와 브라우저 URL이 모두 HTTPS
+- `AGI_CLIENT_SHA256`가 64자리 SHA-256 hex
+
+Production과 Preview에서는 관련 환경변수를 설정하지 않거나 false로 유지합니다.
 
 ## API
 
-```txt
+모든 일반 API는 `Authorization: Bearer <Supabase access token>` 헤더를 사용합니다.
+
+```text
 GET    /api/workspaces
 POST   /api/workspaces
 PATCH  /api/workspaces
 
+GET    /api/workspaces/:id/members
+POST   /api/workspaces/:id/members
+
 GET    /api/pages?workspaceId=...
+GET    /api/pages?id=...
 POST   /api/pages
 PATCH  /api/pages
 DELETE /api/pages?id=...
 
 POST   /api/assets              # action=prepare | complete
-DELETE /api/assets              # 실패한 미등록 업로드 정리
+DELETE /api/assets              # 미등록 업로드 취소·정리
 POST   /api/assets/clone
 
-GET    /api/workspaces/:id/members
-POST   /api/workspaces/:id/members
+GET    /api/agi                 # local legacy AGI download
+POST   /api/agi                 # local legacy AGI start/stop beacon
+DELETE /api/agi                 # local legacy AGI stop
 ```
 
-멤버 추가 요청 예시:
+## 검증
 
-```json
-{
-  "email": "user@example.com",
-  "role": "editor"
-}
+변경 후 최소 검증 명령은 다음과 같습니다.
+
+```bash
+npm ci --dry-run --ignore-scripts
+npm run typecheck
+npm run test:image-assets
+npm run test:editor-paste-priority
+npm run test:page-parent-validation
+npm run build
+npm audit --omit=dev
+git diff --check
 ```
 
-## UI 메모
+현재 테스트 범위:
 
-- 최상단 헤더는 스크롤 중에도 고정됩니다.
-- 좌측 사이드바(워크스페이스 선택 + 페이지 목록)는 스크롤 시에도 고정됩니다. 에디터 영역만 독립적으로 스크롤됩니다.
-- 좌측 사이드바에서 워크스페이스와 페이지를 관리합니다.
-- 워크스페이스 선택은 네이티브 select가 아니라 커스텀 드롭다운입니다.
-- 워크스페이스 역할 상태는 `owner` = `●`, `editor` = `◆`, `viewer` = `○`로 표시합니다.
-- 워크스페이스 드롭다운에서 항목을 드래그하면 사용자별 표시 순서가 저장됩니다.
-- 좌측 사이드바 오른쪽 경계를 드래그해 폭을 조절할 수 있습니다.
-- 페이지 목록의 긴 제목은 버튼 안에서 `...`으로 말줄임 처리됩니다.
-- 페이지 목록에서 항목을 드래그하면 순서 또는 부모 페이지를 변경할 수 있습니다.
-- 페이지 목록의 하위 페이지 추가 / 삭제 버튼은 해당 행 hover 또는 focus 때만 보입니다.
-- 페이지 헤더는 `워크스페이스 / 상위 페이지 / 현재 페이지` 형태의 경로형 제목입니다.
-- 문서 저장 상태는 페이지 헤더 우측에 고정 폭 배지로 표시합니다.
-- 별도 편집 도구 패널은 두지 않습니다.
-- 목록은 `Tab` / `Shift+Tab`으로 계층 조절이 가능합니다.
-- 표 행 높이는 표 행 하단 경계를 드래그해서 조절합니다.
+- Signed Upload 경로·MIME·크기·완료 검증
+- 에디터 붙여넣기 처리 우선순위
+- Page parent의 정상 이동·자기참조·cycle·cross-workspace 거부
 
-## 다음 작업 후보
+`npm audit`은 공개 advisory가 갱신될 수 있으므로 배포 직전에 다시 실행합니다.
 
-- Yjs + Hocuspocus 실시간 협업 연결
-- 브라우저 포커스 복귀 시 자동 동기화
-- 멤버 제거 / 역할 변경
-- 페이지 snapshot / history
-- 초대 메일 또는 공유 링크
-- 이미지 포함 ZIP export
+## 배포 체크리스트
 
-## 문서
+- [ ] `004_workspace_members_hardening.sql` 적용 후 policy/grant 확인
+- [ ] `005_pages_tree_integrity.sql` 적용 후 `pages_tree_integrity` trigger 확인
+- [ ] `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` 설정
+- [ ] 공개 Supabase 변수와 `NEXT_PUBLIC_SITE_URL` 설정
+- [ ] Supabase Auth Redirect URLs 설정
+- [ ] `NEXT_PUBLIC_ENABLE_AGI=false`, `ENABLE_LEGACY_AGI=false` 확인
+- [ ] 테스트·production build·production dependency audit 실행
+- [ ] Preview에서 로그인, workspace 생성, 멤버 추가, page CRUD, 이미지 업로드 smoke test
 
-프로젝트 문서는 `docs/plans`와 `docs/history`를 기준으로 관리합니다.
+## 프로젝트 구조
 
-```txt
-docs/plans/PLAN_YYYYMMDD.md
-docs/history/DEV_YYMMDD.md
+```text
+app/
+  api/
+    _utils/                     # 인증·API timing
+    agi/                        # local-only legacy AGI
+    assets/                     # 이미지 prepare/complete/delete/clone
+    pages/                      # page CRUD와 hierarchy 검증
+    workspaces/                 # workspace와 member API
+  p/[pageId]/                   # 짧은 page URL
+  w/[workspaceId]/              # workspace URL
+
+components/
+  notion-lite-app.tsx           # 앱 조립과 상위 상태 연결
+  document-editor.tsx           # Tiptap editor
+  notion-lite/                  # header/sidebar/tree/settings/document UI
+
+hooks/
+  use-workspace-data.ts         # workspace와 member 상태
+  use-page-data.ts              # page 목록·cache·CRUD
+  use-page-persistence.ts       # title/content 저장
+  use-selection-navigation.ts   # URL과 선택 상태
+
+lib/
+  notion-lite/                  # API client, types, tree/move/role 로직
+  supabase-admin.ts             # server-only service-role client
+  supabase-browser.ts           # browser publishable client
+  image-assets.ts               # 이미지 보안 규칙
+
+supabase/migrations/            # 순서대로 적용하는 SQL migration
+tests/                          # Node 기반 회귀·보안 테스트
+docs/plans/                     # 구현 계획
+docs/history/                   # 날짜별 개발 기록
 ```
 
-이전 `docs/specs` 문서는 날짜별 plan 문서로 통합했습니다.
+## 기술 스택
+
+| 영역 | 기술 |
+|---|---|
+| Framework | Next.js 16, React 19, TypeScript 6 |
+| UI | Tailwind CSS 4 |
+| Editor | Tiptap 3, lowlight, Mermaid |
+| Backend | Supabase Auth, Postgres, Storage |
+| 배포 | Vercel 또는 Node.js Next.js runtime |
+
+## 현재 제약과 후속 작업
+
+- 본문은 문서 JSON 전체를 저장하므로 동시 저장 시 마지막 쓰기가 이전 내용을 덮을 수 있습니다.
+- Yjs/Hocuspocus 실시간 collaboration은 아직 연결하지 않았습니다.
+- `page_assets`는 아직 history SQL에 의존하며 현재 bucket은 public URL을 사용합니다.
+- 멤버 제거·owner 이전·초대 메일 기능이 없습니다.
+- API 공통 rate limit과 request body 상한이 아직 없습니다.
+- Markdown export는 이미지 파일을 함께 묶지 않고 URL을 참조합니다.
+
+우선순위와 보안 개선 계획은 [PLAN_20260925_SECURITY_REMEDIATION_PRIORITIES.md](./docs/plans/PLAN_20260925_SECURITY_REMEDIATION_PRIORITIES.md)를 참고합니다.
+
+## 문서 관리
+
+- 구현 계획: `docs/plans/PLAN_YYYYMMDD_*.md`
+- 개발 기록: `docs/history/DEV_YYMMDD.md`
+- 에디터 문법: [EDITOR_SYNTAX.md](./docs/EDITOR_SYNTAX.md)

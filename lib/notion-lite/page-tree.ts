@@ -2,6 +2,41 @@ import type { PageRecord } from './types'
 
 const ROOT_KEY = 'root'
 
+type PageParentRecord = Pick<PageRecord, 'id' | 'workspace_id' | 'parent_id'>
+
+export function getPageParentValidationError(
+  pages: PageParentRecord[],
+  pageId: string,
+  workspaceId: string,
+  parentId: string | null,
+) {
+  if (parentId === null) return null
+  if (parentId === pageId) return 'A page cannot be its own parent'
+
+  const pagesById = new Map(pages.map(page => [page.id, page]))
+  const parent = pagesById.get(parentId)
+  if (!parent || parent.workspace_id !== workspaceId) {
+    return 'Parent page must belong to the same workspace'
+  }
+
+  const visited = new Set<string>()
+  let current: PageParentRecord | undefined = parent
+  while (current) {
+    if (current.id === pageId) return 'Page hierarchy cannot contain a cycle'
+    if (visited.has(current.id)) return 'Page hierarchy already contains a cycle'
+    visited.add(current.id)
+
+    if (!current.parent_id) return null
+    current = pagesById.get(current.parent_id)
+    if (!current) return 'Parent hierarchy is invalid'
+    if (current.workspace_id !== workspaceId) {
+      return 'Parent page must belong to the same workspace'
+    }
+  }
+
+  return null
+}
+
 export function buildPageTree(pages: PageRecord[]) {
   const byParent = new Map<string, PageRecord[]>()
 

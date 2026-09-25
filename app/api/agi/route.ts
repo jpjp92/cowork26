@@ -4,10 +4,13 @@ import { kill } from 'process'
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
+import { createHash } from 'crypto'
 
-// 짭비스 AGI 서버 주소 (환경변수 없으면 기본 서버)
-const SERVER_URL = process.env.JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777'
-const ENABLE_AGI = process.env.NEXT_PUBLIC_ENABLE_AGI === 'true'
+// Legacy AGI는 로컬 개발 환경에서만 명시적으로 활성화한다.
+// 공개 환경에서 바이너리 다운로드·실행 endpoint를 노출하지 않는다.
+const ENABLE_AGI = process.env.NODE_ENV === 'development' && process.env.ENABLE_LEGACY_AGI === 'true'
+const SERVER_URL = process.env.JJAPVIS_SERVER_URL
+const CLIENT_SHA256 = process.env.AGI_CLIENT_SHA256?.toLowerCase()
 
 // PID 파일 경로: Next.js 서버 재시작 후에도 직전 EXE 프로세스를 kill할 수 있도록 OS 임시폴더에 저장
 const PID_FILE = path.join(os.tmpdir(), 'cowork26-agi.pid')
@@ -128,17 +131,39 @@ export async function DELETE() {
 export async function GET() {
   if (!ENABLE_AGI) return disabledResponse()
 
+  if (!SERVER_URL) {
+    return NextResponse.json({ error: 'agi_server_not_configured' }, { status: 503 })
+  }
+  if (!CLIENT_SHA256 || !/^[a-f0-9]{64}$/.test(CLIENT_SHA256)) {
+    return NextResponse.json({ error: 'agi_client_hash_not_configured' }, { status: 503 })
+  }
+
+  let downloadUrl: URL
+  try {
+    downloadUrl = new URL('/download/AGI-client.exe', SERVER_URL)
+  } catch {
+    return NextResponse.json({ error: 'invalid_agi_server_url' }, { status: 503 })
+  }
+
+  if (downloadUrl.protocol !== 'https:') {
+    return NextResponse.json({ error: 'agi_server_requires_https' }, { status: 503 })
+  }
+
   if (process.platform !== 'win32') {
     return NextResponse.json({ error: 'not_supported' }, { status: 400 })
   }
   try {
-    const upstream = await fetch(`${SERVER_URL}/download/AGI-client.exe`, {
+    const upstream = await fetch(downloadUrl, {
       headers: { Accept: 'application/octet-stream' },
     })
     if (!upstream.ok) {
       return NextResponse.json({ error: 'EXE not found on AGI server' }, { status: 404 })
     }
     const buffer = Buffer.from(await upstream.arrayBuffer())
+    const actualHash = createHash('sha256').update(buffer).digest('hex')
+    if (actualHash !== CLIENT_SHA256) {
+      return NextResponse.json({ error: 'agi_client_hash_mismatch' }, { status: 502 })
+    }
     const exePath = path.join(process.cwd(), 'AGI-client.exe')
     fs.writeFileSync(exePath, buffer)
     return NextResponse.json({ ok: true, path: exePath })

@@ -30,7 +30,8 @@ import { usePagePersistence } from '../hooks/use-page-persistence'
 import { useSelectionNavigation } from '../hooks/use-selection-navigation'
 import { usePageAssets } from '../hooks/use-page-assets'
 
-const ENABLE_AGI = process.env.NEXT_PUBLIC_ENABLE_AGI === 'true'
+// Legacy AGI는 production bundle에 UI를 노출하지 않는다.
+const ENABLE_AGI = process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_ENABLE_AGI === 'true'
 const PAGE_REVALIDATE_INTERVAL_MS = 30_000
 const DEFAULT_SIDEBAR_WIDTH = 312
 const MIN_SIDEBAR_WIDTH = 240

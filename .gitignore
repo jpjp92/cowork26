@@ -23,4 +23,3 @@
 /scripts/*-test.*
 /scripts/*-review.*
 !/scripts/workspace-dropdown-review.mjs
-/tests/editor-paste-priority.test.mjs

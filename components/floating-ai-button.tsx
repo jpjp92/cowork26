@@ -3,15 +3,19 @@
 import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const AGI_PRIMARY_URL = process.env.NEXT_PUBLIC_JJAPVIS_SERVER_URL ?? 'http://49.142.52.133:1777'
+const AGI_PRIMARY_URL = process.env.NEXT_PUBLIC_JJAPVIS_SERVER_URL
 
-function getMessageTargetOrigin(url: string) {
+function getTrustedAgiOrigin(url: string | undefined) {
+  if (!url) return null
   try {
-    return new URL(url).origin
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' ? parsed.origin : null
   } catch {
-    return 'http://49.142.52.133:1777'
+    return null
   }
 }
+
+const AGI_TARGET_ORIGIN = getTrustedAgiOrigin(AGI_PRIMARY_URL)
 
 /** SVG 엘리먼트 → canvas → base64 PNG (Mermaid 다이어그램 캡처용) */
 async function svgToBase64Png(svgEl: SVGElement): Promise<string | null> {
@@ -94,12 +98,14 @@ async function collectPageContext(): Promise<{ context: string; images: string[]
 }
 
 export default function FloatingAiButton() {
+  if (!AGI_TARGET_ORIGIN) return null
+
   const [y, setY] = useState(300)
   const [panelOpen, setPanelOpen] = useState(false)
   const [launched, setLaunched] = useState(false)
   const [launching, setLaunching] = useState(false)
-  const [agiBaseUrl] = useState(AGI_PRIMARY_URL)
-  const [messageTargetOrigin] = useState(() => getMessageTargetOrigin(AGI_PRIMARY_URL))
+  const [agiBaseUrl] = useState(AGI_TARGET_ORIGIN)
+  const [messageTargetOrigin] = useState(AGI_TARGET_ORIGIN)
   // ── exe 설치 관련 상태 ──────────────────────────────────────────────
   const [needsInstall, setNeedsInstall] = useState(false)
   const [installing, setInstalling] = useState(false)
