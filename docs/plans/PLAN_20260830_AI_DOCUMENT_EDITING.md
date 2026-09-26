@@ -13,6 +13,8 @@
   - page revision, migrations, AI tables, RLS/grants, credential crypto, Vercel
 - [기능 구현 계획](./PLAN_20260831_AI_DOCUMENT_EDITING_IMPLEMENTATION.md)
   - document conversion, provider adapters, API, draft UI, apply, tests
+- [사용자 API key 기반 워크스페이스 분석 계획](./PLAN_20260926_WORKSPACE_AI_ANALYSIS_BYOK.md)
+  - BYOK credential 보안, 선택 문서 분석, 출처 표시, 검색형 workspace 분석
 
 중복 내용이 발견되면 세부 설계는 하위 문서를 따르고, 범위·우선순위·릴리스 판단은 이 Master Roadmap을 따른다.
 
@@ -27,7 +29,7 @@
 
 ## 3. Non-goals
 
-- 여러 page/workspace 일괄 처리
+- 이 로드맵의 문서 편집 범위에서는 여러 page/workspace 일괄 처리를 제외한다. 워크스페이스 분석은 별도 확장 계획에서 다룬다.
 - selection AI와 shared draft
 - tool call, web search, DB/MCP/사내 시스템 호출
 - 자동 3-way merge와 long-document chunking

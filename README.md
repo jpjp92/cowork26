@@ -292,6 +292,7 @@ docs/history/                   # 날짜별 개발 기록
 - [모바일 UI 개선 계획](./docs/plans/PLAN_20260925_MOBILE_UI.md)
 - [노션형 편집 인터랙션 및 표 UI 계획](./docs/plans/PLAN_20260926_NOTION_EDITOR_INTERACTIONS.md)
 - [사용자 입력 및 요청 크기 제한 계획](./docs/plans/PLAN_20260926_INPUT_LIMITS.md)
+- [사용자 API key 기반 워크스페이스 분석 계획](./docs/plans/PLAN_20260926_WORKSPACE_AI_ANALYSIS_BYOK.md)
 - [2026-09-26 개발 기록](./docs/history/DEV_260926.md)
 
 ## 문서 관리
