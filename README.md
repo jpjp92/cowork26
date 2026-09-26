@@ -1,6 +1,6 @@
 # Cowork26
 
-Next.js, Supabase, Tiptap 기반의 workspace 문서 편집 앱입니다. Workspace별 중첩 page, 역할 기반 접근 제어, 자동 저장, 검색, Markdown 변환, 이미지 첨부를 제공합니다.
+Next.js, Supabase, Tiptap 기반의 workspace 문서 편집 앱입니다. Workspace별 중첩 page, 역할 기반 접근 제어, 자동 저장, 검색, Markdown 변환, 표 편집, 이미지 첨부와 반응형 모바일 UI를 제공합니다.
 
 현재는 서버 저장 기반 협업 모델입니다. Yjs와 Hocuspocus 패키지는 설치되어 있지만 실시간 동시 편집에는 연결하지 않았습니다.
 
@@ -21,10 +21,22 @@ Next.js, Supabase, Tiptap 기반의 workspace 문서 편집 앱입니다. Worksp
 - 같은 workspace의 page만 부모로 지정 가능하며 자기참조와 cycle 차단
 - 제목 blur 저장 및 본문 1.5초 debounce 자동 저장
 - page 검색 및 Markdown 다운로드
-- 표 열 너비·행 높이 조절
+- 페이지 행 우클릭·`⋯` 공통 메뉴와 모바일 bottom sheet
+- `/table`·`/표` 명령을 통한 2×2, 3×3, 4×4 표 생성
+- 표 행·열 추가/삭제, header 전환, 셀 병합·분할, 표 삭제
+- 표 열 너비·행 높이 조절과 문서 폭 내부 가로 스크롤
+- 선택 텍스트의 3단계 글자 크기 조절 (`13px`, 기본, `20px`)
 - 코드 블록 syntax highlighting
 - Markdown 표·목록·제목·인라인 문법 붙여넣기 변환
 - Mermaid 코드 블록 렌더링 및 소스 편집
+
+### 모바일 UI
+
+- 모바일 헤더에서 페이지 탐색과 검색에 바로 접근
+- 페이지 목록을 backdrop·Escape로 닫을 수 있는 sidebar drawer로 표시
+- 페이지 작업 메뉴와 설정을 작은 화면에 맞는 bottom sheet로 표시
+- 주요 모바일 버튼에 44×44px 터치 영역 적용
+- 넓은 표는 문서나 sidebar를 밀어내지 않고 표 내부에서만 가로 스크롤
 
 ### 이미지
 
@@ -270,9 +282,17 @@ docs/history/                   # 날짜별 개발 기록
 - `page_assets`는 아직 history SQL에 의존하며 현재 bucket은 public URL을 사용합니다.
 - 멤버 제거·owner 이전·초대 메일 기능이 없습니다.
 - API 공통 rate limit과 request body 상한이 아직 없습니다.
+- 제목·이름·검색어·문서 JSON의 입력 크기 제한은 계획 단계이며 아직 적용되지 않았습니다.
 - Markdown export는 이미지 파일을 함께 묶지 않고 URL을 참조합니다.
 
 우선순위와 보안 개선 계획은 [PLAN_20260925_SECURITY_REMEDIATION_PRIORITIES.md](./docs/plans/PLAN_20260925_SECURITY_REMEDIATION_PRIORITIES.md)를 참고합니다.
+
+최근 UI 및 입력 제한 계획:
+
+- [모바일 UI 개선 계획](./docs/plans/PLAN_20260925_MOBILE_UI.md)
+- [노션형 편집 인터랙션 및 표 UI 계획](./docs/plans/PLAN_20260926_NOTION_EDITOR_INTERACTIONS.md)
+- [사용자 입력 및 요청 크기 제한 계획](./docs/plans/PLAN_20260926_INPUT_LIMITS.md)
+- [2026-09-26 개발 기록](./docs/history/DEV_260926.md)
 
 ## 문서 관리
 

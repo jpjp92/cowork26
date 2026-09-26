@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import type { PageDropPosition, PageRecord } from '../../lib/notion-lite/types'
+import { ContextMenu, ContextMenuItem } from './context-menu'
 
 interface PageTreeProps {
   tree: Map<string, PageRecord[]>
@@ -30,7 +31,11 @@ export function PageTree({
 }: PageTreeProps) {
   const draggedIdRef = useRef<string | null>(null)
   const [dragOver, setDragOver] = useState<{ id: string; position: PageDropPosition } | null>(null)
-  const [openActionsId, setOpenActionsId] = useState<string | null>(null)
+  const [menuState, setMenuState] = useState<{ page: PageRecord; x: number; y: number } | null>(null)
+
+  const openMenu = (page: PageRecord, x: number, y: number) => {
+    setMenuState({ page, x, y })
+  }
 
   const renderItems = (parentId: string | null, depth = 0): React.ReactNode => {
     const items = tree.get(parentId ?? 'root') ?? []
@@ -51,6 +56,10 @@ export function PageTree({
               dragOver?.id === page.id && dragOver.position === 'inside' ? 'bg-[#50504d] ring-2 ring-[#baf7c8]' : ''
             }`}
             draggable={canEdit}
+            onContextMenu={event => {
+              event.preventDefault()
+              openMenu(page, event.clientX, event.clientY)
+            }}
             onDragStart={() => { draggedIdRef.current = page.id }}
             onDragEnd={() => { draggedIdRef.current = null; setDragOver(null) }}
             onDragOver={event => {
@@ -106,7 +115,7 @@ export function PageTree({
             </button>
 
             <button
-              onClick={() => { setOpenActionsId(null); onOpen(page.id) }}
+              onClick={() => { setMenuState(null); onOpen(page.id) }}
               className={`flex min-h-11 min-w-0 flex-1 items-center rounded-[4px] px-2 text-left text-sm transition-colors md:min-h-8 ${
                 isActive
                   ? 'border border-black bg-[#baf7c8] font-black text-black shadow-[2px_2px_0_#000]'
@@ -116,81 +125,24 @@ export function PageTree({
               <span className="block min-w-0 truncate">{page.title}</span>
             </button>
 
-            <div className="hidden shrink-0 gap-1 pl-1 opacity-0 transition-opacity group-hover/page-row:opacity-100 group-focus-within/page-row:opacity-100 md:flex">
-              {canEdit && (
-                <button
-                  onClick={() => onCreateChild(page.id)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:bg-[#50504d] hover:text-white"
-                  title="하위 페이지 추가"
-                >
-                  +
-                </button>
-              )}
-              {canEdit && (
-                <button
-                  onClick={() => onRequestDelete(page.id)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:text-red-300"
-                  title="페이지 삭제"
-                >
-                  ×
-                </button>
-              )}
-              <button
-                onClick={() => onDownloadMarkdown(page)}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-xs text-neutral-400 hover:bg-[#50504d] hover:text-white"
-                title="마크다운으로 다운로드"
-              >
-                ↓
-              </button>
-            </div>
             <button
               type="button"
               aria-label={`${page.title} 페이지 작업`}
-              aria-expanded={openActionsId === page.id}
+              aria-haspopup="menu"
+              aria-expanded={menuState?.page.id === page.id}
               onClick={event => {
                 event.stopPropagation()
-                setOpenActionsId(current => current === page.id ? null : page.id)
+                if (menuState?.page.id === page.id) {
+                  setMenuState(null)
+                  return
+                }
+                const rect = event.currentTarget.getBoundingClientRect()
+                openMenu(page, rect.right - 208, rect.bottom + 4)
               }}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] text-lg font-black text-neutral-200 hover:bg-[#50504d] hover:text-white md:hidden"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] text-lg font-black text-neutral-200 hover:bg-[#50504d] hover:text-white md:h-7 md:w-7 md:opacity-0 md:group-hover/page-row:opacity-100 md:group-focus-within/page-row:opacity-100"
             >
               ⋯
             </button>
-            {openActionsId === page.id && (
-              <div
-                role="menu"
-                aria-label={`${page.title} 페이지 작업`}
-                className="absolute right-0 top-[calc(100%+4px)] z-30 w-44 rounded-[8px] border border-black bg-[#50504d] p-1.5 text-white shadow-[4px_4px_0_#000] md:hidden"
-              >
-                {canEdit && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { setOpenActionsId(null); onCreateChild(page.id) }}
-                    className="min-h-11 w-full rounded-[6px] px-3 text-left text-sm font-bold hover:bg-[#62625f]"
-                  >
-                    하위 페이지 추가
-                  </button>
-                )}
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => { setOpenActionsId(null); onDownloadMarkdown(page) }}
-                  className="min-h-11 w-full rounded-[6px] px-3 text-left text-sm font-bold hover:bg-[#62625f]"
-                >
-                  마크다운 다운로드
-                </button>
-                {canEdit && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { setOpenActionsId(null); onRequestDelete(page.id) }}
-                    className="min-h-11 w-full rounded-[6px] px-3 text-left text-sm font-bold text-red-200 hover:bg-[#62625f]"
-                  >
-                    페이지 삭제
-                  </button>
-                )}
-              </div>
-            )}
           </div>
 
           {dragOver?.id === page.id && dragOver.position === 'below' && (
@@ -207,5 +159,36 @@ export function PageTree({
     })
   }
 
-  return renderItems(null)
+  const selectedPage = menuState?.page
+
+  return (
+    <>
+      {renderItems(null)}
+      {menuState && selectedPage && (
+        <ContextMenu
+          label={`${selectedPage.title} 페이지 작업`}
+          x={menuState.x}
+          y={menuState.y}
+          onClose={() => setMenuState(null)}
+        >
+          <ContextMenuItem onSelect={() => { setMenuState(null); onOpen(selectedPage.id) }}>
+            페이지 열기
+          </ContextMenuItem>
+          {canEdit && (
+            <ContextMenuItem onSelect={() => { setMenuState(null); onCreateChild(selectedPage.id) }}>
+              하위 페이지 추가
+            </ContextMenuItem>
+          )}
+          <ContextMenuItem onSelect={() => { setMenuState(null); onDownloadMarkdown(selectedPage) }}>
+            마크다운 다운로드
+          </ContextMenuItem>
+          {canEdit && (
+            <ContextMenuItem destructive onSelect={() => { setMenuState(null); onRequestDelete(selectedPage.id) }}>
+              페이지 삭제
+            </ContextMenuItem>
+          )}
+        </ContextMenu>
+      )}
+    </>
+  )
 }

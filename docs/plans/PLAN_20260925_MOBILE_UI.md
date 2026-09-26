@@ -273,6 +273,15 @@ npm run build
 
 ## 1차 구현 후 전반 UI 검토 결과
 
+### 2026-09-26 추가 보완
+
+- [x] `app/layout.tsx`에 `width=device-width`, `initialScale=1`, `viewportFit=cover` viewport 설정을 명시했다.
+- [x] 모바일 사이드바의 `visibility`·transform 기반 표시를 실제 `hidden`/`flex` 전환으로 단순화해 세로 화면에서 회전 전까지 보이지 않던 repaint 문제를 제거했다.
+- [x] 페이지 작업 메뉴를 우클릭과 `⋯`가 공유하는 컴포넌트로 통합하고 모바일에서는 bottom sheet로 표시한다.
+- [x] 넓은 표가 문서 컨테이너를 확장하지 않고 표 wrapper 안에서만 가로 스크롤되도록 폭을 제한했다.
+- [x] 모바일 헤더에서 새로고침 대신 페이지 검색을 바로 노출하고, 데스크톱의 sidebar 검색 위치는 유지했다.
+- [ ] 실제 iOS Safari와 Android Chrome에서 세로 첫 진입, 회전, 키보드 노출 상태를 추가 확인한다.
+
 ### P1 — 다음 구현 권장
 
 - [ ] 모바일 페이지 작업 메뉴에 이름 변경과 명시적 이동 대상 선택 UI를 추가한다. 현재 생성·다운로드·삭제까지만 터치 메뉴로 제공한다.

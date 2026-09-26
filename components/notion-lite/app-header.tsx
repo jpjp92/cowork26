@@ -16,6 +16,7 @@ interface AppHeaderProps {
   inviteLoading: boolean
   mobileNavigationOpen: boolean
   onToggleMobileNavigation: () => void
+  onSearch: () => void
   onRefresh: () => void
   onToggleSettings: () => void
   onInviteEmailChange: (email: string) => void
@@ -38,6 +39,7 @@ export function AppHeader({
   inviteLoading,
   mobileNavigationOpen,
   onToggleMobileNavigation,
+  onSearch,
   onRefresh,
   onToggleSettings,
   onInviteEmailChange,
@@ -69,10 +71,24 @@ export function AppHeader({
 
       <div className="relative flex min-w-0 items-center gap-2" ref={settingsContainerRef}>
         <button
+          type="button"
+          onClick={onSearch}
+          disabled={!workspace}
+          aria-label="페이지 검색"
+          aria-controls="page-search-dialog"
+          className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:bg-[#baf7c8] hover:text-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-40 md:hidden"
+          title="페이지 검색"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current" strokeWidth="2.25">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="m16 16 4 4" strokeLinecap="round" />
+          </svg>
+        </button>
+        <button
           onClick={onRefresh}
           disabled={refreshing}
           aria-label="새로고침"
-          className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40 sm:h-9 sm:w-9"
+          className="hidden h-9 w-9 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] disabled:opacity-40 md:flex"
           title="새로고침"
         >
           {refreshing

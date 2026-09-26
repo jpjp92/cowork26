@@ -72,6 +72,7 @@ export function SearchModal({ open, pages, onClose, onSelect }: SearchModalProps
 
   return (
     <div
+      id="page-search-dialog"
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-3 pt-[max(1rem,env(safe-area-inset-top))] sm:p-4 sm:pt-[12vh]"
       onClick={onClose}
       role="dialog"

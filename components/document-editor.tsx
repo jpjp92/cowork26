@@ -1,7 +1,8 @@
 'use client'
 
-import { Extension, InputRule, Mark, Node, mergeAttributes } from '@tiptap/core'
-import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
+import { Extension, InputRule, Mark, Node, mergeAttributes, type Editor } from '@tiptap/core'
+import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, useEditorState } from '@tiptap/react'
+import { BubbleMenu } from '@tiptap/react/menus'
 import type { NodeViewProps } from '@tiptap/react'
 import { DOMParser as ProseMirrorDOMParser, Fragment, Slice } from '@tiptap/pm/model'
 import type { Node as ProseMirrorNode, Schema } from '@tiptap/pm/model'
@@ -227,6 +228,313 @@ interface DocumentEditorProps {
     storagePath?: string
     alt?: string
   }>
+}
+
+function TableMenuButton({
+  children,
+  onClick,
+  disabled = false,
+  destructive = false,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+  disabled?: boolean
+  destructive?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onMouseDown={event => event.preventDefault()}
+      onClick={onClick}
+      className={`min-h-9 shrink-0 rounded-[6px] border border-black px-2.5 text-xs font-black shadow-[2px_2px_0_#000] outline-none focus-visible:ring-2 focus-visible:ring-[#baf7c8] disabled:cursor-not-allowed disabled:opacity-35 ${
+        destructive ? 'bg-[#fca5a5] text-black hover:bg-[#f87171]' : 'bg-white text-black hover:bg-[#baf7c8]'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function insertTableAtSelection(editor: Editor, rows: number, cols: number) {
+  const { $from } = editor.state.selection
+  const currentText = $from.parent.isTextblock ? $from.parent.textContent : ''
+  const command = editor.chain().focus()
+
+  if (/^\/(?:table|표)?$/i.test(currentText)) {
+    command.deleteRange({ from: $from.start(), to: $from.end() })
+  }
+
+  command.insertTable({ rows, cols, withHeaderRow: true }).run()
+}
+
+const TEXT_SIZE_OPTIONS = [
+  { label: '작게', size: '13px' },
+  { label: '기본', size: null },
+  { label: '크게', size: '20px' },
+] as const
+
+function TextSizeMenu({ editor, editable }: { editor: Editor | null; editable: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const activeSize = useEditorState({
+    editor,
+    selector: ({ editor: activeEditor }) => (
+      activeEditor?.getAttributes('fontSize').size as string | undefined
+    ) ?? null,
+  })
+
+  useEffect(() => {
+    if (!editor) return
+    const collapse = () => setExpanded(false)
+    editor.on('selectionUpdate', collapse)
+    return () => {
+      editor.off('selectionUpdate', collapse)
+    }
+  }, [editor])
+
+  if (!editor || !editable) return null
+
+  const activeLabel = TEXT_SIZE_OPTIONS.find(option => option.size === (activeSize ?? null))?.label ?? '사용자 지정'
+  const applySize = (size: string | null) => {
+    const chain = editor.chain().focus()
+    if (size) chain.setMark('fontSize', { size }).run()
+    else chain.unsetMark('fontSize').run()
+    setExpanded(false)
+  }
+
+  return (
+    <BubbleMenu
+      editor={editor}
+      pluginKey="textSizeMenu"
+      shouldShow={({ state }) => {
+        const { selection } = state
+        if (selection.empty || selection.from === selection.to) return false
+        if (selection.$from.parent.type.name === 'codeBlock') return false
+        return state.doc.textBetween(selection.from, selection.to, ' ').trim().length > 0
+      }}
+      options={{ placement: 'top', flip: true, shift: true }}
+      role="toolbar"
+      aria-label="글자 크기"
+      className={expanded
+        ? 'flex w-[min(17rem,calc(100vw-1rem))] items-center gap-1.5 rounded-[8px] border border-black bg-[#50504d] p-1.5 text-white shadow-[4px_4px_0_#000]'
+        : 'rounded-[8px] border border-black bg-[#50504d] p-1 text-white shadow-[3px_3px_0_#000]'}
+    >
+      {!expanded ? (
+        <button
+          type="button"
+          aria-expanded="false"
+          onMouseDown={event => event.preventDefault()}
+          onClick={() => setExpanded(true)}
+          className="flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-xs font-black hover:bg-[#62625f] focus-visible:outline-2 focus-visible:outline-[#baf7c8]"
+        >
+          <span aria-hidden="true">Aa</span>
+          크기: {activeLabel}
+        </button>
+      ) : (
+        <>
+          {TEXT_SIZE_OPTIONS.map(option => (
+            <button
+              key={option.label}
+              type="button"
+              aria-pressed={option.size === (activeSize ?? null)}
+              onMouseDown={event => event.preventDefault()}
+              onClick={() => applySize(option.size)}
+              className={`h-9 min-w-0 flex-1 rounded-[6px] border border-black px-2 text-xs font-black text-black shadow-[2px_2px_0_#000] focus-visible:outline-2 focus-visible:outline-[#baf7c8] ${
+                option.size === (activeSize ?? null) ? 'bg-[#baf7c8]' : 'bg-white hover:bg-[#e7e2d9]'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-label="글자 크기 메뉴 닫기"
+            onMouseDown={event => event.preventDefault()}
+            onClick={() => setExpanded(false)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] text-base font-black hover:bg-[#62625f]"
+          >
+            ×
+          </button>
+        </>
+      )}
+    </BubbleMenu>
+  )
+}
+
+function TableInsertMenu({ editor, editable }: { editor: Editor | null; editable: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+
+  useEffect(() => {
+    if (!editor) return
+    const collapseWhenCommandCloses = () => {
+      const { $from } = editor.state.selection
+      if (!$from.parent.isTextblock || !/^\/(?:t(?:a(?:b(?:l(?:e)?)?)?)?|표)$/i.test($from.parent.textContent)) {
+        setExpanded(false)
+      }
+    }
+    editor.on('transaction', collapseWhenCommandCloses)
+    return () => { editor.off('transaction', collapseWhenCommandCloses) }
+  }, [editor])
+
+  if (!editor || !editable) return null
+
+  return (
+    <BubbleMenu
+      editor={editor}
+      pluginKey="tableInsertMenu"
+      shouldShow={({ state }) => {
+        const { $from } = state.selection
+        if (!$from.parent.isTextblock || $from.parent.type.name !== 'paragraph') return false
+        const text = $from.parent.textContent
+        return /^\/(?:t(?:a(?:b(?:l(?:e)?)?)?)?|표)$/i.test(text)
+      }}
+      getReferencedVirtualElement={() => {
+        const domAtSelection = editor.view.domAtPos(editor.state.selection.from).node
+        const element = domAtSelection instanceof HTMLElement
+          ? domAtSelection
+          : domAtSelection.parentElement
+        return element?.closest('p') ?? element ?? null
+      }}
+      options={{ placement: 'bottom-start', flip: true, shift: true }}
+      role="toolbar"
+      aria-label="표 추가"
+      className={expanded
+        ? 'flex w-[min(18rem,calc(100vw-1rem))] items-center justify-center gap-1.5 rounded-[8px] border border-black bg-[#50504d] p-1.5 text-white shadow-[4px_4px_0_#000]'
+        : 'rounded-[8px] border border-black bg-[#50504d] p-1 text-white shadow-[3px_3px_0_#000]'}
+    >
+      {!expanded ? (
+        <button
+          type="button"
+          aria-expanded="false"
+          onMouseDown={event => event.preventDefault()}
+          onClick={() => setExpanded(true)}
+          className="flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-xs font-black hover:bg-[#62625f] focus-visible:outline-2 focus-visible:outline-[#baf7c8]"
+        >
+          <span aria-hidden="true">＋</span>
+          표 만들기
+        </button>
+      ) : (
+        <>
+          <span className="shrink-0 px-1 text-[11px] font-black">크기</span>
+          {[2, 3, 4].map(size => (
+            <TableMenuButton
+              key={size}
+              onClick={() => {
+                setExpanded(false)
+                insertTableAtSelection(editor, size, size)
+              }}
+            >
+              {size}×{size}
+            </TableMenuButton>
+          ))}
+          <button
+            type="button"
+            aria-label="표 크기 선택 닫기"
+            onMouseDown={event => event.preventDefault()}
+            onClick={() => setExpanded(false)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] text-base font-black hover:bg-[#62625f]"
+          >
+            ×
+          </button>
+        </>
+      )}
+    </BubbleMenu>
+  )
+}
+
+function TableContextMenu({ editor, editable }: { editor: Editor | null; editable: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  if (!editor || !editable) return null
+
+  const run = (command: (chain: ReturnType<Editor['chain']>) => ReturnType<Editor['chain']>) => {
+    command(editor.chain().focus()).run()
+    setExpanded(false)
+  }
+
+  return (
+    <BubbleMenu
+      editor={editor}
+      pluginKey="tableContextMenu"
+      shouldShow={({ editor: activeEditor }) => activeEditor.isActive('table')}
+      getReferencedVirtualElement={() => {
+        const domAtSelection = editor.view.domAtPos(editor.state.selection.from).node
+        const element = domAtSelection instanceof HTMLElement
+          ? domAtSelection
+          : domAtSelection.parentElement
+        return element?.closest('table') ?? null
+      }}
+      options={{ placement: 'right-start', flip: true, shift: true }}
+      role="toolbar"
+      aria-label="표 편집"
+      className={expanded
+        ? 'grid max-h-[min(20rem,calc(100dvh-2rem))] w-[min(13rem,calc(100vw-1rem))] grid-cols-1 gap-1.5 overflow-y-auto overscroll-contain rounded-[8px] border border-black bg-[#50504d] p-2 text-white shadow-[4px_4px_0_#000]'
+        : 'rounded-[8px] border border-black bg-[#50504d] p-1 text-white shadow-[3px_3px_0_#000]'}
+    >
+      {!expanded ? (
+        <button
+          type="button"
+          aria-expanded="false"
+          onMouseDown={event => event.preventDefault()}
+          onClick={() => setExpanded(true)}
+          className="flex h-9 items-center gap-1.5 rounded-[6px] bg-[#50504d] px-2.5 text-xs font-black hover:bg-[#62625f] focus-visible:outline-2 focus-visible:outline-[#baf7c8]"
+        >
+          <span aria-hidden="true">⋯</span>
+          표 옵션
+        </button>
+      ) : (
+        <>
+      <div className="flex items-center justify-between gap-2 px-1 pb-0.5">
+        <span className="text-xs font-black">표 옵션</span>
+        <button
+          type="button"
+          aria-label="표 옵션 닫기"
+          onMouseDown={event => event.preventDefault()}
+          onClick={() => setExpanded(false)}
+          className="flex h-7 w-7 items-center justify-center rounded-[6px] text-base font-black hover:bg-[#62625f]"
+        >
+          ×
+        </button>
+      </div>
+      <div className="flex items-center gap-1.5 rounded-[6px] border border-black bg-[#62625f] p-1.5">
+        <span className="w-7 shrink-0 text-[10px] font-black uppercase text-neutral-200">행</span>
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5">
+          <TableMenuButton onClick={() => run(chain => chain.addRowAfter())}>추가</TableMenuButton>
+          <TableMenuButton destructive onClick={() => run(chain => chain.deleteRow())}>삭제</TableMenuButton>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 rounded-[6px] border border-black bg-[#62625f] p-1.5">
+        <span className="w-7 shrink-0 text-[10px] font-black uppercase text-neutral-200">열</span>
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5">
+          <TableMenuButton onClick={() => run(chain => chain.addColumnAfter())}>추가</TableMenuButton>
+          <TableMenuButton destructive onClick={() => run(chain => chain.deleteColumn())}>삭제</TableMenuButton>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 rounded-[6px] border border-black bg-[#62625f] p-1.5">
+        <span className="w-7 shrink-0 text-[10px] font-black uppercase text-neutral-200">셀</span>
+        <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5">
+          <TableMenuButton onClick={() => run(chain => chain.toggleHeaderRow())}>헤더</TableMenuButton>
+          {editor.can().chain().focus().splitCell().run() ? (
+            <TableMenuButton onClick={() => run(chain => chain.splitCell())}>분할</TableMenuButton>
+          ) : (
+            <TableMenuButton
+              disabled={!editor.can().chain().focus().mergeCells().run()}
+              onClick={() => run(chain => chain.mergeCells())}
+            >
+              병합
+            </TableMenuButton>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 rounded-[6px] border border-black bg-[#62625f] p-1.5">
+        <span className="w-7 shrink-0 text-[10px] font-black uppercase text-neutral-200">표</span>
+        <div className="min-w-0 flex-1 [&>button]:w-full">
+          <TableMenuButton destructive onClick={() => run(chain => chain.deleteTable())}>표 전체 삭제</TableMenuButton>
+        </div>
+      </div>
+        </>
+      )}
+    </BubbleMenu>
+  )
 }
 
 const EMPTY_DOC_CONTENT: Record<string, unknown> = {
@@ -1117,7 +1425,7 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
       TableHeader,
       TableCell,
       Placeholder.configure({
-        placeholder: '내용을 입력하세요.',
+        placeholder: '내용을 입력하세요. 표 추가: /table',
       }),
     ],
     content: resolvedContent,
@@ -1398,7 +1706,7 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
   }, [resolvedContent, editor])
 
   return (
-    <div>
+    <div className="min-w-0 max-w-full overflow-x-hidden">
       {imageError && (
         <div
           role="alert"
@@ -1414,6 +1722,9 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
           </button>
         </div>
       )}
+      <TextSizeMenu editor={editor} editable={editable} />
+      <TableInsertMenu editor={editor} editable={editable} />
+      <TableContextMenu editor={editor} editable={editable} />
       <EditorContent editor={editor} />
     </div>
   )

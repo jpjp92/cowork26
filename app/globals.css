@@ -99,6 +99,8 @@ textarea {
 }
 
 .ProseMirror {
+  max-width: 100%;
+  min-width: 0;
   min-height: 55vh;
   outline: none;
   color: #1d1c16;
@@ -305,9 +307,13 @@ textarea {
 .hljs-strong { font-weight: bold; }
 
 .ProseMirror .tableWrapper {
+  box-sizing: border-box;
+  display: block;
   margin: 0.85rem 0;
   max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  width: 100%;
 }
 
 .ProseMirror table {

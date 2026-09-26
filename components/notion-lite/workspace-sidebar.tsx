@@ -93,12 +93,12 @@ export function WorkspaceSidebar({
       <button
         type="button"
         aria-label="페이지 탐색 닫기"
-        className={`fixed inset-0 top-16 z-40 bg-black/45 transition-opacity md:hidden ${mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+        className={`fixed inset-0 top-16 z-40 bg-black/45 md:hidden ${mobileOpen ? 'block' : 'hidden'}`}
         onClick={onCloseMobile}
       />
     <aside
       id="workspace-sidebar"
-      className={`fixed inset-y-0 left-0 z-50 flex w-[min(88vw,22rem)] shrink-0 flex-col border-r border-black bg-[#62625f] pt-[env(safe-area-inset-top)] shadow-[6px_0_0_#000] transition-[transform,visibility] duration-200 md:visible md:relative md:z-auto md:w-[var(--sidebar-width)] md:translate-x-0 md:pt-0 md:shadow-none ${mobileOpen ? 'visible translate-x-0' : 'invisible -translate-x-[calc(100%+8px)]'}`}
+      className={`fixed inset-y-0 left-0 z-50 w-[min(88vw,22rem)] shrink-0 flex-col border-r border-black bg-[#62625f] pt-[env(safe-area-inset-top)] shadow-[6px_0_0_#000] md:relative md:z-auto md:flex md:w-[var(--sidebar-width)] md:pt-0 md:shadow-none ${mobileOpen ? 'flex' : 'hidden'}`}
       style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
     >
       <div className="flex items-center justify-between border-b border-black px-3 py-2 text-white md:hidden">
