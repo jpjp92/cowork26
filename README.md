@@ -32,9 +32,9 @@ Next.js, Supabase, Tiptap 기반의 workspace 문서 편집 앱입니다. Worksp
 
 ### 모바일 UI
 
-- 모바일 헤더에서 페이지 탐색과 검색에 바로 접근
+- 모바일 헤더에서 페이지 탐색에 접근하고, 검색은 sidebar의 Pages 영역에서 실행
 - 페이지 목록을 backdrop·Escape로 닫을 수 있는 sidebar drawer로 표시
-- 페이지 작업 메뉴와 설정을 작은 화면에 맞는 bottom sheet로 표시
+- 페이지 작업 메뉴는 bottom sheet, 설정은 전체 높이 우측 drawer로 표시
 - 주요 모바일 버튼에 44×44px 터치 영역 적용
 - 넓은 표는 문서나 sidebar를 밀어내지 않고 표 내부에서만 가로 스크롤
 

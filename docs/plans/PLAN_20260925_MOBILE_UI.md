@@ -279,14 +279,14 @@ npm run build
 - [x] 모바일 사이드바의 `visibility`·transform 기반 표시를 실제 `hidden`/`flex` 전환으로 단순화해 세로 화면에서 회전 전까지 보이지 않던 repaint 문제를 제거했다.
 - [x] 페이지 작업 메뉴를 우클릭과 `⋯`가 공유하는 컴포넌트로 통합하고 모바일에서는 bottom sheet로 표시한다.
 - [x] 넓은 표가 문서 컨테이너를 확장하지 않고 표 wrapper 안에서만 가로 스크롤되도록 폭을 제한했다.
-- [x] 모바일 헤더에서 새로고침 대신 페이지 검색을 바로 노출하고, 데스크톱의 sidebar 검색 위치는 유지했다.
-- [x] 설정 패널의 모바일 breakpoint를 앱과 같은 `md`로 통일하고, 화면 하단에 붙는 full-width sheet와 backdrop으로 정리했다.
+- [x] 검색 위치는 데스크톱과 모바일 모두 sidebar의 Pages 영역으로 통일했다.
+- [x] 설정 패널의 모바일 breakpoint를 앱과 같은 `md`로 통일하고, 설정 버튼 방향과 이어지는 전체 높이 우측 drawer와 backdrop으로 정리했다.
 - [ ] 실제 iOS Safari와 Android Chrome에서 세로 첫 진입, 회전, 키보드 노출 상태를 추가 확인한다.
 
 ### P1 — 다음 구현 권장
 
 - [ ] 모바일 페이지 작업 메뉴에 이름 변경과 명시적 이동 대상 선택 UI를 추가한다. 현재 생성·다운로드·삭제까지만 터치 메뉴로 제공한다.
-- [ ] drawer, 설정 sheet, 검색 modal, 삭제 dialog에 공통 focus trap과 트리거 포커스 복귀 유틸리티를 적용한다.
+- [ ] sidebar·설정 drawer, 검색 modal, 삭제 dialog에 공통 focus trap과 트리거 포커스 복귀 유틸리티를 적용한다.
 - [ ] 워크스페이스 순서 변경도 native drag 외에 위/아래 이동 버튼을 제공한다.
 - [ ] 성공·실패 피드백을 화면 상단 고정 오류문 대신 공통 toast/status 영역으로 통일하고 `aria-live`를 적용한다.
 - [ ] 검색 결과와 긴 페이지 트리에서 현재 항목이 화면 안으로 자동 스크롤되는지 보장한다.
@@ -298,6 +298,29 @@ npm run build
 - [ ] destructive action의 빨간색, 저장 상태의 초록색, 로딩 상태 표현을 공통 토큰으로 정의한다.
 - [ ] 빈 상태에서 다음 행동 버튼을 직접 제공해 설명 문구만 표시되는 화면을 줄인다.
 - [ ] `prefers-reduced-motion`에서 hover 이동·drawer transition·loading animation을 줄인다.
+
+### 2026-09-26 2차 전반 UI 검토
+
+#### P0 — 반응형 기준 통일
+
+- [ ] 앱 탐색 기준인 `md(768px)`에 맞춰 문서 카드, 제목, breadcrumb와 오버레이의 `sm` 분기를 정리한다.
+- [ ] 320px, 390px, 640px, 768px에서 sidebar·문서·설정의 표시 모드가 서로 어긋나지 않는지 확인한다.
+
+#### P1 — 정보 구조와 접근성
+
+- [ ] sidebar에는 워크스페이스 선택, 검색, 페이지 생성·탐색만 남기고 이름 변경 등 관리 기능은 설정으로 이동한다.
+- [ ] 설정을 계정, 워크스페이스, 멤버 관리, 로그아웃 구역으로 나눈다.
+- [ ] 멤버 제거와 기존 멤버 역할 변경을 별도 동작으로 제공하고 owner 보호 규칙을 표시한다.
+- [ ] 설정 drawer에 최초 포커스, focus trap, Escape와 설정 trigger 포커스 복귀를 적용한다.
+- [ ] 검색 modal, 페이지 menu, 삭제 dialog에도 동일한 overlay 접근성 규칙을 적용한다.
+
+#### P2 — 시각 언어 정리
+
+- [x] 헤더는 별도 박스 로고 없이 `Cowork26` 워드마크만 표시한다.
+- [ ] 강한 검은 border와 shadow는 문서 카드와 주요 CTA에 집중하고 일반 행·보조 버튼에서는 강도를 낮춘다.
+- [ ] 문자 아이콘과 SVG를 하나의 아이콘 체계로 통일하고 크기·선 굵기를 맞춘다.
+- [ ] Workspace, Pages, Members, Add, Logout 등 혼합 언어를 한국어 중심으로 통일한다.
+- [ ] 반복되는 버튼·상태 색상·focus-visible 스타일을 공통 variant 또는 token으로 정리한다.
 
 ### 검증 제약
 

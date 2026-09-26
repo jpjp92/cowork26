@@ -544,12 +544,6 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
           setSettingsOpen(false)
           setMobileSidebarOpen(open => !open)
         }}
-        onSearch={() => {
-          setMobileSidebarOpen(false)
-          setWorkspaceMenuOpen(false)
-          setSettingsOpen(false)
-          setSearchOpen(true)
-        }}
         onRefresh={refreshWorkspaceData}
         onToggleSettings={() => {
           setMobileSidebarOpen(false)

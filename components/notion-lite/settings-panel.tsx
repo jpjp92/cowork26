@@ -44,7 +44,7 @@ export function SettingsPanel({
         id="settings-panel"
         role="dialog"
         aria-label="설정"
-        className="fixed inset-x-0 bottom-0 z-50 max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain rounded-t-[12px] border-t border-black bg-[#50504d] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-white shadow-[0_-5px_0_#000] md:absolute md:inset-x-auto md:bottom-auto md:right-0 md:top-11 md:max-h-[calc(100dvh-5rem)] md:w-[min(20rem,calc(100vw-2rem))] md:rounded-[8px] md:border md:p-3 md:shadow-[5px_5px_0_#000]"
+        className="fixed inset-y-0 right-0 z-50 w-[min(92vw,24rem)] overflow-y-auto overscroll-contain border-l border-black bg-[#50504d] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] text-white shadow-[-6px_0_0_#000] md:absolute md:inset-y-auto md:right-0 md:top-11 md:max-h-[calc(100dvh-5rem)] md:w-[min(20rem,calc(100vw-2rem))] md:rounded-[8px] md:border md:p-3 md:shadow-[5px_5px_0_#000]"
       >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
