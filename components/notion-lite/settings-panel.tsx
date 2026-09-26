@@ -34,12 +34,18 @@ export function SettingsPanel({
   onSignOut,
 }: SettingsPanelProps) {
   return (
-    <div
-      id="settings-panel"
-      role="dialog"
-      aria-label="설정"
-      className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 max-h-[calc(100dvh-5.5rem)] overflow-y-auto rounded-[8px] border border-black bg-[#50504d] p-3 text-white shadow-[5px_5px_0_#000] sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-11 sm:max-h-[calc(100dvh-5rem)] sm:w-[min(20rem,calc(100vw-2rem))]"
-    >
+    <>
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 z-40 bg-black/45 md:hidden"
+        onClick={onClose}
+      />
+      <div
+        id="settings-panel"
+        role="dialog"
+        aria-label="설정"
+        className="fixed inset-x-0 bottom-0 z-50 max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain rounded-t-[12px] border-t border-black bg-[#50504d] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-white shadow-[0_-5px_0_#000] md:absolute md:inset-x-auto md:bottom-auto md:right-0 md:top-11 md:max-h-[calc(100dvh-5rem)] md:w-[min(20rem,calc(100vw-2rem))] md:rounded-[8px] md:border md:p-3 md:shadow-[5px_5px_0_#000]"
+      >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-xs font-bold text-neutral-100">{email}</p>
@@ -49,7 +55,7 @@ export function SettingsPanel({
           type="button"
           aria-label="설정 닫기"
           onClick={onClose}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] border border-black bg-[#62625f] text-xl font-black text-white sm:hidden"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] border border-black bg-[#62625f] text-xl font-black text-white md:hidden"
         >
           ×
         </button>
@@ -92,7 +98,7 @@ export function SettingsPanel({
                 id="member-email"
                 aria-label="Member email"
                 autoComplete="email"
-                className="w-full rounded-[8px] border border-black bg-white px-2.5 py-2 text-base font-bold text-black outline-none placeholder:text-[#666] focus-visible:ring-2 focus-visible:ring-[#baf7c8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#50504d] sm:text-sm"
+                className="w-full rounded-[8px] border border-black bg-white px-2.5 py-2 text-base font-bold text-black outline-none placeholder:text-[#666] focus-visible:ring-2 focus-visible:ring-[#baf7c8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#50504d] md:text-sm"
                 placeholder="Email"
                 type="email"
                 value={inviteEmail}
@@ -105,7 +111,7 @@ export function SettingsPanel({
                     type="button"
                     aria-pressed={inviteRole === 'editor'}
                     onClick={() => onInviteRoleChange('editor')}
-                    className={`min-h-11 flex-1 py-1.5 text-xs font-black uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white sm:min-h-0 ${
+                    className={`min-h-11 flex-1 py-1.5 text-xs font-black uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white md:min-h-0 ${
                       inviteRole === 'editor' ? 'bg-[#fde68a] text-black' : 'bg-[#62625f] text-neutral-300 hover:text-white'
                     }`}
                   >editor</button>
@@ -114,7 +120,7 @@ export function SettingsPanel({
                     type="button"
                     aria-pressed={inviteRole === 'viewer'}
                     onClick={() => onInviteRoleChange('viewer')}
-                    className={`min-h-11 flex-1 py-1.5 text-xs font-black uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white sm:min-h-0 ${
+                    className={`min-h-11 flex-1 py-1.5 text-xs font-black uppercase transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white md:min-h-0 ${
                       inviteRole === 'viewer' ? 'bg-[#c4b5fd] text-black' : 'bg-[#62625f] text-neutral-300 hover:text-white'
                     }`}
                   >viewer</button>
@@ -125,7 +131,7 @@ export function SettingsPanel({
                   aria-busy={inviteLoading}
                   onClick={onInvite}
                   disabled={!inviteEmail.trim() || inviteLoading}
-                  className="h-11 rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-[2px_2px_0_#000] sm:h-9"
+                  className="h-11 rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-[2px_2px_0_#000] md:h-9"
                 >
                   {inviteLoading ? <span aria-hidden="true" className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span> : 'Add'}
                 </button>
@@ -137,10 +143,11 @@ export function SettingsPanel({
       <button
         type="button"
         onClick={onSignOut}
-        className="mt-3 h-11 w-full rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:h-9"
+        className="mt-3 h-11 w-full rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white md:h-9"
       >
         Logout
       </button>
-    </div>
+      </div>
+    </>
   )
 }
