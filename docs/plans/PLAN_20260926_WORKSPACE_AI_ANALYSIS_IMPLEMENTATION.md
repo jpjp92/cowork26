@@ -524,3 +524,41 @@ DB가 필요한 test는 로컬 Supabase 또는 격리된 test project에서만 �
 - duplicate request가 provider를 한 번만 호출한다.
 - Preview/Production 환경과 encryption key가 분리된다.
 - mobile/desktop 설정과 분석 UI의 keyboard 기본 동작이 검증된다.
+
+## 9. 2026-09-28 로컬 통합 검증 현황
+
+### 완료된 검증
+
+- [x] migration `008` 적용 후 AI table 4개의 RLS/FORCE RLS, service-role CRUD, browser grant 0건을 확인했다.
+- [x] 로컬 feature flag와 32-byte credential encryption key를 설정했다.
+- [x] OpenAI credential model lookup과 암호화 저장이 `200`으로 완료됐다.
+- [x] workspace AI policy가 비활성 상태일 때 분석 요청이 `403`으로 차단되는 것을 확인했다.
+- [x] owner가 외부 전송에 동의하고 OpenAI를 허용한 뒤 선택한 여러 page의 실제 분석이 완료됐다.
+- [x] 결과가 개요·핵심 사항·결정 사항·미해결 사항·확인할 사항으로 구조화되고 source citation이 실제 page link로 연결되는 것을 확인했다.
+- [x] 결과 화면에서 `새 분석`으로 이전 draft를 재사용하고, `닫기` 후 사이드바 AI 분석 진입점으로 직전 결과를 다시 여는 흐름을 추가했다.
+- [x] 분석 중 문구의 점 애니메이션과 현재 단계 점멸을 추가하고 `prefers-reduced-motion`을 지원했다.
+- [x] provider model lookup의 `404`를 모델 접근 불가로 분리하고 개발 로그에는 key나 upstream body 없이 status/code만 남기도록 했다.
+- [x] `npm run typecheck`와 `npm run test:security`가 통과했다. 마지막 확인 기준 security test는 17 files, 103 tests다.
+
+### Source label 의미
+
+- `S1`, `S2`, `S3`는 AI가 생성한 임의 분류가 아니라 이번 요청에 포함된 원본 page의 순번이다.
+- 하나의 결과 항목에 여러 label이 있으면 여러 page를 근거로 종합했다는 의미다.
+- label 버튼을 누르면 매핑된 원본 page로 이동한다.
+- provider가 요청에 없는 label을 반환하면 결과 전체를 `invalid_output`으로 거부한다.
+
+### 다음 UI 개선 우선순위
+
+1. citation을 `출처: S1 · S3 · S4`처럼 한 줄로 압축하고 page title을 함께 확인할 수 있게 한다.
+2. 결과 상단에 provider/model, source page 수와 완료 시각을 표시한다.
+3. 결과 복사 기능을 추가한다.
+4. 긴 결과의 section 접기/펼치기와 하단 source 목록을 추가한다.
+5. 명시적 사용자 동작으로만 결과를 새 page에 저장하는 기능을 추가한다.
+6. 실제 단계별 체크가 필요하면 단일 POST의 추정 UI가 아니라 SSE 또는 job status polling으로 서버 진행 상태를 전달한다.
+
+### 현재 제한
+
+- 분석 결과는 현재 client memory에만 유지되므로 새로고침하면 사라진다.
+- 분석 request ledger에는 상태·사용량·source revision만 기록하며 raw prompt와 raw result는 저장하지 않는다.
+- 현재 진행 단계는 indeterminate loading UI다. 서버가 중간 상태를 전송하지 않으므로 가짜 퍼센트나 시간 기반 완료 체크는 표시하지 않는다.
+- 결과는 원문 page를 자동 변경하지 않으며 자동 다운로드하거나 새 page를 생성하지 않는다.
