@@ -193,13 +193,13 @@ git status --short
 
 **작업**
 
-- [ ] 32-byte master key 형식과 version lookup을 시작 시 검증한다.
-- [ ] random 12-byte nonce와 AES-256-GCM encrypt/decrypt를 구현한다.
-- [ ] AAD에 user ID, provider, key version을 바인딩한다.
-- [ ] ciphertext, nonce, auth tag는 base64url로 직렬화한다.
-- [ ] nested object/Error/header에서 secret 후보를 제거하는 redactor를 만든다.
-- [ ] crypto module과 AI env module에 `server-only`를 적용한다.
-- [ ] provider allowlist를 `openai | gemini`로 고정하고 provider를 AAD에 결합한다.
+- [x] 32-byte master key 형식과 version lookup을 시작 시 검증한다.
+- [x] random 12-byte nonce와 AES-256-GCM encrypt/decrypt를 구현한다.
+- [x] AAD에 user ID, provider, key version을 바인딩한다.
+- [x] ciphertext, nonce, auth tag는 base64url로 직렬화한다.
+- [x] nested object/Error/header에서 secret 후보를 제거하는 redactor를 만든다.
+- [x] crypto module과 AI env module에 `server-only`를 적용한다.
+- [x] provider allowlist를 `openai | gemini`로 고정하고 provider를 AAD에 결합한다.
 
 **테스트**
 
