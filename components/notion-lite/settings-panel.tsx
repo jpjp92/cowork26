@@ -1,8 +1,13 @@
+'use client'
+
+import { useState } from 'react'
 import type { Workspace, WorkspaceMember, WorkspaceRole } from '../../lib/notion-lite/types'
 import { getRoleBadgeClass } from '../../lib/notion-lite/roles'
 import { MembersSkeleton } from './loading-states'
+import { AiCredentialSettings } from './ai-credential-settings'
 
 interface SettingsPanelProps {
+  accessToken: string
   email: string
   workspace?: Workspace
   members: WorkspaceMember[]
@@ -19,6 +24,7 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({
+  accessToken,
   email,
   workspace,
   members,
@@ -33,6 +39,10 @@ export function SettingsPanel({
   onInvite,
   onSignOut,
 }: SettingsPanelProps) {
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(false)
+  const [showAllMembers, setShowAllMembers] = useState(false)
+  const visibleMembers = showAllMembers ? members : members.slice(0, 3)
+
   return (
     <>
       <div
@@ -43,14 +53,12 @@ export function SettingsPanel({
       <div
         id="settings-panel"
         role="dialog"
+        aria-modal="true"
         aria-label="설정"
-        className="fixed inset-y-0 right-0 z-50 w-[min(92vw,24rem)] overflow-y-auto overscroll-contain border-l border-black bg-[#50504d] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))] text-white shadow-[-6px_0_0_#000] md:absolute md:inset-y-auto md:right-0 md:top-11 md:max-h-[calc(100dvh-5rem)] md:w-[min(20rem,calc(100vw-2rem))] md:rounded-[8px] md:border md:p-3 md:shadow-[5px_5px_0_#000]"
+        className="fixed inset-y-0 right-0 z-50 flex w-[min(92vw,24rem)] flex-col overflow-hidden border-l border-black bg-[#50504d] text-white shadow-[-6px_0_0_#000] md:absolute md:inset-y-auto md:right-0 md:top-11 md:max-h-[calc(100dvh-5rem)] md:w-[min(22rem,calc(100vw-2rem))] md:rounded-[8px] md:border md:shadow-[5px_5px_0_#000]"
       >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-xs font-bold text-neutral-100">{email}</p>
-          {workspace && <p className="mt-1 truncate text-sm font-black uppercase">{workspace.name}</p>}
-        </div>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-black bg-[#50504d] px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-3 md:py-2.5">
+        <p className="text-sm font-black">설정</p>
         <button
           type="button"
           aria-label="설정 닫기"
@@ -60,11 +68,38 @@ export function SettingsPanel({
           ×
         </button>
       </div>
+      <div className="min-h-0 flex-1 scroll-pb-28 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 md:px-3 md:pb-3">
+      <section aria-labelledby="account-settings-heading">
+        <p id="account-settings-heading" className="text-[11px] font-black uppercase text-neutral-200">계정</p>
+        <p className="mt-1 truncate text-xs font-bold text-neutral-100">{email}</p>
+      </section>
       {workspace && (
-        <>
-          <div className="mt-3 border-t border-black pt-3">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-[11px] font-black uppercase text-neutral-100">Members</p>
+        <section className="mt-3 border-t border-black pt-3" aria-labelledby="workspace-settings-heading">
+          <button
+            type="button"
+            aria-expanded={workspaceExpanded}
+            aria-controls="workspace-settings-content"
+            onClick={() => setWorkspaceExpanded(value => {
+              if (value) setShowAllMembers(false)
+              return !value
+            })}
+            className="flex min-h-11 w-full items-center justify-between gap-3 rounded-[8px] px-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            <span className="min-w-0">
+              <span id="workspace-settings-heading" className="block text-[11px] font-black uppercase text-neutral-100">워크스페이스 · 멤버</span>
+              <span className="mt-0.5 block truncate text-xs font-bold text-neutral-200">{workspace.name}</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              <span className="rounded border border-black bg-[#baf7c8] px-1.5 py-0.5 text-[10px] font-black text-black">
+                {membersLoading ? '확인 중' : `${members.length}명`}
+              </span>
+              <span aria-hidden="true" className={`text-sm font-black transition-transform ${workspaceExpanded ? 'rotate-90' : ''}`}>›</span>
+            </span>
+          </button>
+          {workspaceExpanded && (
+            <div id="workspace-settings-content">
+            <div className="mb-2 mt-3 flex items-center justify-between border-t border-black pt-3">
+              <p className="text-[11px] font-black uppercase text-neutral-100">멤버</p>
               {membersLoading ? (
                 <span aria-label="Loading members" role="status" className="loading-dots text-[11px] font-bold tracking-widest text-neutral-200"><span aria-hidden="true">·</span><span aria-hidden="true">·</span><span aria-hidden="true">·</span></span>
               ) : (
@@ -73,10 +108,10 @@ export function SettingsPanel({
                 </span>
               )}
             </div>
-            <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+            <div className="space-y-2">
               {membersLoading && members.length === 0 ? (
                 <MembersSkeleton />
-              ) : members.map(member => (
+              ) : visibleMembers.map(member => (
                 <div key={member.user_id} className="rounded-[8px] border border-black bg-[#62625f] px-2 py-2">
                   <p className="truncate text-xs font-bold text-white">{member.email ?? member.user_id}</p>
                   <span className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${getRoleBadgeClass(member.role)}`}>
@@ -88,7 +123,14 @@ export function SettingsPanel({
                 <p className="text-xs font-bold text-neutral-200">No members yet.</p>
               )}
             </div>
-          </div>
+            {members.length > 3 && (
+              <button
+                type="button"
+                aria-expanded={showAllMembers}
+                onClick={() => setShowAllMembers(value => !value)}
+                className="mt-2 min-h-11 w-full rounded-[8px] text-xs font-bold text-neutral-100 underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white md:min-h-8"
+              >{showAllMembers ? '멤버 접기' : `나머지 ${members.length - 3}명 보기`}</button>
+            )}
           {canManageMembers && (
             <div className="mt-3 border-t border-black pt-3">
               <label htmlFor="member-email" className="mb-2 block text-[11px] font-black uppercase text-neutral-100">
@@ -138,15 +180,22 @@ export function SettingsPanel({
               </div>
             </div>
           )}
-        </>
+            </div>
+          )}
+        </section>
       )}
-      <button
-        type="button"
-        onClick={onSignOut}
-        className="mt-3 h-11 w-full rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white md:h-9"
-      >
-        Logout
-      </button>
+      <AiCredentialSettings accessToken={accessToken} />
+      <section aria-labelledby="logout-heading" className="mt-3 border-t border-black pt-3">
+        <h2 id="logout-heading" className="text-[11px] font-black uppercase text-neutral-100">로그아웃</h2>
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="mt-2 h-11 w-full rounded-[8px] border border-black bg-[#baf7c8] px-3 text-xs font-black text-black shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:shadow-[3px_3px_0_#000] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white md:h-9"
+        >
+          Logout
+        </button>
+      </section>
+      </div>
       </div>
     </>
   )

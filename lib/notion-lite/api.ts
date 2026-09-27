@@ -1,4 +1,6 @@
 import type {
+  AiCredentialProvider,
+  AiCredentialStatus,
   CloneImageSource,
   PageRecord,
   PreparedImageUpload,
@@ -162,6 +164,46 @@ function uploadImageToSignedUrl(signedUrl: string, file: File) {
 }
 
 export const notionLiteApi = {
+  getAiCredentialStatus(
+    accessToken: string,
+    provider: AiCredentialProvider,
+    signal?: AbortSignal,
+  ) {
+    return requestJson<AiCredentialStatus>(
+      accessToken,
+      `/api/ai/credentials/${encodeURIComponent(provider)}`,
+      'AI 연결 상태를 불러오지 못했습니다.',
+      { cache: 'no-store', signal },
+    )
+  },
+
+  connectAiCredential(
+    accessToken: string,
+    provider: AiCredentialProvider,
+    apiKey: string,
+    signal?: AbortSignal,
+  ) {
+    return requestJson<AiCredentialStatus>(
+      accessToken,
+      `/api/ai/credentials/${encodeURIComponent(provider)}`,
+      'AI API 키를 연결하지 못했습니다.',
+      { method: 'PUT', body: JSON.stringify({ apiKey }), cache: 'no-store', signal },
+    )
+  },
+
+  deleteAiCredential(
+    accessToken: string,
+    provider: AiCredentialProvider,
+    signal?: AbortSignal,
+  ) {
+    return requestEmpty(
+      accessToken,
+      `/api/ai/credentials/${encodeURIComponent(provider)}`,
+      'AI API 키 연결을 삭제하지 못했습니다.',
+      { method: 'DELETE', cache: 'no-store', signal },
+    )
+  },
+
   listWorkspaces(accessToken: string) {
     return requestJson<Workspace[]>(
       accessToken,

@@ -3,6 +3,7 @@ import type { Workspace, WorkspaceMember, WorkspaceRole } from '../../lib/notion
 import { SettingsPanel } from './settings-panel'
 
 interface AppHeaderProps {
+  accessToken: string
   email: string
   workspace?: Workspace
   refreshing: boolean
@@ -25,6 +26,7 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({
+  accessToken,
   email,
   workspace,
   refreshing,
@@ -86,6 +88,7 @@ export function AppHeader({
         </button>
         {settingsOpen && (
           <SettingsPanel
+            accessToken={accessToken}
             email={email}
             workspace={workspace}
             members={members}

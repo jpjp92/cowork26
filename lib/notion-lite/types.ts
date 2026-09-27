@@ -27,6 +27,16 @@ export interface WorkspaceMember {
   email: string | null
 }
 
+export type AiCredentialProvider = 'openai' | 'gemini'
+
+export interface AiCredentialStatus {
+  provider: AiCredentialProvider
+  connected: boolean
+  keyLastFour?: string
+  verifiedAt?: string
+  updatedAt?: string
+}
+
 export interface UploadedImageAsset {
   id: string
   url: string

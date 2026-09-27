@@ -326,14 +326,14 @@ interface AiProvider {
 
 **작업**
 
-- [ ] 설정을 계정/워크스페이스/멤버/AI 연결/로그아웃 구역으로 나눈다.
-- [ ] API key 등록은 별도 화면이 아니라 기존 Settings drawer의 개인 설정 `AI 연결` 구역에 배치한다.
-- [ ] `내 OpenAI API 키`, `내 Gemini API 키`를 별도 카드로 표시하고 workspace 공용 key로 오해할 표현을 사용하지 않는다.
-- [ ] password input, 연결 확인, 교체, 삭제와 loading/error 상태를 구현한다.
-- [ ] 저장 후에는 원문 대신 연결 상태, 마지막 네 자리, 마지막 확인 시각만 표시한다.
-- [ ] 성공·취소·로그아웃·provider 변경 시 key state를 즉시 비운다.
-- [ ] 저장된 key 원문 보기·복사 기능은 제공하지 않는다.
-- [ ] 모바일 drawer 내부 keyboard/scroll/focus 동작을 확인한다.
+- [x] 설정을 계정/워크스페이스/멤버/AI 연결/로그아웃 구역으로 나눈다.
+- [x] API key 등록은 별도 화면이 아니라 기존 Settings drawer의 개인 설정 `AI 연결` 구역에 배치한다.
+- [x] `내 OpenAI API 키`, `내 Gemini API 키`를 별도 카드로 표시하고 workspace 공용 key로 오해할 표현을 사용하지 않는다.
+- [x] password input, 연결 확인, 교체, 삭제와 loading/error 상태를 구현한다.
+- [x] 저장 후에는 원문 대신 연결 상태, 마지막 네 자리, 마지막 확인 시각만 표시한다.
+- [x] 성공·취소·로그아웃·provider 변경 시 key state를 즉시 비운다.
+- [x] 저장된 key 원문 보기·복사 기능은 제공하지 않는다.
+- [x] 모바일 drawer 내부 keyboard/scroll/focus 동작을 확인한다.
 
 **Exit**
 
@@ -384,6 +384,8 @@ interface AiProvider {
 - [ ] 같은 workspace 여부, membership과 page 존재를 서버가 확인한다.
 - [ ] source label과 실제 page ID 매핑을 서버 내부에 유지한다.
 - [ ] UI에서 page 검색·선택·해제와 전송 대상 최종 확인을 제공한다.
+- [ ] `현재 페이지만`과 `현재 페이지 + 하위 페이지` 선택을 제공하되, 하위 페이지를 자동 전송하지 않고 실제 대상 목록을 확인시킨다.
+- [ ] 하위 페이지 포함 시에도 최대 10 pages·256KiB 제한을 적용하고 초과 대상은 사용자가 제외하게 한다.
 - [ ] 요약·정리·분석·질문·액션 아이템 mode와 최대 1,000자 추가 요청 UI를 제공한다.
 
 **Exit**

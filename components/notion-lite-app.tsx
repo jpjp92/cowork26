@@ -248,6 +248,17 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   useOutsidePointerDown(workspaceMenuOpen, workspaceMenuRef, () => setWorkspaceMenuOpen(false))
 
   useEffect(() => {
+    if (!settingsOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSettingsOpen(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [settingsOpen])
+
+  useEffect(() => {
     if (!mobileSidebarOpen) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -533,6 +544,7 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   return (
     <main className="flex h-screen h-dvh flex-col overflow-hidden bg-[#777773] text-black">
       <AppHeader
+        accessToken={session.access_token}
         email={session.user.email ?? ''}
         workspace={activeWorkspace}
         refreshing={refreshing}
