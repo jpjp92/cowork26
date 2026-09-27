@@ -201,10 +201,16 @@ POST   /api/assets              # action=prepare | complete
 DELETE /api/assets              # 미등록 업로드 취소·정리
 POST   /api/assets/clone
 
+GET    /api/ai/credentials/:provider
+PUT    /api/ai/credentials/:provider     # 개인 BYOK 검증·암호화 저장
+DELETE /api/ai/credentials/:provider
+
 GET    /api/agi                 # local legacy AGI download
 POST   /api/agi                 # local legacy AGI start/stop beacon
 DELETE /api/agi                 # local legacy AGI stop
 ```
+
+AI credential API는 `openai`, `gemini`만 허용하고 모든 응답에 `Cache-Control: no-store`를 적용합니다. 실제 provider adapter가 추가되기 전에는 production에서 credential 검증이 비활성화되며, 삭제 API는 AI feature flag와 관계없이 계속 사용할 수 있습니다.
 
 ## 검증
 
@@ -226,6 +232,7 @@ git diff --check
 - Signed Upload 경로·MIME·크기·완료 검증
 - 에디터 붙여넣기 처리 우선순위
 - Page parent의 정상 이동·자기참조·cycle·cross-workspace 거부
+- AI credential의 fresh auth, 요청 크기 제한, 암호화 저장, 사용자 scope, 응답 redaction과 verify rate limit
 
 `npm audit`은 공개 advisory가 갱신될 수 있으므로 배포 직전에 다시 실행합니다.
 

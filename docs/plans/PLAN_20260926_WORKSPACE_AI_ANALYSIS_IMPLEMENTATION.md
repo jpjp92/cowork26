@@ -297,12 +297,12 @@ interface AiProvider {
 
 **작업**
 
-- [ ] GET은 연결 상태, last four, verified/updated time만 반환한다.
-- [ ] PUT은 fresh auth → bounded body → provider allowlist → fake verify → encrypt → upsert 순서로 처리한다.
-- [ ] DELETE는 소유자 credential만 삭제한다.
-- [ ] 모든 응답에 `Cache-Control: no-store`를 적용한다.
-- [ ] key 원문, ciphertext, nonce/tag와 provider raw error를 응답하지 않는다.
-- [ ] 동일 사용자의 verify burst를 제한한다.
+- [x] GET은 연결 상태, last four, verified/updated time만 반환한다.
+- [x] PUT은 fresh auth → bounded body → provider allowlist → fake verify → encrypt → upsert 순서로 처리한다.
+- [x] DELETE는 소유자 credential만 삭제한다.
+- [x] 모든 응답에 `Cache-Control: no-store`를 적용한다.
+- [x] key 원문, ciphertext, nonce/tag와 provider raw error를 응답하지 않는다.
+- [x] 동일 사용자의 verify burst를 제한한다.
 
 **Exit**
 

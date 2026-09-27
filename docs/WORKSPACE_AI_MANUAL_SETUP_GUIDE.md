@@ -8,18 +8,18 @@
 
 ## 1. 현재 해야 할 일
 
-현재 브랜치는 **계획 작성 단계**이며 AI용 migration `006`~`008`은 아직 생성되지 않았다.
+현재 브랜치는 migration `006`~`008`, AI 암호화 기반, provider 계약과 credential API까지 구현된 상태다. 실제 OpenAI/Gemini adapter와 Settings UI는 아직 연결하지 않았다.
 
-- 지금 Supabase에서 새 AI SQL을 실행하지 않는다.
+- migration `006`~`008`을 이미 적용하고 각 runbook 검증 결과가 정상이라면 다시 실행하지 않는다.
 - 지금 Production Vercel에 encryption key를 추가하지 않는다.
-- 기존 `004_workspace_members_hardening.sql`, `005_pages_tree_integrity.sql`을 이미 적용했다면 다시 실행할 필요가 없다.
-- 구현 후 각 runbook이 생성되면 아래 순서로 적용한다.
+- 실제 provider key는 현재 로컬 `.env.local`, Vercel 또는 repository에 추가하지 않는다. Task 12 live smoke test 시점에 별도 안내한다.
+- 로컬 자동 테스트는 실제 provider key 없이 deterministic fake provider를 사용한다.
 
 | 시점 | 운영자가 할 일 | 현재 상태 |
 |---|---|---|
-| Task 2 완료 후 | Supabase에 `006_page_assets_baseline.sql` 적용 | 파일 준비됨 · Preview/Test부터 수동 실행 |
-| Task 3 완료 후 | Supabase에 `007_page_content_revision.sql` 적용 | 파일 준비됨 · 코드와 함께 Preview/Test 검증 필요 |
-| Task 5 완료 후 | Supabase에 `008_ai_document_editing.sql` 적용 | 파일·runbook 준비됨 · 자동 검증 후 Preview/Test부터 실행 |
+| Task 2 완료 후 | Supabase에 `006_page_assets_baseline.sql` 적용 | 적용·검증 완료 |
+| Task 3 완료 후 | Supabase에 `007_page_content_revision.sql` 적용 | 적용·검증 완료 |
+| Task 5 완료 후 | Supabase에 `008_ai_document_editing.sql` 적용 | 적용·검증 완료 |
 | Preview 배포 전 | Preview 전용 Vercel secret과 feature flag 설정 | 구현 후 진행 |
 | Production 승인 전 | Production 전용 secret 설정, flag는 `false` 유지 | 구현 후 진행 |
 | 내부 검증 통과 후 | 승인된 범위에서 Production flag 활성화 | release checklist 통과 후 진행 |
