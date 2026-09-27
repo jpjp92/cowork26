@@ -351,11 +351,11 @@ interface AiProvider {
 
 **작업**
 
-- [ ] GET은 workspace member에게 현재 policy를 반환한다.
-- [ ] PATCH는 fresh auth의 owner만 수행한다.
-- [ ] 기본은 disabled, allowed provider는 fake/OpenAI/Gemini allowlist, role은 owner/editor로 제한한다.
-- [ ] 설정 drawer에 외부 전송 안내와 명시적 opt-in을 표시한다.
-- [ ] policy disable 시 진행 전 요청을 차단하고 기존 credential 삭제 경로는 유지한다.
+- [x] GET은 workspace member에게 현재 policy를 반환한다.
+- [x] PATCH는 fresh auth의 owner만 수행한다.
+- [x] 기본은 disabled, 저장 provider는 OpenAI/Gemini allowlist, role은 owner/editor로 제한한다. fake adapter는 로컬에서 선택한 실제 provider ID를 모사하며 DB 값으로 저장하지 않는다.
+- [x] 설정 drawer에 외부 전송 안내와 명시적 opt-in을 표시한다.
+- [x] policy disable 시 DB integrity trigger가 분석 request를 차단하고 기존 credential 삭제 경로는 유지한다.
 
 **Exit**
 
@@ -379,14 +379,14 @@ interface AiProvider {
 
 **작업**
 
-- [ ] 서버에서 page content를 안정적인 분석용 텍스트로 정규화한다.
-- [ ] 최대 10 pages와 256KiB 합계 제한을 byte 기준으로 적용한다.
-- [ ] 같은 workspace 여부, membership과 page 존재를 서버가 확인한다.
-- [ ] source label과 실제 page ID 매핑을 서버 내부에 유지한다.
-- [ ] UI에서 page 검색·선택·해제와 전송 대상 최종 확인을 제공한다.
-- [ ] `현재 페이지만`과 `현재 페이지 + 하위 페이지` 선택을 제공하되, 하위 페이지를 자동 전송하지 않고 실제 대상 목록을 확인시킨다.
-- [ ] 하위 페이지 포함 시에도 최대 10 pages·256KiB 제한을 적용하고 초과 대상은 사용자가 제외하게 한다.
-- [ ] 요약·정리·분석·질문·액션 아이템 mode와 최대 1,000자 추가 요청 UI를 제공한다.
+- [x] 서버에서 page content를 안정적인 분석용 텍스트로 정규화한다.
+- [x] 최대 10 pages와 256KiB 합계 제한을 byte 기준으로 적용한다.
+- [x] 같은 workspace 여부, membership과 page 존재를 서버가 확인한다.
+- [x] source label과 실제 page ID 매핑을 서버 내부에 유지한다.
+- [x] UI에서 page 검색·선택·해제와 전송 대상 최종 확인을 제공한다.
+- [x] `현재 페이지만`과 `현재 페이지 + 하위 페이지` 선택을 제공하되, 하위 페이지를 자동 전송하지 않고 실제 대상 목록을 확인시킨다.
+- [x] 하위 페이지 포함 시에도 최대 10 pages·256KiB 제한을 적용하고 초과 대상은 사용자가 제외하게 한다.
+- [x] 요약·정리·분석·질문·액션 아이템 mode와 최대 1,000자 추가 요청 UI를 제공한다.
 
 **Exit**
 
@@ -406,13 +406,15 @@ interface AiProvider {
 
 **작업**
 
-- [ ] fresh auth, role, policy, credential, source를 순서대로 검증한다.
-- [ ] provider 호출 직전에 membership/policy를 다시 확인한다.
-- [ ] request ledger와 source revision을 기록한다.
-- [ ] `(user_id, idempotency_key)` 중복 실행을 차단한다.
-- [ ] fake output의 source label을 실제 page link로 안전하게 변환한다.
-- [ ] unknown citation, timeout, 취소와 실패 복구 UI를 구현한다.
-- [ ] 분석만으로 pages table이 변경되지 않는지 테스트한다.
+- [x] fresh auth, role, policy, credential, source를 순서대로 검증한다.
+- [x] provider 호출 직전에 membership/policy를 다시 확인한다.
+- [x] request ledger와 source revision을 기록한다.
+- [x] `(user_id, idempotency_key)` 중복 실행을 차단한다.
+- [x] fake output의 source label을 실제 page link로 안전하게 변환한다.
+- [x] unknown citation, timeout, 취소와 실패 복구 UI를 구현한다.
+- [x] 분석만으로 pages table이 변경되지 않는지 테스트한다.
+- [x] 페이지 헤더 대신 사이드바 Utility 진입점과 반응형 오른쪽 Intelligence 패널을 사용한다.
+- [x] 분석 중에는 추정 퍼센트 대신 검증 가능한 단계 상태를 표시한다.
 
 **Exit**
 
@@ -430,14 +432,14 @@ interface AiProvider {
 
 **작업**
 
-- [ ] provider별 server allowlist model 하나로 시작한다.
-- [ ] 최소 권한·최소 비용 credential 검증 방식을 확정한다.
-- [ ] provider timeout, 401, 429, 5xx, invalid JSON을 normalized error로 변환한다.
-- [ ] output runtime schema와 citation label을 검증한다.
-- [ ] usage와 provider request ID만 기록하고 raw prompt/output은 로그하지 않는다.
-- [ ] live smoke test는 test key가 있을 때만 명시적으로 실행한다.
-- [ ] Gemini key를 URL query가 아니라 인증 header로 전달한다.
-- [ ] OpenAI와 Gemini를 독립 feature flag로 순차 활성화하고 자동 fallback하지 않는다.
+- [x] provider별 server allowlist model 하나로 시작한다.
+- [x] 최소 권한·최소 비용 credential 검증 방식을 확정한다.
+- [x] provider timeout, 401, 429, 5xx, invalid JSON을 normalized error로 변환한다.
+- [x] output runtime schema와 citation label을 검증한다.
+- [x] usage와 provider request ID만 기록하고 raw prompt/output은 로그하지 않는다.
+- [x] live smoke test는 test key가 있을 때만 명시적으로 실행한다.
+- [x] Gemini key를 URL query가 아니라 인증 header로 전달한다.
+- [x] OpenAI와 Gemini를 독립 feature flag로 순차 활성화하고 자동 fallback하지 않는다.
 
 **Exit**
 

@@ -37,6 +37,14 @@ export interface AiCredentialStatus {
   updatedAt?: string
 }
 
+export interface WorkspaceAiPolicy {
+  workspaceId: string
+  enabled: boolean
+  allowedProviders: AiCredentialProvider[]
+  allowedRoles: Array<Extract<WorkspaceRole, 'owner' | 'editor'>>
+  updatedAt: string | null
+}
+
 export interface UploadedImageAsset {
   id: string
   url: string
@@ -60,3 +68,32 @@ export interface CloneImageSource {
 export type PageDropPosition = 'above' | 'below' | 'inside'
 export type SavingStatus = 'idle' | 'saved' | 'loaded' | 'conflict'
 export type VisibleSavingStatus = Exclude<SavingStatus, 'idle'>
+
+export type WorkspaceAnalysisMode = 'summary' | 'organize' | 'analysis' | 'question' | 'action_items'
+
+export interface WorkspaceAnalysisDraft {
+  workspaceId: string
+  pageIds: string[]
+  provider: AiCredentialProvider
+  mode: WorkspaceAnalysisMode
+  additionalRequest: string
+}
+
+export interface WorkspaceAnalysisCitation {
+  label: string
+  pageId: string
+}
+
+export interface WorkspaceAnalysisResult {
+  requestId: string
+  status: 'succeeded'
+  provider: AiCredentialProvider
+  title: string
+  overview: string
+  sections: Array<{
+    kind: string
+    heading: string
+    items: Array<{ text: string; citations: WorkspaceAnalysisCitation[] }>
+  }>
+  unknowns: Array<{ text: string; citations: WorkspaceAnalysisCitation[] }>
+}

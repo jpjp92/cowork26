@@ -6,7 +6,7 @@ import { ACTIVE_CREDENTIAL_KEY_VERSION, aiEnvironment } from './env'
 import type { AiProvider } from './provider-contract'
 import { AiProviderError } from './provider-errors'
 import type { AiProviderId } from './providers'
-import { FakeAiProvider } from './providers/fake'
+import { getAiProvider } from './provider-factory'
 
 const MAX_API_KEY_BYTES = 8 * 1024
 
@@ -35,13 +35,8 @@ function normalizeApiKey(value: unknown) {
   return normalized
 }
 
-export function getCredentialVerificationProvider(): AiProvider {
-  // The fake adapter is intentionally unavailable in production deployments.
-  // Task 12 replaces this branch with provider-specific adapters.
-  if (process.env.NODE_ENV === 'production') {
-    throw new AiProviderError('provider_unavailable')
-  }
-  return new FakeAiProvider()
+export function getCredentialVerificationProvider(provider: AiProviderId): AiProvider {
+  return getAiProvider(provider)
 }
 
 export async function getCredentialStatus(
@@ -81,7 +76,7 @@ export async function verifyAndStoreCredential(input: {
     throw new AiProviderError('provider_unavailable')
   }
 
-  const verificationProvider = input.verificationProvider ?? getCredentialVerificationProvider()
+  const verificationProvider = input.verificationProvider ?? getCredentialVerificationProvider(input.provider)
   await verificationProvider.verifyCredential(apiKey, input.signal)
   const encrypted = encryptCredential(apiKey, {
     userId: input.userId,

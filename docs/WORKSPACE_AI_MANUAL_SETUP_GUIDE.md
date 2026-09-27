@@ -8,12 +8,13 @@
 
 ## 1. 현재 해야 할 일
 
-현재 브랜치는 migration `006`~`008`, AI 암호화 기반, provider 계약과 credential API까지 구현된 상태다. 실제 OpenAI/Gemini adapter와 Settings UI는 아직 연결하지 않았다.
+현재 브랜치는 migration `006`~`008`, AI 암호화 기반, credential API/UI, workspace AI opt-in 정책, 분석 source 선택·서버 정규화, 분석 API/결과 UI와 OpenAI/Gemini provider adapter까지 구현된 상태다. OpenAI는 `gpt-5.6-luna`, Gemini는 `gemini-3.6-flash`로 서버에서 고정하며 provider 간 자동 fallback은 하지 않는다.
 
 - migration `006`~`008`을 이미 적용하고 각 runbook 검증 결과가 정상이라면 다시 실행하지 않는다.
 - 지금 Production Vercel에 encryption key를 추가하지 않는다.
-- 실제 provider key는 현재 로컬 `.env.local`, Vercel 또는 repository에 추가하지 않는다. Task 12 live smoke test 시점에 별도 안내한다.
-- 로컬 자동 테스트는 실제 provider key 없이 deterministic fake provider를 사용한다.
+- 사용자 provider key는 앱 설정 화면에서 본인 계정에 연결하며 repository나 Vercel 공용 환경변수에 저장하지 않는다.
+- 로컬 자동 테스트는 실제 provider key 없이 deterministic response fixture를 사용한다.
+- live smoke는 `RUN_LIVE_AI_SMOKE=true`를 명시한 별도 명령에서만 수행하며 key와 응답 본문을 출력하지 않는다.
 
 | 시점 | 운영자가 할 일 | 현재 상태 |
 |---|---|---|
@@ -124,10 +125,19 @@ AI_WORKSPACE_ANALYSIS_ENABLED=false
 
 1. Preview 전용 Supabase에 `006`~`008`을 순서대로 적용한다.
 2. Preview 전용 `SUPABASE_*`와 `AI_CREDENTIAL_ENCRYPTION_KEY_V1`을 등록한다.
-3. 처음에는 fake provider로 권한·암호화·로그 노출 검증을 한다.
-4. 테스트용 개인 OpenAI key로 먼저 provider 호출을 검증한다.
-5. OpenAI 검증과 로그 점검이 끝난 뒤 테스트용 Gemini 제한 key를 별도 검증한다.
+3. 자동 테스트 fixture로 권한·암호화·로그 노출 검증을 한다.
+4. 테스트용 개인 OpenAI key를 앱 설정에 등록하고 OpenAI만 활성화해 내부 workspace에서 검증한다.
+5. OpenAI 검증과 로그 점검이 끝난 뒤 테스트용 Gemini 제한 key를 앱 설정에 등록하고 Gemini를 별도로 검증한다.
 6. Runtime Logs와 Log Drain에서 API key marker와 문서 marker가 0건인지 확인한다.
+
+생성 요청 없이 credential과 allowlist model 접근만 확인하는 opt-in smoke 명령은 다음과 같다. key는 shell 환경에만 일시적으로 주입하고 명령 기록이나 `.env` 파일에 남기지 않는다.
+
+```sh
+RUN_LIVE_AI_SMOKE=true AI_SMOKE_PROVIDER=openai OPENAI_API_KEY='...' npm run smoke:ai-provider
+RUN_LIVE_AI_SMOKE=true AI_SMOKE_PROVIDER=gemini GEMINI_API_KEY='...' npm run smoke:ai-provider
+```
+
+`RUN_LIVE_AI_SMOKE=true`가 없으면 스크립트는 외부 요청을 거부한다. 이 smoke는 문서 내용을 전송하지 않으며 실제 분석은 앱의 내부 테스트 workspace에서 별도로 확인한다.
 7. owner opt-in, owner/editor 허용, viewer/비멤버 거부를 확인한다.
 8. 실패 시 네 AI flag를 모두 `false`로 되돌리고 재배포한다.
 

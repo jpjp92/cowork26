@@ -9,6 +9,7 @@ export type ApiErrorCode =
   | 'PAGE_REVISION_CONFLICT'
   | 'AI_PROVIDER_AUTH_FAILED'
   | 'AI_RATE_LIMITED'
+  | 'AI_MODEL_UNAVAILABLE'
   | 'AI_PROVIDER_UNAVAILABLE'
   | 'AI_REQUEST_TIMEOUT'
   | 'INTERNAL_ERROR'
@@ -22,6 +23,7 @@ const ERROR_CONTRACT: Record<ApiErrorCode, { status: number; message: string }> 
   PAGE_REVISION_CONFLICT: { status: 409, message: 'The page changed before this save completed.' },
   AI_PROVIDER_AUTH_FAILED: { status: 422, message: 'The AI provider rejected this credential.' },
   AI_RATE_LIMITED: { status: 429, message: 'Too many AI credential verification attempts.' },
+  AI_MODEL_UNAVAILABLE: { status: 422, message: 'The configured AI model is unavailable for this API project.' },
   AI_PROVIDER_UNAVAILABLE: { status: 503, message: 'The AI provider is unavailable.' },
   AI_REQUEST_TIMEOUT: { status: 504, message: 'The AI provider request timed out.' },
   INTERNAL_ERROR: { status: 500, message: 'An unexpected error occurred.' },

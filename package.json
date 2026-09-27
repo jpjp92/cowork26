@@ -11,6 +11,7 @@
     "test:unit": "vitest run tests/unit",
     "test:security": "vitest run tests/security",
     "test:legacy": "npm run test:editor-paste-priority && npm run test:image-assets && npm run test:page-parent-validation",
+    "smoke:ai-provider": "node scripts/ai-provider-smoke.mjs",
     "test:editor-paste-priority": "node tests/editor-paste-priority.test.mjs",
     "test:image-assets": "node tests/image-assets.test.mjs",
     "test:page-parent-validation": "node tests/page-parent-validation.test.mjs",

@@ -75,17 +75,6 @@ export function AppHeader({
             ? <span className="loading-dots text-xs tracking-widest"><span>·</span><span>·</span><span>·</span></span>
             : '↻'}
         </button>
-        <button
-          type="button"
-          aria-label="설정"
-          aria-controls="settings-panel"
-          aria-expanded={settingsOpen}
-          onClick={onToggleSettings}
-          className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-black bg-[#50504d] text-lg font-black leading-none text-white shadow-[2px_2px_0_#000] hover:-translate-y-0.5 hover:bg-[#baf7c8] hover:text-black hover:shadow-[3px_3px_0_#000] sm:h-9 sm:w-9"
-          title="Settings"
-        >
-          ⚙
-        </button>
         {settingsOpen && (
           <SettingsPanel
             accessToken={accessToken}

@@ -6,6 +6,9 @@ import type {
   PreparedImageUpload,
   UploadedImageAsset,
   Workspace,
+  WorkspaceAiPolicy,
+  WorkspaceAnalysisDraft,
+  WorkspaceAnalysisResult,
   WorkspaceMember,
 } from './types'
 import { getImageSizeError, isSupportedImageType } from '../image-assets'
@@ -164,6 +167,48 @@ function uploadImageToSignedUrl(signedUrl: string, file: File) {
 }
 
 export const notionLiteApi = {
+  runWorkspaceAnalysis(
+    accessToken: string,
+    draft: WorkspaceAnalysisDraft,
+    idempotencyKey: string,
+    signal?: AbortSignal,
+  ) {
+    return requestJson<WorkspaceAnalysisResult>(
+      accessToken,
+      '/api/ai/workspace-analysis',
+      '문서 분석을 완료하지 못했습니다.',
+      {
+        method: 'POST',
+        body: JSON.stringify({ ...draft, idempotencyKey }),
+        cache: 'no-store',
+        signal,
+      },
+    )
+  },
+
+  getWorkspaceAiPolicy(accessToken: string, workspaceId: string, signal?: AbortSignal) {
+    return requestJson<WorkspaceAiPolicy>(
+      accessToken,
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/ai-policy`,
+      '워크스페이스 AI 정책을 불러오지 못했습니다.',
+      { cache: 'no-store', signal },
+    )
+  },
+
+  updateWorkspaceAiPolicy(
+    accessToken: string,
+    workspaceId: string,
+    policy: Pick<WorkspaceAiPolicy, 'enabled' | 'allowedProviders' | 'allowedRoles'>,
+    signal?: AbortSignal,
+  ) {
+    return requestJson<WorkspaceAiPolicy>(
+      accessToken,
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/ai-policy`,
+      '워크스페이스 AI 정책을 저장하지 못했습니다.',
+      { method: 'PATCH', body: JSON.stringify(policy), cache: 'no-store', signal },
+    )
+  },
+
   getAiCredentialStatus(
     accessToken: string,
     provider: AiCredentialProvider,

@@ -3,6 +3,7 @@ export const AI_PROVIDER_ERROR_CODES = [
   'rate_limited',
   'timeout',
   'aborted',
+  'model_unavailable',
   'provider_unavailable',
   'blocked',
   'truncated',
@@ -16,6 +17,7 @@ const SAFE_MESSAGES: Record<AiProviderErrorCode, string> = {
   rate_limited: 'AI 제공자 요청 한도를 초과했습니다. 잠시 후 다시 시도해 주세요.',
   timeout: 'AI 제공자 응답 시간이 초과되었습니다.',
   aborted: 'AI 요청이 취소되었습니다.',
+  model_unavailable: '설정된 AI 모델을 이 API 프로젝트에서 사용할 수 없습니다.',
   provider_unavailable: 'AI 제공자를 일시적으로 사용할 수 없습니다.',
   blocked: 'AI 제공자가 요청 또는 응답을 차단했습니다.',
   truncated: 'AI 응답이 완성되기 전에 종료되었습니다.',
@@ -26,10 +28,11 @@ export class AiProviderError extends Error {
   readonly code: AiProviderErrorCode
   readonly retryable: boolean
   readonly retryAfterSeconds?: number
+  readonly providerStatus?: number
 
   constructor(
     code: AiProviderErrorCode,
-    options: { retryable?: boolean; retryAfterSeconds?: number } = {},
+    options: { retryable?: boolean; retryAfterSeconds?: number; providerStatus?: number } = {},
   ) {
     // Do not retain the provider's raw error as `cause`: callers may serialize
     // or log this normalized error at a different trust boundary.
@@ -39,6 +42,9 @@ export class AiProviderError extends Error {
     this.retryable = options.retryable ?? ['rate_limited', 'timeout', 'provider_unavailable'].includes(code)
     if (Number.isSafeInteger(options.retryAfterSeconds) && (options.retryAfterSeconds ?? 0) > 0) {
       this.retryAfterSeconds = options.retryAfterSeconds
+    }
+    if (Number.isSafeInteger(options.providerStatus) && (options.providerStatus ?? 0) >= 400) {
+      this.providerStatus = options.providerStatus
     }
   }
 }

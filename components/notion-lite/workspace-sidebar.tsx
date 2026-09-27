@@ -44,6 +44,12 @@ interface WorkspaceSidebarProps {
   onDownloadMarkdown: (page: PageRecord) => void
   onMovePage: (draggedId: string, targetId: string, position: PageDropPosition) => void
   onResizeStart: PointerEventHandler<HTMLButtonElement>
+  analysisOpen: boolean
+  analysisRunning: boolean
+  analysisReady: boolean
+  onOpenAnalysis: () => void
+  settingsOpen: boolean
+  onOpenSettings: () => void
   mobileOpen: boolean
   onCloseMobile: () => void
 }
@@ -85,6 +91,12 @@ export function WorkspaceSidebar({
   onDownloadMarkdown,
   onMovePage,
   onResizeStart,
+  analysisOpen,
+  analysisRunning,
+  analysisReady,
+  onOpenAnalysis,
+  settingsOpen,
+  onOpenSettings,
   mobileOpen,
   onCloseMobile,
 }: WorkspaceSidebarProps) {
@@ -241,6 +253,29 @@ export function WorkspaceSidebar({
           )}
         </div>
       </div>
+
+      <nav aria-label="워크스페이스 도구" className="shrink-0 border-t border-black bg-[#50504d] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <button
+          type="button"
+          aria-pressed={analysisOpen}
+          onClick={onOpenAnalysis}
+          disabled={!activeWorkspaceId || !activePageId || !canEdit}
+          className={`flex min-h-11 w-full items-center gap-2 rounded-[8px] border border-black px-3 text-left text-xs font-black shadow-[2px_2px_0_#000] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${analysisOpen ? 'bg-[#c4b5fd] text-black' : 'bg-[#62625f] text-white hover:bg-[#c4b5fd] hover:text-black'}`}
+        >
+          <span aria-hidden="true" className="text-base">✦</span>
+          <span className="flex-1">AI 분석</span>
+          {analysisRunning && <span className="text-[10px]">분석 중</span>}
+          {!analysisRunning && analysisReady && <span aria-label="새 분석 결과" className="grid h-5 min-w-5 place-items-center rounded-full border border-black bg-[#baf7c8] px-1 text-[10px] text-black">1</span>}
+        </button>
+        <button
+          type="button"
+          aria-pressed={settingsOpen}
+          onClick={onOpenSettings}
+          className={`mt-2 flex min-h-11 w-full items-center gap-2 rounded-[8px] border border-black px-3 text-left text-xs font-black shadow-[2px_2px_0_#000] ${settingsOpen ? 'bg-[#baf7c8] text-black' : 'bg-[#62625f] text-white hover:bg-[#baf7c8] hover:text-black'}`}
+        >
+          <span aria-hidden="true" className="text-base">⚙</span><span>설정</span>
+        </button>
+      </nav>
 
       <button
         type="button"

@@ -5,6 +5,8 @@ import type { Workspace, WorkspaceMember, WorkspaceRole } from '../../lib/notion
 import { getRoleBadgeClass } from '../../lib/notion-lite/roles'
 import { MembersSkeleton } from './loading-states'
 import { AiCredentialSettings } from './ai-credential-settings'
+import { WorkspaceAiPolicySettings } from './workspace-ai-policy'
+import { UtilityPanel } from './utility-panel'
 
 interface SettingsPanelProps {
   accessToken: string
@@ -44,31 +46,7 @@ export function SettingsPanel({
   const visibleMembers = showAllMembers ? members : members.slice(0, 3)
 
   return (
-    <>
-      <div
-        aria-hidden="true"
-        className="fixed inset-0 z-40 bg-black/45 md:hidden"
-        onClick={onClose}
-      />
-      <div
-        id="settings-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label="설정"
-        className="fixed inset-y-0 right-0 z-50 flex w-[min(92vw,24rem)] flex-col overflow-hidden border-l border-black bg-[#50504d] text-white shadow-[-6px_0_0_#000] md:absolute md:inset-y-auto md:right-0 md:top-11 md:max-h-[calc(100dvh-5rem)] md:w-[min(22rem,calc(100vw-2rem))] md:rounded-[8px] md:border md:shadow-[5px_5px_0_#000]"
-      >
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-black bg-[#50504d] px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:px-3 md:py-2.5">
-        <p className="text-sm font-black">설정</p>
-        <button
-          type="button"
-          aria-label="설정 닫기"
-          onClick={onClose}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[8px] border border-black bg-[#62625f] text-xl font-black text-white md:hidden"
-        >
-          ×
-        </button>
-      </div>
-      <div className="min-h-0 flex-1 scroll-pb-28 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 md:px-3 md:pb-3">
+    <UtilityPanel id="settings-panel" title="설정" description="계정과 워크스페이스 관리" closeLabel="설정 닫기" onClose={onClose} tone="dark">
       <section aria-labelledby="account-settings-heading">
         <p id="account-settings-heading" className="text-[11px] font-black uppercase text-neutral-200">계정</p>
         <p className="mt-1 truncate text-xs font-bold text-neutral-100">{email}</p>
@@ -185,6 +163,13 @@ export function SettingsPanel({
         </section>
       )}
       <AiCredentialSettings accessToken={accessToken} />
+      {workspace && (
+        <WorkspaceAiPolicySettings
+          accessToken={accessToken}
+          workspaceId={workspace.id}
+          canManage={canManageMembers}
+        />
+      )}
       <section aria-labelledby="logout-heading" className="mt-3 border-t border-black pt-3">
         <h2 id="logout-heading" className="text-[11px] font-black uppercase text-neutral-100">로그아웃</h2>
         <button
@@ -195,8 +180,6 @@ export function SettingsPanel({
           Logout
         </button>
       </section>
-      </div>
-      </div>
-    </>
+    </UtilityPanel>
   )
 }

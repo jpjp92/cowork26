@@ -12,6 +12,8 @@ import type {
   PageDropPosition,
   PageRecord,
   Workspace,
+  WorkspaceAnalysisDraft,
+  WorkspaceAnalysisResult,
 } from '../lib/notion-lite/types'
 import {
   buildPageTree,
@@ -29,6 +31,8 @@ import { usePageData } from '../hooks/use-page-data'
 import { usePagePersistence } from '../hooks/use-page-persistence'
 import { useSelectionNavigation } from '../hooks/use-selection-navigation'
 import { usePageAssets } from '../hooks/use-page-assets'
+import { WorkspaceAnalysisDialog } from './notion-lite/workspace-analysis-dialog'
+import { WorkspaceAnalysisResultDialog } from './notion-lite/workspace-analysis-result'
 
 // Legacy AGI는 production bundle에 UI를 노출하지 않는다.
 const ENABLE_AGI = process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_ENABLE_AGI === 'true'
@@ -60,11 +64,18 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   const [searchOpen, setSearchOpen] = useState(false)
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [analysisDialogOpen, setAnalysisDialogOpen] = useState(false)
+  const [analysisDraft, setAnalysisDraft] = useState<WorkspaceAnalysisDraft | null>(null)
+  const [analysisResultOpen, setAnalysisResultOpen] = useState(false)
+  const [analysisRunning, setAnalysisRunning] = useState(false)
+  const [analysisResult, setAnalysisResult] = useState<WorkspaceAnalysisResult | null>(null)
+  const [analysisError, setAnalysisError] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('editor')
   const settingsRef = useRef<HTMLDivElement>(null)
   const workspaceMenuRef = useRef<HTMLDivElement>(null)
+  const analysisAbortRef = useRef<AbortController | null>(null)
   const workspacesRef = useRef<Workspace[]>([])
   const accessToken = session?.access_token
   const {
@@ -377,6 +388,39 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
   }, [activeWorkspace?.id, activeWorkspace?.name])
 
   useEffect(() => {
+    setAnalysisDialogOpen(false)
+    analysisAbortRef.current?.abort()
+    analysisAbortRef.current = null
+    setAnalysisResultOpen(false)
+    setAnalysisRunning(false)
+    setAnalysisResult(null)
+    setAnalysisError('')
+    setAnalysisDraft(previous => previous?.workspaceId === activeWorkspaceId ? previous : null)
+  }, [activeWorkspaceId])
+
+  const runAnalysis = useCallback(async (draft: WorkspaceAnalysisDraft) => {
+    if (!accessToken) return
+    analysisAbortRef.current?.abort()
+    const controller = new AbortController()
+    analysisAbortRef.current = controller
+    setAnalysisDraft(draft)
+    setAnalysisDialogOpen(false)
+    setAnalysisResultOpen(true)
+    setAnalysisRunning(true)
+    setAnalysisResult(null)
+    setAnalysisError('')
+    try {
+      const result = await notionLiteApi.runWorkspaceAnalysis(accessToken, draft, crypto.randomUUID(), controller.signal)
+      if (!controller.signal.aborted) setAnalysisResult(result)
+    } catch (requestError) {
+      if (!controller.signal.aborted) setAnalysisError(requestError instanceof Error ? requestError.message : '문서 분석을 완료하지 못했습니다.')
+    } finally {
+      if (analysisAbortRef.current === controller) analysisAbortRef.current = null
+      if (!controller.signal.aborted) setAnalysisRunning(false)
+    }
+  }, [accessToken])
+
+  useEffect(() => {
     if (!settingsOpen || !activeWorkspaceId) return
     loadMembers(activeWorkspaceId).catch(err => setError(err instanceof Error ? err.message : '오류가 발생했습니다.'))
   }, [settingsOpen, activeWorkspaceId, loadMembers])
@@ -618,6 +662,24 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
           onDownloadMarkdown={downloadPageMarkdown}
           onMovePage={movePage}
           onResizeStart={startSidebarResize}
+          analysisOpen={analysisDialogOpen || analysisResultOpen}
+          analysisRunning={analysisRunning}
+          analysisReady={Boolean(analysisResult) && !analysisResultOpen}
+          onOpenAnalysis={() => {
+            setSettingsOpen(false)
+            setMobileSidebarOpen(false)
+            setWorkspaceMenuOpen(false)
+            if (analysisRunning || analysisResult || analysisError) setAnalysisResultOpen(true)
+            else setAnalysisDialogOpen(true)
+          }}
+          settingsOpen={settingsOpen}
+          onOpenSettings={() => {
+            setAnalysisDialogOpen(false)
+            setAnalysisResultOpen(false)
+            setMobileSidebarOpen(false)
+            setWorkspaceMenuOpen(false)
+            setSettingsOpen(true)
+          }}
           mobileOpen={mobileSidebarOpen}
           onCloseMobile={() => {
             setMobileSidebarOpen(false)
@@ -674,6 +736,41 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
         pages={pages}
         onClose={() => setSearchOpen(false)}
         onSelect={revealPage}
+      />
+      <WorkspaceAnalysisDialog
+        open={analysisDialogOpen && Boolean(activeWorkspaceId && activePageId)}
+        workspaceId={activeWorkspaceId}
+        pages={pages}
+        currentPageId={activePageId}
+        initialDraft={analysisDraft}
+        onClose={() => setAnalysisDialogOpen(false)}
+        onConfirm={draft => {
+          void runAnalysis(draft)
+        }}
+      />
+      <WorkspaceAnalysisResultDialog
+        open={analysisResultOpen}
+        loading={analysisRunning}
+        result={analysisResult}
+        error={analysisError}
+        onCancel={() => {
+          analysisAbortRef.current?.abort()
+          analysisAbortRef.current = null
+          setAnalysisRunning(false)
+          setAnalysisResultOpen(false)
+        }}
+        onBack={() => {
+          setAnalysisResultOpen(false)
+          setAnalysisError('')
+          setAnalysisDialogOpen(true)
+        }}
+        onClose={() => {
+          setAnalysisResultOpen(false)
+        }}
+        onOpenPage={pageId => {
+          revealPage(pageId)
+          setAnalysisResultOpen(false)
+        }}
       />
     </main>
   )

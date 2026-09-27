@@ -21,10 +21,19 @@ function noStore(response: Response) {
 
 function safeErrorResponse(error: unknown) {
   if (isAiProviderError(error)) {
+    if (process.env.NODE_ENV !== 'production' && error.providerStatus) {
+      // Status/code only: never log credentials or upstream response bodies.
+      console.warn('[ai-provider] credential verification failed', {
+        code: error.code,
+        providerStatus: error.providerStatus,
+      })
+    }
     const code = error.code === 'invalid_credential'
       ? 'AI_PROVIDER_AUTH_FAILED'
       : error.code === 'rate_limited'
         ? 'AI_RATE_LIMITED'
+        : error.code === 'model_unavailable'
+          ? 'AI_MODEL_UNAVAILABLE'
         : error.code === 'timeout'
           ? 'AI_REQUEST_TIMEOUT'
           : 'AI_PROVIDER_UNAVAILABLE'

@@ -95,7 +95,7 @@ AGI_CLIENT_SHA256=
 - Production과 Preview는 가능하면 서로 다른 Supabase 프로젝트와 service key를 사용합니다.
 - `.env*` 파일은 `.env.example`을 제외하고 Git에서 무시됩니다.
 
-워크스페이스 AI 기능의 Supabase SQL 적용과 Vercel secret/feature flag 설정은 코드 구현과 분리해서 진행합니다. `006`과 `007` migration은 작성·검증됐고 `008` AI schema는 아직 구현 전입니다. 환경별 적용 여부와 다음 수동 작업은 [워크스페이스 AI 수동 설정 가이드](./docs/WORKSPACE_AI_MANUAL_SETUP_GUIDE.md)를 따릅니다.
+워크스페이스 AI 기능의 Supabase SQL 적용과 Vercel secret/feature flag 설정은 코드 구현과 분리해서 진행합니다. `006`~`008` migration은 작성·적용·검증됐습니다. 환경별 적용 여부와 다음 수동 작업은 [워크스페이스 AI 수동 설정 가이드](./docs/WORKSPACE_AI_MANUAL_SETUP_GUIDE.md)를 따릅니다.
 
 ## Supabase 설정
 
@@ -205,12 +205,20 @@ GET    /api/ai/credentials/:provider
 PUT    /api/ai/credentials/:provider     # 개인 BYOK 검증·암호화 저장
 DELETE /api/ai/credentials/:provider
 
+GET    /api/workspaces/:id/ai-policy
+PATCH  /api/workspaces/:id/ai-policy   # owner 전용 workspace AI opt-in
+
+POST   /api/ai/workspace-analysis      # source 재검증 후 분석 실행
+GET    /api/ai/workspace-analysis/:id  # 요청 상태 metadata 조회
+
 GET    /api/agi                 # local legacy AGI download
 POST   /api/agi                 # local legacy AGI start/stop beacon
 DELETE /api/agi                 # local legacy AGI stop
 ```
 
-AI credential API는 `openai`, `gemini`만 허용하고 모든 응답에 `Cache-Control: no-store`를 적용합니다. 실제 provider adapter가 추가되기 전에는 production에서 credential 검증이 비활성화되며, 삭제 API는 AI feature flag와 관계없이 계속 사용할 수 있습니다.
+AI credential API는 `openai`, `gemini`만 허용하고 모든 응답에 `Cache-Control: no-store`를 적용합니다. OpenAI는 Responses API와 `gpt-5.6-luna`, Gemini는 Generate Content API와 `gemini-3.6-flash`만 서버 allowlist로 허용합니다. 두 provider는 독립 feature flag를 사용하며 자동 fallback하지 않습니다. 삭제 API는 AI feature flag와 관계없이 계속 사용할 수 있습니다.
+
+왼쪽 사이드바 하단의 `AI 분석` 진입점에서는 현재 페이지, 현재 페이지와 하위 페이지 또는 같은 workspace의 직접 선택한 페이지를 분석할 수 있습니다. 선택·진행·결과는 데스크톱의 compact floating 패널과 모바일의 전체 화면에서 이어지며 문서 Canvas의 폭을 변경하지 않습니다. `분석에 포함할 페이지`는 AI에 전달할 근거 목록이고 결과 페이지 생성이나 다운로드를 의미하지 않습니다. 한 요청은 최대 10개·정규화 합계 256KiB이며, 실행 시 브라우저의 본문이 아니라 서버가 최신 page와 revision을 다시 조회합니다. 서버는 fresh auth, workspace 정책, 개인 credential을 확인하고 요청 ledger와 source revision을 기록한 뒤 허용된 OpenAI 또는 Gemini adapter를 호출합니다. 자동 테스트는 실제 provider key 없이 deterministic fixture로 실행하며 live smoke test는 명시적 opt-in이 있어야만 실행됩니다.
 
 ## 검증
 
