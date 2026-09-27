@@ -15,6 +15,8 @@
   - document conversion, provider adapters, API, draft UI, apply, tests
 - [사용자 API key 기반 워크스페이스 분석 계획](./PLAN_20260926_WORKSPACE_AI_ANALYSIS_BYOK.md)
   - BYOK credential 보안, 선택 문서 분석, 출처 표시, 검색형 workspace 분석
+- [워크스페이스 AI 분석 구현 계획](./PLAN_20260926_WORKSPACE_AI_ANALYSIS_IMPLEMENTATION.md)
+  - 현재 저장소 기준 migration 번호, 파일·테스트·검증 단위 실행 순서
 
 중복 내용이 발견되면 세부 설계는 하위 문서를 따르고, 범위·우선순위·릴리스 판단은 이 Master Roadmap을 따른다.
 
@@ -107,8 +109,8 @@ M0 Foundation
 
 - tests가 version control과 `npm test`에 연결됨
 - service-role module과 auth/error 경계 강화
-- `004_page_assets_baseline.sql`
-- `005_page_content_revision.sql`
+- `006_page_assets_baseline.sql`
+- `007_page_content_revision.sql`
 - page별 save coordinator와 strict flush
 - stale normal PATCH가 HTTP 409
 - production legacy AGI disabled gate
@@ -125,7 +127,7 @@ Exit:
 
 주요 결과:
 
-- `006_ai_document_editing.sql`
+- `008_ai_document_editing.sql`
 - credential/policy/generation/draft tables와 RLS/grants
 - versioned AES-GCM과 redaction
 - pure Markdown ↔ Tiptap conversion

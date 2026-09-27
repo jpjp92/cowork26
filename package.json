@@ -7,6 +7,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "npm run test:unit && npm run test:security && npm run test:legacy",
+    "test:unit": "vitest run tests/unit",
+    "test:security": "vitest run tests/security",
+    "test:legacy": "npm run test:editor-paste-priority && npm run test:image-assets && npm run test:page-parent-validation",
     "test:editor-paste-priority": "node tests/editor-paste-priority.test.mjs",
     "test:image-assets": "node tests/image-assets.test.mjs",
     "test:page-parent-validation": "node tests/page-parent-validation.test.mjs",
@@ -22,7 +26,8 @@
     "autoprefixer": "^10.5.0",
     "postcss": "^8.5.14",
     "tailwindcss": "^4.3.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.2"
   },
   "dependencies": {
     "@hocuspocus/provider": "^4.0.0",

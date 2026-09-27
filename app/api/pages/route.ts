@@ -3,6 +3,8 @@ import { supabaseAdmin } from '../../../lib/supabase-admin'
 import { getUserFromRequest, requireWorkspaceRole } from '../_utils/auth'
 import { createApiTiming } from '../_utils/timing'
 import { getPageParentValidationError } from '../../../lib/notion-lite/page-tree'
+import { isRevisionedPagePatch, isValidBaseRevision } from '../../../lib/notion-lite/page-revision'
+import { ApiError, apiErrorResponse } from '../_utils/api-error'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -50,7 +52,7 @@ export async function GET(request: Request) {
       mode = 'single'
       const { data: page, error: pageError } = await timing.measure('page.select', () => supabaseAdmin
         .from('pages')
-        .select('id, workspace_id, parent_id, title, order_index, content, created_by, updated_by, created_at, updated_at')
+        .select('id, workspace_id, parent_id, title, order_index, content, content_revision, created_by, updated_by, created_at, updated_at')
         .eq('id', pageId)
         .single())
 
@@ -73,7 +75,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await timing.measure('pages.select', () => supabaseAdmin
       .from('pages')
-      .select('id, workspace_id, parent_id, title, order_index, content, created_by, updated_by, created_at, updated_at')
+      .select('id, workspace_id, parent_id, title, order_index, content, content_revision, created_by, updated_by, created_at, updated_at')
       .eq('workspace_id', workspaceId)
       .order('order_index', { ascending: true })
       .order('created_at', { ascending: true }))
@@ -148,7 +150,7 @@ export async function POST(request: Request) {
         created_by: user.id,
         updated_by: user.id,
       })
-      .select('id, workspace_id, parent_id, title, order_index, content, created_by, updated_by, created_at, updated_at')
+      .select('id, workspace_id, parent_id, title, order_index, content, content_revision, created_by, updated_by, created_at, updated_at')
       .single())
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -205,6 +207,10 @@ export async function PATCH(request: Request) {
       patch.parent_id = parentId
     }
     if (typeof body.orderIndex === 'number') patch.order_index = body.orderIndex
+    const revisionedPatch = isRevisionedPagePatch(patch)
+    if (revisionedPatch && !isValidBaseRevision(body.baseRevision)) {
+      return apiErrorResponse(new ApiError('VALIDATION_ERROR'))
+    }
     patchType = [
       patch.title !== undefined ? 'title' : '',
       patch.content !== undefined ? 'content' : '',
@@ -212,14 +218,21 @@ export async function PATCH(request: Request) {
       patch.order_index !== undefined ? 'order' : '',
     ].filter(Boolean).join('+') || 'metadata'
 
-    const { data, error } = await timing.measure('page.update', () => supabaseAdmin
+    let updateQuery = supabaseAdmin
       .from('pages')
       .update(patch)
       .eq('id', body.id)
-      .select('id, workspace_id, parent_id, title, order_index, content, created_by, updated_by, created_at, updated_at')
-      .single())
+    if (revisionedPatch) updateQuery = updateQuery.eq('content_revision', body.baseRevision)
+
+    const { data, error } = await timing.measure('page.update', () => updateQuery
+      .select('id, workspace_id, parent_id, title, order_index, content, content_revision, created_by, updated_by, created_at, updated_at')
+      .maybeSingle())
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!data && revisionedPatch) {
+      return apiErrorResponse(new ApiError('PAGE_REVISION_CONFLICT'))
+    }
+    if (!data) return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     return NextResponse.json(data)
   } finally {
     timing.log({ patchType })

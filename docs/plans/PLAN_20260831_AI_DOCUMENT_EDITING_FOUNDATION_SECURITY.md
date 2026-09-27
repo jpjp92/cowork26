@@ -37,14 +37,14 @@ AI 기능을 추가하기 전에 기존 저장 방식과 배포 보안 경계를
 
 ## 4. Migration 계획
 
-### `004_page_assets_baseline.sql`
+### `006_page_assets_baseline.sql`
 
 - `docs/history/DEV_260615.md`의 `page_assets` table, constraints, indexes, RLS를 정식 migration으로 승격한다.
 - 기존 운영 DB에 이미 존재할 수 있으므로 schema drift를 먼저 확인하고 idempotent하게 작성한다.
 - fresh DB와 기존 DB 양쪽에서 forward migration을 검증한다.
 - Storage bucket 생성, MIME allowlist, size limit은 운영 체크리스트에 별도로 기록한다.
 
-### `005_page_content_revision.sql`
+### `007_page_content_revision.sql`
 
 - `pages.content_revision BIGINT NOT NULL DEFAULT 1` 추가
 - title/content가 실제로 바뀔 때만 revision 증가
@@ -52,7 +52,7 @@ AI 기능을 추가하기 전에 기존 저장 방식과 배포 보안 경계를
 - 기존 `updated_at` trigger와 실행 순서 검증
 - 일반 page conditional update와 AI apply RPC 기반 제공
 
-### `006_ai_document_editing.sql`
+### `008_ai_document_editing.sql`
 
 - `user_ai_credentials`
 - `workspace_ai_policies`
@@ -274,7 +274,7 @@ Official references:
 
 ### F1 — migration baseline과 page revision
 
-**Create:** `supabase/migrations/004_page_assets_baseline.sql`, `supabase/migrations/005_page_content_revision.sql`, `hooks/use-page-save-coordinator.ts`
+**Create:** `supabase/migrations/006_page_assets_baseline.sql`, `supabase/migrations/007_page_content_revision.sql`, `hooks/use-page-save-coordinator.ts`
 **Modify:** pages API, notion-lite types/API, page persistence
 
 - [ ] page_assets baseline
@@ -284,7 +284,7 @@ Official references:
 
 ### F2 — AI schema와 crypto
 
-**Create:** `supabase/migrations/006_ai_document_editing.sql`, credential crypto/redaction primitives, DB/security tests
+**Create:** `supabase/migrations/008_ai_document_editing.sql`, credential crypto/redaction primitives, DB/security tests
 
 - [ ] four AI tables와 policies/grants
 - [ ] atomic apply RPC

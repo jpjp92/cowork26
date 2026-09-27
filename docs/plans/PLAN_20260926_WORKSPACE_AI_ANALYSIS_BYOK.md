@@ -1,9 +1,11 @@
 # 사용자 API Key 기반 워크스페이스 분석 계획
 
-**작성일:** 2026-09-26  
-**상태:** 기획 완료 · 구현 전  
-**연결 계획:** `PLAN_20260830_AI_DOCUMENT_EDITING.md`, `PLAN_20260831_AI_DOCUMENT_EDITING_FOUNDATION_SECURITY.md`  
+**작성일:** 2026-09-26
+**상태:** 기획 완료 · 구현 전
+**연결 계획:** `PLAN_20260830_AI_DOCUMENT_EDITING.md`, `PLAN_20260831_AI_DOCUMENT_EDITING_FOUNDATION_SECURITY.md`
 **대상:** 개인 BYOK credential, workspace AI policy, 선택 문서 분석, 검색형 workspace 질의
+
+구체적인 파일·테스트·배포 순서는 `PLAN_20260926_WORKSPACE_AI_ANALYSIS_IMPLEMENTATION.md`를 따르고, prompt/provider 계약은 `PLAN_20260927_AI_PROMPT_PROVIDER_ARCHITECTURE.md`를 따른다.
 
 ## 1. 결론
 
@@ -15,7 +17,7 @@
 
 ## 2. 목표
 
-- 사용자가 자신의 OpenAI API key를 등록·검증·교체·삭제할 수 있다.
+- 사용자가 자신의 OpenAI와 Gemini API key를 각각 등록·검증·교체·삭제할 수 있다.
 - key 원문이 DB, API 응답, 브라우저 저장소, 로그와 다른 사용자에게 노출되지 않는다.
 - workspace owner가 외부 AI 전송 사용 여부와 실행 가능한 역할을 관리한다.
 - 허용된 사용자가 직접 선택한 문서를 요약하거나 질문할 수 있다.
@@ -44,7 +46,8 @@
 - 저장된 key는 다시 표시하지 않고 연결 상태, provider, 마지막 네 자리, 갱신 시각만 반환한다.
 - 브라우저 `localStorage`, `sessionStorage`, cookie와 URL에는 key를 저장하지 않는다.
 - key 입력 state는 성공·취소·로그아웃·workspace 전환 시 즉시 제거한다.
-- MVP provider는 OpenAI 하나로 시작하고 fake provider를 먼저 연결한다.
+- credential schema와 Settings는 OpenAI/Gemini를 지원한다.
+- 실제 provider는 fake → OpenAI → Gemini 순서로 검증하고 독립 flag로 활성화한다.
 
 ### 권한
 
@@ -65,7 +68,9 @@
 
 ### 결과
 
-- 초기 기능은 요약, 질문 답변, 액션 아이템 추출로 제한한다.
+- 초기 기능은 요약, 정리, 분석, 질문 답변, 액션 아이템 추출로 제한한다.
+- 사용자는 system prompt 전체가 아니라 최대 1,000자의 추가 요청만 입력한다.
+- 서버 prompt는 공통 보안 규칙과 mode별 versioned template로 관리한다.
 - 결과는 생성자 개인 데이터로 저장하거나, 보관 정책이 확정되기 전에는 응답 후 저장하지 않는다.
 - provider 응답은 runtime schema로 검증하고 raw HTML, script와 unsafe URL을 거부한다.
 - 답변에 출처가 없거나 존재하지 않는 source label이 포함되면 명확히 표시하고 자동 링크하지 않는다.
@@ -185,18 +190,19 @@ DELETE /api/ai/workspace-analysis/:id      # 취소 또는 결과 삭제
 
 ### 개인 API key 연결
 
-1. 사용자가 설정 drawer의 `AI 연결` 구역을 연다.
-2. provider와 API key를 입력하고 `연결 확인`을 누른다.
-3. 서버가 최소 권한·최소 비용 방식으로 provider key를 검증한다.
-4. 성공하면 암호화 저장하고 입력값을 비운다.
-5. UI는 `연결됨 · 끝 4자리 · 확인 시각`만 표시한다.
-6. 사용자는 key 교체 또는 삭제를 실행할 수 있다.
+1. 사용자가 기존 Settings drawer의 개인 설정 `AI 연결` 구역을 연다.
+2. `내 OpenAI API 키` 또는 `내 Gemini API 키` 입력란에서 개인 key임을 확인한다.
+3. provider와 API key를 입력하고 `연결 확인`을 누른다.
+4. 서버가 최소 권한·최소 비용 방식으로 provider key를 검증한다.
+5. 성공하면 암호화 저장하고 입력값을 비운다.
+6. UI는 `연결됨 · 끝 4자리 · 확인 시각`만 표시한다.
+7. 사용자는 key 교체 또는 삭제를 실행할 수 있다.
 
 ### 선택 문서 분석
 
 1. 사용자가 workspace에서 `문서 분석`을 연다.
 2. 최대 10개 page를 선택한다.
-3. 분석 유형과 질문을 입력한다.
+3. 다섯 분석 mode 중 하나를 고르고 필요한 경우 제한된 추가 요청을 입력한다.
 4. 외부 전송 대상 page와 provider를 최종 확인한다.
 5. 서버가 최신 page와 권한을 다시 조회해 provider를 호출한다.
 6. 결과와 출처 page 링크를 표시한다.
@@ -219,7 +225,7 @@ DELETE /api/ai/workspace-analysis/:id      # 취소 또는 결과 삭제
 ### W1 — 개인 Credential UI/API
 
 - [ ] 설정 drawer에 `AI 연결` 구역을 추가한다.
-- [ ] OpenAI key 등록·검증·교체·삭제 API를 구현한다.
+- [ ] OpenAI/Gemini key 등록·검증·교체·삭제 API를 구현한다.
 - [ ] 성공 후 입력 state 제거와 마스킹 상태 표시를 구현한다.
 - [ ] invalid key, timeout, rate limit 오류를 원문 없이 구분한다.
 - [ ] credential lifecycle audit event를 key 원문 없이 기록한다.
@@ -230,9 +236,10 @@ DELETE /api/ai/workspace-analysis/:id      # 취소 또는 결과 삭제
 
 - [ ] owner가 workspace AI policy를 opt-in할 수 있게 한다.
 - [ ] page 선택기와 최대 10개 제한을 구현한다.
-- [ ] 요약, 질문 답변, 액션 아이템 추출 prompt contract를 정의한다.
+- [ ] 요약, 정리, 분석, 질문 답변, 액션 아이템 prompt contract를 정의한다.
+- [ ] 공통 structured output schema와 citation validator를 구현한다.
 - [ ] fake provider로 source mapping과 citation UI를 검증한다.
-- [ ] OpenAI adapter를 연결하고 usage·timeout·idempotency를 기록한다.
+- [ ] OpenAI/Gemini adapter를 독립 flag로 연결하고 usage·timeout·idempotency를 기록한다.
 - [ ] 결과가 원본 page를 변경하지 않는지 검증한다.
 
 **Exit:** 권한이 있는 사용자가 선택한 문서만 전송되고 모든 답변의 출처가 실제 page로 검증된다.
@@ -284,6 +291,8 @@ DELETE /api/ai/workspace-analysis/:id      # 취소 또는 결과 삭제
 - [ ] 사용자별 rate·concurrency 제한 우회 실패
 
 ## 11. Vercel·Supabase 운영 체크리스트
+
+운영자가 직접 수행할 SQL 적용 순서와 Vercel 설정 절차는 [워크스페이스 AI 수동 설정 가이드](../WORKSPACE_AI_MANUAL_SETUP_GUIDE.md)에서 별도로 관리한다. 아직 생성되지 않은 migration은 선행 실행하지 않는다.
 
 ### Supabase
 

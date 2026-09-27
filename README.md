@@ -95,6 +95,8 @@ AGI_CLIENT_SHA256=
 - Production과 Preview는 가능하면 서로 다른 Supabase 프로젝트와 service key를 사용합니다.
 - `.env*` 파일은 `.env.example`을 제외하고 Git에서 무시됩니다.
 
+워크스페이스 AI 기능의 Supabase SQL 적용과 Vercel secret/feature flag 설정은 코드 구현과 분리해서 진행합니다. `006`과 `007` migration은 작성·검증됐고 `008` AI schema는 아직 구현 전입니다. 환경별 적용 여부와 다음 수동 작업은 [워크스페이스 AI 수동 설정 가이드](./docs/WORKSPACE_AI_MANUAL_SETUP_GUIDE.md)를 따릅니다.
+
 ## Supabase 설정
 
 Supabase SQL Editor 또는 프로젝트의 migration workflow에서 아래 파일을 순서대로 적용합니다.
@@ -105,6 +107,8 @@ supabase/migrations/002_notion_lite.sql
 supabase/migrations/003_workspace_member_order.sql
 supabase/migrations/004_workspace_members_hardening.sql
 supabase/migrations/005_pages_tree_integrity.sql
+supabase/migrations/006_page_assets_baseline.sql
+supabase/migrations/007_page_content_revision.sql
 ```
 
 | Migration | 역할 |
@@ -114,11 +118,15 @@ supabase/migrations/005_pages_tree_integrity.sql
 | `003_workspace_member_order.sql` | 사용자별 workspace 정렬 순서 |
 | `004_workspace_members_hardening.sql` | 브라우저 직접 membership 변경과 self-owner 권한 상승 차단 |
 | `005_pages_tree_integrity.sql` | cross-workspace parent와 page hierarchy cycle 차단 |
+| `006_page_assets_baseline.sql` | 이미지 metadata·Storage bucket baseline과 브라우저 직접 CRUD 차단 |
+| `007_page_content_revision.sql` | title/content revision과 stale 자동 저장 충돌 방지 |
 
 보안 migration 적용 안내:
 
 - [Migration 004 runbook](./docs/SUPABASE_MIGRATION_004_RUNBOOK.md)
 - [Migration 005 runbook](./docs/SUPABASE_MIGRATION_005_RUNBOOK.md)
+- [Migration 006 runbook](./docs/SUPABASE_MIGRATION_006_RUNBOOK.md)
+- [Migration 007 runbook](./docs/SUPABASE_MIGRATION_007_RUNBOOK.md)
 
 `workspace_members` 쓰기는 server API의 service-role client를 통해 처리합니다. 일반 사용자는 앱에서 멤버를 추가하지만, publishable key로 table을 직접 INSERT/UPDATE/DELETE할 수는 없습니다.
 
@@ -131,7 +139,7 @@ supabase/migrations/005_pages_tree_integrity.sql
 - 허용 MIME: `image/png`, `image/jpeg`, `image/webp`, `image/gif`
 - 현재 구현은 public URL을 문서에 저장
 
-현재 `page_assets` 생성 SQL은 [DEV_260615.md](./docs/history/DEV_260615.md)에 기록되어 있습니다. 정식 baseline migration으로 승격하는 작업이 남아 있으므로 새 Supabase 프로젝트를 구성할 때 누락하지 않도록 주의합니다.
+`page_assets` table과 bucket 계약은 `006_page_assets_baseline.sql`에 정식 migration으로 관리됩니다. 현재 호환성을 위해 public bucket을 사용하므로 URL을 아는 사용자는 이미지를 조회할 수 있습니다. private bucket 전환은 별도 migration과 signed read URL 설계가 필요합니다.
 
 ## 권한 모델
 
@@ -277,9 +285,9 @@ docs/history/                   # 날짜별 개발 기록
 
 ## 현재 제약과 후속 작업
 
-- 본문은 문서 JSON 전체를 저장하므로 동시 저장 시 마지막 쓰기가 이전 내용을 덮을 수 있습니다.
+- 실시간 공동 편집은 아니며, revision 기반 저장 충돌 감지 후 사용자가 내용을 직접 조정해야 합니다.
 - Yjs/Hocuspocus 실시간 collaboration은 아직 연결하지 않았습니다.
-- `page_assets`는 아직 history SQL에 의존하며 현재 bucket은 public URL을 사용합니다.
+- `page_assets`는 정식 baseline migration으로 관리하지만 현재 bucket은 호환성을 위해 public URL을 사용합니다.
 - 멤버 제거·owner 이전·초대 메일 기능이 없습니다.
 - API 공통 rate limit과 request body 상한이 아직 없습니다.
 - 제목·이름·검색어·문서 JSON의 입력 크기 제한은 계획 단계이며 아직 적용되지 않았습니다.
@@ -293,6 +301,8 @@ docs/history/                   # 날짜별 개발 기록
 - [노션형 편집 인터랙션 및 표 UI 계획](./docs/plans/PLAN_20260926_NOTION_EDITOR_INTERACTIONS.md)
 - [사용자 입력 및 요청 크기 제한 계획](./docs/plans/PLAN_20260926_INPUT_LIMITS.md)
 - [사용자 API key 기반 워크스페이스 분석 계획](./docs/plans/PLAN_20260926_WORKSPACE_AI_ANALYSIS_BYOK.md)
+- [워크스페이스 AI 분석 구체 구현 계획](./docs/plans/PLAN_20260926_WORKSPACE_AI_ANALYSIS_IMPLEMENTATION.md)
+- [AI 프롬프트·Provider 아키텍처 계획](./docs/plans/PLAN_20260927_AI_PROMPT_PROVIDER_ARCHITECTURE.md)
 - [2026-09-26 개발 기록](./docs/history/DEV_260926.md)
 
 ## 문서 관리

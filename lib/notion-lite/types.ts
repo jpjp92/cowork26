@@ -15,6 +15,7 @@ export interface PageRecord {
   title: string
   order_index: number
   content: Record<string, unknown> | null
+  content_revision: number
   created_at: string
   updated_at: string
 }
@@ -47,5 +48,5 @@ export interface CloneImageSource {
 }
 
 export type PageDropPosition = 'above' | 'below' | 'inside'
-export type SavingStatus = 'idle' | 'saved' | 'loaded'
+export type SavingStatus = 'idle' | 'saved' | 'loaded' | 'conflict'
 export type VisibleSavingStatus = Exclude<SavingStatus, 'idle'>

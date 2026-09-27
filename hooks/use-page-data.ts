@@ -28,6 +28,7 @@ interface UsePageDataOptions {
   activePageIdRef: MutableRefObject<string>
   saveTimers: MutableRefObject<Map<string, number>>
   pendingContent: MutableRefObject<Map<string, Record<string, unknown>>>
+  pendingTitles: MutableRefObject<Map<string, string>>
   contentSaveInFlight: MutableRefObject<Set<string>>
   pendingCreateIds: MutableRefObject<Set<string>>
   clearPagePersistence: (pageIds: Iterable<string>) => void
@@ -48,6 +49,7 @@ export function usePageData({
   activePageIdRef,
   saveTimers,
   pendingContent,
+  pendingTitles,
   contentSaveInFlight,
   pendingCreateIds,
   clearPagePersistence,
@@ -94,7 +96,8 @@ export function usePageData({
         const hasUnsaved = (
           saveTimers.current.has(serverPage.id) ||
           contentSaveInFlight.current.has(serverPage.id) ||
-          pendingContent.current.has(serverPage.id)
+          pendingContent.current.has(serverPage.id) ||
+          pendingTitles.current.has(serverPage.id)
         )
         if (!hasUnsaved) return serverPage
         const localContent = (
@@ -102,7 +105,10 @@ export function usePageData({
           currentById.get(serverPage.id)?.content ??
           serverPage.content
         )
-        return { ...serverPage, content: localContent }
+        const localTitle = pendingTitles.current.get(serverPage.id)
+          ?? currentById.get(serverPage.id)?.title
+          ?? serverPage.title
+        return { ...serverPage, title: localTitle, content: localContent }
       })
 
       const serverIds = new Set(data.map(page => page.id))
@@ -133,6 +139,7 @@ export function usePageData({
     contentSaveInFlight,
     onLoadedPageSelection,
     pendingContent,
+    pendingTitles,
     saveTimers,
   ])
 
@@ -233,6 +240,7 @@ export function usePageData({
       title,
       order_index: siblingCount,
       content: { type: 'doc', content: [{ type: 'paragraph' }] },
+      content_revision: 0,
       created_at: now,
       updated_at: now,
     }

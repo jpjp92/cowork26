@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server'
 import type { User } from '@supabase/supabase-js'
 import { supabaseAdmin } from '../../../lib/supabase-admin'
+import { ApiError, apiErrorResponse } from './api-error'
 import type { ApiTiming } from './timing'
 
 const AUTH_USER_CACHE_TTL_MS = 10_000
@@ -10,6 +10,16 @@ const ROLE_CACHE_MAX_SIZE = 200
 
 type AuthUserResponse = Awaited<ReturnType<typeof supabaseAdmin.auth.getUser>>
 type WorkspaceRole = 'owner' | 'editor' | 'viewer'
+
+export type AuthLookupOptions = {
+  fresh?: boolean
+}
+
+export type WorkspaceRoleLookupOptions = {
+  fresh?: boolean
+  timing?: ApiTiming
+  label?: string
+}
 
 const authUserCache = new Map<string, { user: User; expiresAt: number }>()
 const authUserRequests = new Map<string, Promise<AuthUserResponse>>()
@@ -43,7 +53,15 @@ function pruneAuthUserCache(now: number) {
   }
 }
 
-async function getCachedUser(token: string, timing?: ApiTiming) {
+async function getCachedUser(token: string, timing?: ApiTiming, fresh = false) {
+  if (fresh) {
+    const response = timing
+      ? await timing.measure('auth.getUser.fresh', () => supabaseAdmin.auth.getUser(token))
+      : await supabaseAdmin.auth.getUser(token)
+
+    return { user: response.data.user, error: response.error }
+  }
+
   const now = Date.now()
   const cached = authUserCache.get(token)
   if (cached && cached.expiresAt > now) {
@@ -79,23 +97,25 @@ async function getCachedUser(token: string, timing?: ApiTiming) {
   return { user: data.user, error }
 }
 
-export async function getUserFromRequest(request: Request, timing?: ApiTiming) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '')
+export async function getUserFromRequest(
+  request: Request,
+  timing?: ApiTiming,
+  options: AuthLookupOptions = {},
+) {
+  const authorization = request.headers.get('authorization')
+  const token = authorization?.match(/^Bearer ([^\s]+)$/i)?.[1]
   if (!token || token === 'undefined') {
     return {
       user: null,
-      response: NextResponse.json({ error: 'Missing access token' }, { status: 401 }),
+      response: apiErrorResponse(new ApiError('UNAUTHENTICATED')),
     }
   }
 
-  const { user, error } = await getCachedUser(token, timing)
+  const { user, error } = await getCachedUser(token, timing, options.fresh)
   if (error || !user) {
     return {
       user: null,
-      response: NextResponse.json(
-        { error: error?.message ?? 'Invalid access token' },
-        { status: 401 }
-      ),
+      response: apiErrorResponse(new ApiError('UNAUTHENTICATED')),
     }
   }
 
@@ -106,12 +126,17 @@ export async function requireWorkspaceRole(
   workspaceId: string,
   userId: string,
   roles: Array<WorkspaceRole>,
-  timing?: ApiTiming,
-  label = 'role.select',
+  timingOrOptions?: ApiTiming | WorkspaceRoleLookupOptions,
+  legacyLabel = 'role.select',
 ) {
+  const options: WorkspaceRoleLookupOptions = timingOrOptions && 'measure' in timingOrOptions
+    ? { timing: timingOrOptions, label: legacyLabel }
+    : timingOrOptions ?? {}
+  const timing = options.timing
+  const label = options.label ?? 'role.select'
   const cacheKey = `${userId}:${workspaceId}`
   const now = Date.now()
-  const cached = roleCache.get(cacheKey)
+  const cached = options.fresh ? undefined : roleCache.get(cacheKey)
   if (cached && cached.expiresAt > now) {
     timing?.mark('role.cacheHit', performance.now())
     // role 문자열을 캐싱하고 호출마다 roles와 대조한다.
@@ -119,7 +144,7 @@ export async function requireWorkspaceRole(
     return roles.includes(cached.role)
   }
 
-  roleCache.delete(cacheKey)
+  if (!options.fresh) roleCache.delete(cacheKey)
 
   const { data, error } = await (timing
     ? timing.measure(label, () => supabaseAdmin
@@ -138,8 +163,10 @@ export async function requireWorkspaceRole(
   if (error || !data) return false
 
   // 멤버인 경우에만 캐싱(비멤버 negative는 드물고 Forbidden 처리됨)
-  roleCache.set(cacheKey, { role: data.role, expiresAt: Date.now() + ROLE_CACHE_TTL_MS })
-  pruneRoleCache(Date.now())
+  if (!options.fresh) {
+    roleCache.set(cacheKey, { role: data.role, expiresAt: Date.now() + ROLE_CACHE_TTL_MS })
+    pruneRoleCache(Date.now())
+  }
 
   return roles.includes(data.role)
 }

@@ -18,14 +18,37 @@ interface PageUpdatePatch {
   content?: Record<string, unknown> | null
   parentId?: string | null
   orderIndex?: number
+  baseRevision?: number
+}
+
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+    readonly requestId?: string,
+  ) {
+    super(message)
+    this.name = 'ApiRequestError'
+  }
 }
 
 async function readError(response: Response, fallback: string) {
   try {
-    const data = await response.json() as { error?: string }
-    return new Error(data.error ? `${fallback}: ${data.error}` : fallback)
+    const data = await response.json() as {
+      error?: string | { code?: string; message?: string; requestId?: string }
+    }
+    if (typeof data.error === 'string') {
+      return new ApiRequestError(`${fallback}: ${data.error}`, response.status)
+    }
+    return new ApiRequestError(
+      data.error?.message ? `${fallback}: ${data.error.message}` : fallback,
+      response.status,
+      data.error?.code,
+      data.error?.requestId,
+    )
   } catch {
-    return new Error(fallback)
+    return new ApiRequestError(fallback, response.status)
   }
 }
 

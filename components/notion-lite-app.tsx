@@ -119,6 +119,7 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
     visibleSavingStatus,
     saveTimers,
     pendingContent,
+    pendingTitles,
     contentSaveInFlight,
     pendingCreateIds,
     showSavingStatus,
@@ -127,6 +128,8 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
     scheduleContentSave,
     flushPendingContentSaves,
     getEffectiveContent,
+    trackPendingTitle,
+    clearPendingTitle,
     clearPagePersistence,
     markPageCreating,
     finishPageCreating,
@@ -137,6 +140,7 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
     accessToken,
     canEdit,
     activePageIdRef,
+    getPageRef: findPageRef,
     onPageSavedRef: pageSavedHandlerRef,
     onError: setError,
   })
@@ -164,6 +168,7 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
     activePageIdRef,
     saveTimers,
     pendingContent,
+    pendingTitles,
     contentSaveInFlight,
     pendingCreateIds,
     clearPagePersistence,
@@ -621,6 +626,7 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
           workspaceCount={workspaces.length}
           pageCount={pages.length}
           onTitleChange={(pageId, title) => {
+            trackPendingTitle(pageId, title)
             setPages(previous => previous.map(page => (
               page.id === pageId ? { ...page, title } : page
             )))
@@ -628,8 +634,11 @@ export default function NotionLiteApp({ initialWorkspaceId = '', initialPageId =
           onTitleFocus={rememberTitle}
           onTitleCommit={(pageId, title, currentTitle) => {
             const previousTitle = consumePreviousTitle(pageId, currentTitle)
-            if (title.trim() === previousTitle.trim()) return
-            updatePage(pageId, { title })
+            if (title.trim() === previousTitle.trim()) {
+              clearPendingTitle(pageId)
+              return
+            }
+            updatePage(pageId, { title }).catch(() => undefined)
           }}
           onContentChange={scheduleContentSave}
           onUploadImage={canEdit ? uploadImage : undefined}

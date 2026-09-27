@@ -87,10 +87,18 @@ export function DocumentPane({
                 className={`w-16 shrink-0 self-end rounded-[8px] border border-black px-2 py-1 text-center text-[11px] font-black text-black shadow-[2px_2px_0_#000] transition-opacity ${
                   savingStatus === 'idle' ? 'pointer-events-none opacity-0' : 'opacity-100'
                 } ${
-                  visibleSavingStatus === 'loaded' ? 'bg-[#fde68a]' : 'bg-[#baf7c8]'
+                  visibleSavingStatus === 'loaded'
+                    ? 'bg-[#fde68a]'
+                    : visibleSavingStatus === 'conflict'
+                      ? 'bg-red-300'
+                      : 'bg-[#baf7c8]'
                 }`}
               >
-                {visibleSavingStatus === 'loaded' ? '불러옴' : '저장됨'}
+                {visibleSavingStatus === 'loaded'
+                  ? '불러옴'
+                  : visibleSavingStatus === 'conflict'
+                    ? '충돌'
+                    : '저장됨'}
               </span>
             </div>
           </div>
