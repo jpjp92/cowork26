@@ -79,6 +79,13 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 SUPABASE_URL=...
 SUPABASE_SERVICE_KEY=...
 
+# Workspace AI — 서버 전용
+AI_FEATURE_ENABLED=false
+AI_OPENAI_ENABLED=false
+AI_GEMINI_ENABLED=false
+AI_WORKSPACE_ANALYSIS_ENABLED=false
+AI_CREDENTIAL_ENCRYPTION_KEY_V1=...
+
 # Legacy AGI — local development에서만 선택적으로 사용
 NEXT_PUBLIC_ENABLE_AGI=false
 ENABLE_LEGACY_AGI=false
@@ -96,6 +103,28 @@ AGI_CLIENT_SHA256=
 - `.env*` 파일은 `.env.example`을 제외하고 Git에서 무시됩니다.
 
 워크스페이스 AI 기능의 Supabase SQL 적용과 Vercel secret/feature flag 설정은 코드 구현과 분리해서 진행합니다. `006`~`008` migration은 작성·적용·검증됐습니다. 환경별 적용 여부와 다음 수동 작업은 [워크스페이스 AI 수동 설정 가이드](./docs/WORKSPACE_AI_MANUAL_SETUP_GUIDE.md)를 따릅니다.
+
+### Workspace AI 배포 변수
+
+Vercel의 Preview와 Production 각각에 서버 전용 변수를 설정합니다. 처음에는 모든 AI flag를 `false`로 두고, 검증할 환경에서만 필요한 flag를 켭니다.
+
+| 변수 | Preview 내부 검증 예시 | Production 최초값 | 설명 |
+|---|---:|---:|---|
+| `AI_FEATURE_ENABLED` | `true` | `false` | AI API 전체 활성화 |
+| `AI_OPENAI_ENABLED` | `true` | `false` | OpenAI provider 활성화 |
+| `AI_GEMINI_ENABLED` | `false` | `false` | Gemini provider 활성화 |
+| `AI_WORKSPACE_ANALYSIS_ENABLED` | `true` | `false` | workspace 문서 분석 활성화 |
+| `AI_CREDENTIAL_ENCRYPTION_KEY_V1` | 환경별 별도 key | Production 전용 key | 사용자 provider key를 암호화하는 32-byte Base64 master key |
+
+`AI_CREDENTIAL_ENCRYPTION_KEY_V1`은 환경마다 따로 생성합니다. Preview 키를 Production에 복사하지 않습니다.
+
+```sh
+openssl rand -base64 32
+```
+
+이 값은 Vercel 서버 환경 변수로만 저장하고 Git, 문서, 채팅에 기록하지 않습니다. `SUPABASE_URL`과 `SUPABASE_SERVICE_KEY`도 Preview/Production의 해당 Supabase 프로젝트 값으로 각각 설정합니다.
+
+사용자의 OpenAI 또는 Gemini API key는 Vercel 환경변수가 아닙니다. 사용자가 로그인 후 앱의 `설정 → AI 연결`에서 본인 계정에 등록하며, 서버가 암호화해 저장합니다. 배포자는 개인 provider key를 Vercel에 등록할 필요가 없습니다. 자세한 순서와 활성화 조건은 [워크스페이스 AI 수동 설정 가이드](./docs/WORKSPACE_AI_MANUAL_SETUP_GUIDE.md)를 참고하세요.
 
 ## Supabase 설정
 
@@ -241,6 +270,9 @@ git diff --check
 - 에디터 붙여넣기 처리 우선순위
 - Page parent의 정상 이동·자기참조·cycle·cross-workspace 거부
 - AI credential의 fresh auth, 요청 크기 제한, 암호화 저장, 사용자 scope, 응답 redaction과 verify rate limit
+- AI provider 오류 정규화, source 제한·인용 검증, workspace 정책 API와 결과 UI
+
+전체 테스트 실행은 `npm test`입니다. AI 기능 변경 시 `npm run test:security`와 `npm run typecheck`도 확인합니다.
 
 `npm audit`은 공개 advisory가 갱신될 수 있으므로 배포 직전에 다시 실행합니다.
 
@@ -248,8 +280,11 @@ git diff --check
 
 - [ ] `004_workspace_members_hardening.sql` 적용 후 policy/grant 확인
 - [ ] `005_pages_tree_integrity.sql` 적용 후 `pages_tree_integrity` trigger 확인
+- [ ] `006`~`008` migration을 해당 환경에 적용하고 runbook 확인
 - [ ] `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` 설정
-- [ ] 공개 Supabase 변수와 `NEXT_PUBLIC_SITE_URL` 설정
+- [ ] `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SITE_URL` 설정
+- [ ] Preview/Production 각각에 AI encryption key와 네 개의 AI flag 설정
+- [ ] Production AI flag는 release 승인 전 모두 `false`인지 확인
 - [ ] Supabase Auth Redirect URLs 설정
 - [ ] `NEXT_PUBLIC_ENABLE_AGI=false`, `ENABLE_LEGACY_AGI=false` 확인
 - [ ] 테스트·production build·production dependency audit 실행

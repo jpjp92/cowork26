@@ -33,8 +33,8 @@ describe('verified document source normalization', () => {
     expect(result.providerSources.map(source => source.label)).toEqual(['S1', 'S2'])
     expect(result.providerSources.map(source => source.title)).toEqual(['Page 2', 'Page 1'])
     expect(result.metadata).toEqual([
-      expect.objectContaining({ label: 'S1', pageId: page2, contentRevision: 3 }),
-      expect.objectContaining({ label: 'S2', pageId: page1, contentRevision: 3 }),
+      expect.objectContaining({ label: 'S1', pageId: page2, pageTitle: 'Page 2', contentRevision: 3 }),
+      expect.objectContaining({ label: 'S2', pageId: page1, pageTitle: 'Page 1', contentRevision: 3 }),
     ])
     expect(JSON.stringify(result.providerSources)).not.toContain(page1)
     expect(JSON.stringify(result.providerSources)).not.toContain(page2)

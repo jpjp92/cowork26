@@ -3,6 +3,43 @@
 import type { WorkspaceAnalysisResult } from '../../lib/notion-lite/types'
 import { UtilityPanel } from './utility-panel'
 
+function SourceLinks({
+  citations,
+  onOpenPage,
+}: {
+  citations: WorkspaceAnalysisResult['sources']
+  onOpenPage: (pageId: string) => void
+}) {
+  if (citations.length === 0) return null
+  return (
+    <details className="group mt-1.5 text-[10px]">
+      <summary
+        title={citations.map(citation => `${citation.label} · ${citation.pageTitle}`).join('\n')}
+        className="inline-flex max-w-full cursor-pointer list-none items-center gap-1 rounded-[5px] border border-black bg-[#e7f8eb] px-1.5 py-1 font-bold marker:hidden hover:bg-[#baf7c8] [&::-webkit-details-marker]:hidden"
+      >
+        <span className="shrink-0 text-[#555]">출처</span>
+        <span className="min-w-0 truncate font-black">{citations.map(citation => citation.label).join(' · ')}</span>
+        <span aria-hidden="true" className="shrink-0 text-[9px] transition-transform group-open:rotate-180">⌄</span>
+      </summary>
+      <ul className="mt-1.5 space-y-1 border-l-2 border-[#baf7c8] pl-2">
+        {citations.map(citation => (
+          <li key={citation.label}>
+            <button
+              type="button"
+              aria-label={`${citation.label} 출처 페이지 열기: ${citation.pageTitle}`}
+              onClick={() => onOpenPage(citation.pageId)}
+              className="flex w-full min-w-0 items-center gap-1.5 rounded px-1 py-1 text-left hover:bg-[#e7f8eb]"
+            >
+              <span className="shrink-0 font-black">{citation.label}</span>
+              <span className="min-w-0 truncate">{citation.pageTitle}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
+
 export function WorkspaceAnalysisResultDialog({
   open,
   loading,
@@ -57,8 +94,21 @@ export function WorkspaceAnalysisResultDialog({
           {error && <div className="rounded-[8px] border border-black bg-red-200 p-4"><p className="text-sm font-black">분석하지 못했습니다.</p><p className="mt-1 text-xs font-medium">{error}</p></div>}
           {result && <div>
             <div className="rounded-[8px] border border-black bg-white p-4"><p className="text-[10px] font-black uppercase text-[#666]">{result.provider}</p><h3 className="mt-1 text-xl font-black">{result.title}</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{result.overview}</p></div>
-            {result.sections.map((section, index) => <section key={`${section.kind}-${index}`} className="mt-3 rounded-[8px] border border-black bg-white p-4"><h4 className="text-sm font-black">{section.heading}</h4><ul className="mt-2 space-y-2">{section.items.map((item, itemIndex) => <li key={itemIndex} className="text-sm"><p className="whitespace-pre-wrap">{item.text}</p>{item.citations.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{item.citations.map(citation => <button key={citation.label} type="button" onClick={() => onOpenPage(citation.pageId)} className="rounded border border-black bg-[#baf7c8] px-1.5 py-0.5 text-[10px] font-black">{citation.label}</button>)}</div>}</li>)}</ul></section>)}
-            {result.unknowns.length > 0 && <section className="mt-3 rounded-[8px] border border-black bg-[#fde68a] p-4"><h4 className="text-sm font-black">확인할 사항</h4><ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{result.unknowns.map((item, index) => <li key={index}>{item.text}</li>)}</ul></section>}
+            {result.sections.map((section, index) => <section key={`${section.kind}-${index}`} className="mt-3 rounded-[8px] border border-black bg-white p-4"><h4 className="text-sm font-black">{section.heading}</h4><ul className="mt-2 space-y-3">{section.items.map((item, itemIndex) => <li key={itemIndex} className="text-sm"><p className="whitespace-pre-wrap">{item.text}</p><SourceLinks citations={item.citations} onOpenPage={onOpenPage} /></li>)}</ul></section>)}
+            {result.unknowns.length > 0 && <section className="mt-3 rounded-[8px] border border-black bg-[#fde68a] p-4"><h4 className="text-sm font-black">확인할 사항</h4><ul className="mt-2 space-y-3 text-sm">{result.unknowns.map((item, index) => <li key={index}><p>{item.text}</p><SourceLinks citations={item.citations} onOpenPage={onOpenPage} /></li>)}</ul></section>}
+            <details className="mt-3 rounded-[8px] border border-black bg-white p-3">
+              <summary className="cursor-pointer text-xs font-black">출처 페이지 {result.sources.length}개</summary>
+              <ol className="mt-2 space-y-1.5">
+                {result.sources.map(source => (
+                  <li key={source.label}>
+                    <button type="button" onClick={() => onOpenPage(source.pageId)} className="flex w-full items-center gap-2 rounded-[6px] border border-transparent px-2 py-1.5 text-left text-xs font-bold hover:border-black hover:bg-[#baf7c8]">
+                      <span className="shrink-0 font-black">{source.label}</span>
+                      <span className="min-w-0 truncate">{source.pageTitle}</span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </details>
           </div>}
     </UtilityPanel>
   )

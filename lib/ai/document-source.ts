@@ -19,6 +19,7 @@ type PageSourceRow = {
 export type AnalysisSourceMetadata = {
   label: string
   pageId: string
+  pageTitle: string
   contentRevision: number
   normalizedBytes: number
 }
@@ -82,7 +83,7 @@ export function normalizeVerifiedPageRows(
     const label = `S${index + 1}`
 
     providerSources.push({ label, revision: row.content_revision, title, content })
-    metadata.push({ label, pageId, contentRevision: row.content_revision, normalizedBytes })
+    metadata.push({ label, pageId, pageTitle: title, contentRevision: row.content_revision, normalizedBytes })
   })
 
   return { providerSources, metadata, totalBytes }

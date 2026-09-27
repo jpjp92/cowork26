@@ -120,7 +120,12 @@ export async function runWorkspaceAnalysis(input: {
     const analyzed = await provider.analyze({ mode: input.mode, model: getAiAnalysisModel(input.provider), systemPrompt: prompt.systemPrompt, userPrompt: prompt.userPrompt, sourceLabels: prompt.sourceLabels }, apiKey, input.signal)
     await finishRequest(requestId, { status: 'succeeded', provider_request_id: analyzed.requestId ?? null, usage_input_tokens: analyzed.usage.inputTokens ?? null, usage_output_tokens: analyzed.usage.outputTokens ?? null })
     await supabaseAdmin.from('user_ai_credentials').update({ last_used_at: new Date().toISOString() }).eq('user_id', input.userId).eq('provider', input.provider)
-    return { requestId, provider: input.provider, output: analyzed.output, citations: Object.fromEntries(sources.metadata.map(source => [source.label, source.pageId])) }
+    return {
+      requestId,
+      provider: input.provider,
+      output: analyzed.output,
+      sources: sources.metadata.map(source => ({ label: source.label, pageId: source.pageId, pageTitle: source.pageTitle })),
+    }
   } catch (error) {
     if (isAiProviderError(error) && error.code === 'aborted') await finishRequest(requestId, { status: 'cancelled' })
     else await finishRequest(requestId, { status: 'failed', error_code: ledgerErrorCode(error) })
@@ -128,12 +133,27 @@ export async function runWorkspaceAnalysis(input: {
   }
 }
 
-export function presentAnalysisResult(result: { requestId: string; provider: AiProviderId; output: StructuredAnalysisOutput; citations: Record<string, string> }) {
+export function presentAnalysisResult(result: {
+  requestId: string
+  provider: AiProviderId
+  output: StructuredAnalysisOutput
+  sources: Array<{ label: string; pageId: string; pageTitle: string }>
+}) {
+  const sourcesByLabel = Object.fromEntries(result.sources.map(source => [source.label, source]))
   const item = (value: { text: string; sourceLabels: string[] }) => ({
     text: value.text,
-    citations: value.sourceLabels.map(label => ({ label, pageId: result.citations[label] })).filter(citation => Boolean(citation.pageId)),
+    citations: value.sourceLabels.map(label => sourcesByLabel[label]).filter(Boolean),
   })
-  return { requestId: result.requestId, status: 'succeeded' as const, provider: result.provider, title: result.output.title, overview: result.output.overview, sections: result.output.sections.map(section => ({ ...section, items: section.items.map(item) })), unknowns: result.output.unknowns.map(item) }
+  return {
+    requestId: result.requestId,
+    status: 'succeeded' as const,
+    provider: result.provider,
+    title: result.output.title,
+    overview: result.output.overview,
+    sources: result.sources,
+    sections: result.output.sections.map(section => ({ ...section, items: section.items.map(item) })),
+    unknowns: result.output.unknowns.map(item),
+  }
 }
 
 export async function getAnalysisRequest(userId: string, requestId: string) {

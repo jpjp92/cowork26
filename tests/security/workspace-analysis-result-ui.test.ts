@@ -16,6 +16,10 @@ describe('workspace analysis result UI', () => {
     expect(result).toContain("error ? '다시 선택' : '새 분석'")
     expect(result).toContain('닫아도 이번 결과는 AI 분석 메뉴에 유지됩니다.')
     expect(result).toContain('onOpenPage(citation.pageId)')
+    expect(result).toContain('출처 페이지 {result.sources.length}개')
+    expect(result).toContain('citation.pageTitle')
+    expect(result).toContain('citations.map(citation => citation.label).join(\' · \')')
+    expect(result).toContain('<details className="group mt-1.5 text-[10px]">')
   })
 
   it('does not render provider HTML or mutate page content from a result', () => {

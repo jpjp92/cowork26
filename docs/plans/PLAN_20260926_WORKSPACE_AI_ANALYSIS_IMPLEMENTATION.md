@@ -465,6 +465,7 @@ interface AiProvider {
 
 **작업**
 
+- [x] `.env.example`, README와 Vercel 수동 설정 가이드에 서버 전용 AI flag와 환경별 encryption key 절차를 기록한다.
 - [ ] Production/Preview Supabase와 encryption key를 분리한다.
 - [ ] Vercel Sensitive env, Deployment Protection, Firewall/rate limit을 확인한다.
 - [ ] 이전 deployment의 old master key 접근 차단 절차를 검증한다.
@@ -549,7 +550,7 @@ DB가 필요한 test는 로컬 Supabase 또는 격리된 test project에서만 �
 
 ### 다음 UI 개선 우선순위
 
-1. citation을 `출처: S1 · S3 · S4`처럼 한 줄로 압축하고 page title을 함께 확인할 수 있게 한다.
+1. [x] citation을 접이식 한 줄 `출처 S1 · S3 · S4`로 압축하고, 펼치면 page title을 확인할 수 있게 한다. 결과 하단에도 접이식 source page 목록을 제공한다.
 2. 결과 상단에 provider/model, source page 수와 완료 시각을 표시한다.
 3. 결과 복사 기능을 추가한다.
 4. 긴 결과의 section 접기/펼치기와 하단 source 목록을 추가한다.

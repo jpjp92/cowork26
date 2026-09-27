@@ -82,6 +82,7 @@ export interface WorkspaceAnalysisDraft {
 export interface WorkspaceAnalysisCitation {
   label: string
   pageId: string
+  pageTitle: string
 }
 
 export interface WorkspaceAnalysisResult {
@@ -90,6 +91,7 @@ export interface WorkspaceAnalysisResult {
   provider: AiCredentialProvider
   title: string
   overview: string
+  sources: WorkspaceAnalysisCitation[]
   sections: Array<{
     kind: string
     heading: string
