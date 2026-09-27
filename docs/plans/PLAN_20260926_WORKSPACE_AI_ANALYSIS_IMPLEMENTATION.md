@@ -230,12 +230,12 @@ git status --short
 
 **작업**
 
-- [ ] UUID, enum/check, timestamps, unique key와 FK delete 정책을 명시한다.
-- [ ] credential table의 anon/authenticated direct grants를 모두 제거한다.
-- [ ] policy와 analysis metadata에 필요한 최소 RLS/grants만 둔다.
-- [ ] browser가 ciphertext나 analysis metadata를 직접 조회하지 못하게 한다.
-- [ ] view/RPC를 만들 경우 `search_path`와 EXECUTE grant를 명시한다.
-- [ ] source에는 page ID/revision/label/byte만 저장하고 원문을 저장하지 않는다.
+- [x] UUID, enum/check, timestamps, unique key와 FK delete 정책을 명시한다.
+- [x] credential table의 anon/authenticated direct grants를 모두 제거한다.
+- [x] policy와 analysis metadata에 필요한 최소 RLS/grants만 둔다.
+- [x] browser가 ciphertext나 analysis metadata를 직접 조회하지 못하게 한다.
+- [x] view/RPC를 만들 경우 `search_path`와 EXECUTE grant를 명시한다.
+- [x] source에는 page ID/revision/label/byte만 저장하고 원문을 저장하지 않는다.
 
 **테스트**
 

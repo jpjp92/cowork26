@@ -19,7 +19,7 @@
 |---|---|---|
 | Task 2 완료 후 | Supabase에 `006_page_assets_baseline.sql` 적용 | 파일 준비됨 · Preview/Test부터 수동 실행 |
 | Task 3 완료 후 | Supabase에 `007_page_content_revision.sql` 적용 | 파일 준비됨 · 코드와 함께 Preview/Test 검증 필요 |
-| Task 5 완료 후 | Supabase에 `008_ai_document_editing.sql` 적용 | 파일 미생성 · 실행 금지 |
+| Task 5 완료 후 | Supabase에 `008_ai_document_editing.sql` 적용 | 파일·runbook 준비됨 · 자동 검증 후 Preview/Test부터 실행 |
 | Preview 배포 전 | Preview 전용 Vercel secret과 feature flag 설정 | 구현 후 진행 |
 | Production 승인 전 | Production 전용 secret 설정, flag는 `false` 유지 | 구현 후 진행 |
 | 내부 검증 통과 후 | 승인된 범위에서 Production flag 활성화 | release checklist 통과 후 진행 |

@@ -109,6 +109,7 @@ supabase/migrations/004_workspace_members_hardening.sql
 supabase/migrations/005_pages_tree_integrity.sql
 supabase/migrations/006_page_assets_baseline.sql
 supabase/migrations/007_page_content_revision.sql
+supabase/migrations/008_ai_document_editing.sql
 ```
 
 | Migration | 역할 |
@@ -120,6 +121,7 @@ supabase/migrations/007_page_content_revision.sql
 | `005_pages_tree_integrity.sql` | cross-workspace parent와 page hierarchy cycle 차단 |
 | `006_page_assets_baseline.sql` | 이미지 metadata·Storage bucket baseline과 브라우저 직접 CRUD 차단 |
 | `007_page_content_revision.sql` | title/content revision과 stale 자동 저장 충돌 방지 |
+| `008_ai_document_editing.sql` | 개인 AI credential 암호문, workspace opt-in 정책, 분석 요청·출처 metadata |
 
 보안 migration 적용 안내:
 
@@ -127,6 +129,7 @@ supabase/migrations/007_page_content_revision.sql
 - [Migration 005 runbook](./docs/SUPABASE_MIGRATION_005_RUNBOOK.md)
 - [Migration 006 runbook](./docs/SUPABASE_MIGRATION_006_RUNBOOK.md)
 - [Migration 007 runbook](./docs/SUPABASE_MIGRATION_007_RUNBOOK.md)
+- [Migration 008 runbook](./docs/SUPABASE_MIGRATION_008_RUNBOOK.md)
 
 `workspace_members` 쓰기는 server API의 service-role client를 통해 처리합니다. 일반 사용자는 앱에서 멤버를 추가하지만, publishable key로 table을 직접 INSERT/UPDATE/DELETE할 수는 없습니다.
 
