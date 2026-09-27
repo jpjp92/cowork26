@@ -1,7 +1,7 @@
 # AI 프롬프트·Provider 아키텍처 계획
 
 **작성일:** 2026-09-27
-**상태:** 설계 확정 · 구현 전
+**상태:** 설계 확정 · Task 6 공통 계약 구현 완료
 **대상:** 개인 OpenAI/Gemini BYOK, 선택 문서 분석, 서버 관리형 prompt
 **참고 구현:** `ref/docs-processor`
 

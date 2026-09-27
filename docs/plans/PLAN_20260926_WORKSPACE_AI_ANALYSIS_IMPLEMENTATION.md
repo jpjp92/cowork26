@@ -274,12 +274,12 @@ interface AiProvider {
 
 **작업**
 
-- [ ] credential check, analysis output, usage, request ID, normalized error contract를 만든다.
-- [ ] deterministic fake provider로 success, invalid key, timeout, 429, malformed output을 재현한다.
-- [ ] provider raw response가 API 계층 밖으로 나가지 않게 한다.
-- [ ] 서버 관리형 5개 prompt template과 최대 1,000자 추가 요청 계약을 만든다.
-- [ ] 공통 structured output schema, 길이/항목/citation validator를 만든다.
-- [ ] template version과 prompt hash만 metadata로 기록하고 prompt/source 원문은 기록하지 않는다.
+- [x] credential check, analysis output, usage, request ID, normalized error contract를 만든다.
+- [x] deterministic fake provider로 success, invalid key, timeout, 429, malformed output을 재현한다.
+- [x] provider raw response가 API 계층 밖으로 나가지 않게 한다.
+- [x] 서버 관리형 5개 prompt template과 최대 1,000자 추가 요청 계약을 만든다.
+- [x] 공통 structured output schema, 길이/항목/citation validator를 만든다.
+- [x] template version과 prompt hash만 metadata로 기록하고 prompt/source 원문은 기록하지 않는다.
 
 **Exit**
 
