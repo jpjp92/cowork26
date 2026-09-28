@@ -554,7 +554,7 @@ DB가 필요한 test는 로컬 Supabase 또는 격리된 test project에서만 �
 2. 결과 상단에 provider/model, source page 수와 완료 시각을 표시한다.
 3. 결과 복사 기능을 추가한다.
 4. 긴 결과의 section 접기/펼치기와 하단 source 목록을 추가한다.
-5. 명시적 사용자 동작으로만 결과를 새 page에 저장하는 기능을 추가한다.
+5. [계획 완료] 명시적 사용자 동작으로 결과를 새 page에 저장하는 기능을 별도 계획에서 정의한다: [AI 분석 결과 새 페이지 저장 계획](./PLAN_20260928_AI_ANALYSIS_SAVE_TO_PAGE.md).
 6. 실제 단계별 체크가 필요하면 단일 POST의 추정 UI가 아니라 SSE 또는 job status polling으로 서버 진행 상태를 전달한다.
 
 ### 현재 제한
