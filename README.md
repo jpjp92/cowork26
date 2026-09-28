@@ -25,7 +25,6 @@ Next.js, Supabase, Tiptap 기반의 workspace 문서 편집 앱입니다. Worksp
 - `/table`·`/표` 명령을 통한 2×2, 3×3, 4×4 표 생성
 - 표 행·열 추가/삭제, header 전환, 셀 병합·분할, 표 삭제
 - 표 열 너비·행 높이 조절과 문서 폭 내부 가로 스크롤
-- 선택 텍스트의 3단계 글자 크기 조절 (`13px`, 기본, `20px`)
 - 코드 블록 syntax highlighting
 - Markdown 표·목록·제목·인라인 문법 붙여넣기 변환
 - Mermaid 코드 블록 렌더링 및 소스 편집

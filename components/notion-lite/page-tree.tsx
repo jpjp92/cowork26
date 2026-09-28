@@ -171,9 +171,6 @@ export function PageTree({
           y={menuState.y}
           onClose={() => setMenuState(null)}
         >
-          <ContextMenuItem onSelect={() => { setMenuState(null); onOpen(selectedPage.id) }}>
-            페이지 열기
-          </ContextMenuItem>
           {canEdit && (
             <ContextMenuItem onSelect={() => { setMenuState(null); onCreateChild(selectedPage.id) }}>
               하위 페이지 추가
