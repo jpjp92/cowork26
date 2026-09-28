@@ -1,7 +1,7 @@
 'use client'
 
 import { Extension, InputRule, Mark, Node, mergeAttributes, type Editor } from '@tiptap/core'
-import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, useEditorState } from '@tiptap/react'
+import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import type { NodeViewProps } from '@tiptap/react'
 import { DOMParser as ProseMirrorDOMParser, Fragment, Slice } from '@tiptap/pm/model'
@@ -266,99 +266,6 @@ function insertTableAtSelection(editor: Editor, rows: number, cols: number) {
   }
 
   command.insertTable({ rows, cols, withHeaderRow: true }).run()
-}
-
-const TEXT_SIZE_OPTIONS = [
-  { label: '작게', size: '13px' },
-  { label: '기본', size: null },
-  { label: '크게', size: '20px' },
-] as const
-
-function TextSizeMenu({ editor, editable }: { editor: Editor | null; editable: boolean }) {
-  const [expanded, setExpanded] = useState(false)
-  const activeSize = useEditorState({
-    editor,
-    selector: ({ editor: activeEditor }) => (
-      activeEditor?.getAttributes('fontSize').size as string | undefined
-    ) ?? null,
-  })
-
-  useEffect(() => {
-    if (!editor) return
-    const collapse = () => setExpanded(false)
-    editor.on('selectionUpdate', collapse)
-    return () => {
-      editor.off('selectionUpdate', collapse)
-    }
-  }, [editor])
-
-  if (!editor || !editable) return null
-
-  const activeLabel = TEXT_SIZE_OPTIONS.find(option => option.size === (activeSize ?? null))?.label ?? '사용자 지정'
-  const applySize = (size: string | null) => {
-    const chain = editor.chain().focus()
-    if (size) chain.setMark('fontSize', { size }).run()
-    else chain.unsetMark('fontSize').run()
-    setExpanded(false)
-  }
-
-  return (
-    <BubbleMenu
-      editor={editor}
-      pluginKey="textSizeMenu"
-      shouldShow={({ state }) => {
-        const { selection } = state
-        if (selection.empty || selection.from === selection.to) return false
-        if (selection.$from.parent.type.name === 'codeBlock') return false
-        return state.doc.textBetween(selection.from, selection.to, ' ').trim().length > 0
-      }}
-      options={{ placement: 'top', flip: true, shift: true }}
-      role="toolbar"
-      aria-label="글자 크기"
-      className={expanded
-        ? 'flex w-[min(17rem,calc(100vw-1rem))] items-center gap-1.5 rounded-[8px] border border-black bg-[#50504d] p-1.5 text-white shadow-[4px_4px_0_#000]'
-        : 'rounded-[8px] border border-black bg-[#50504d] p-1 text-white shadow-[3px_3px_0_#000]'}
-    >
-      {!expanded ? (
-        <button
-          type="button"
-          aria-expanded="false"
-          onMouseDown={event => event.preventDefault()}
-          onClick={() => setExpanded(true)}
-          className="flex h-9 items-center gap-1.5 rounded-[6px] px-2.5 text-xs font-black hover:bg-[#62625f] focus-visible:outline-2 focus-visible:outline-[#baf7c8]"
-        >
-          <span aria-hidden="true">Aa</span>
-          크기: {activeLabel}
-        </button>
-      ) : (
-        <>
-          {TEXT_SIZE_OPTIONS.map(option => (
-            <button
-              key={option.label}
-              type="button"
-              aria-pressed={option.size === (activeSize ?? null)}
-              onMouseDown={event => event.preventDefault()}
-              onClick={() => applySize(option.size)}
-              className={`h-9 min-w-0 flex-1 rounded-[6px] border border-black px-2 text-xs font-black text-black shadow-[2px_2px_0_#000] focus-visible:outline-2 focus-visible:outline-[#baf7c8] ${
-                option.size === (activeSize ?? null) ? 'bg-[#baf7c8]' : 'bg-white hover:bg-[#e7e2d9]'
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            aria-label="글자 크기 메뉴 닫기"
-            onMouseDown={event => event.preventDefault()}
-            onClick={() => setExpanded(false)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] text-base font-black hover:bg-[#62625f]"
-          >
-            ×
-          </button>
-        </>
-      )}
-    </BubbleMenu>
-  )
 }
 
 function TableInsertMenu({ editor, editable }: { editor: Editor | null; editable: boolean }) {
@@ -1722,7 +1629,6 @@ export default function DocumentEditor({ content, editable, onChange, onUploadIm
           </button>
         </div>
       )}
-      <TextSizeMenu editor={editor} editable={editable} />
       <TableInsertMenu editor={editor} editable={editable} />
       <TableContextMenu editor={editor} editable={editable} />
       <EditorContent editor={editor} />
